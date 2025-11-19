@@ -787,53 +787,53 @@ body {
 }
 
 /* AI Context Label & Prompt Prefix - Font Context - Dark Theme */
-:root:not([data-theme="light"]) .ai-context-label.font-context,
-:root:not([data-theme="light"]) .ai-prompt-prefix.font-context {
+:root:not([data-theme="light"]) #ai-context-label.font-context,
+:root:not([data-theme="light"]) #ai-prompt-prefix.font-context {
     background-color: var(--font-context-bg);
     color: var(--font-context-text);
 }
 
-:root:not([data-theme="light"]) .view-assistant.focused .ai-context-label.font-context,
-:root:not([data-theme="light"]) .view-assistant.focused .ai-prompt-prefix.font-context {
+:root:not([data-theme="light"]) .view-assistant.focused #ai-context-label.font-context,
+:root:not([data-theme="light"]) .view-assistant.focused #ai-prompt-prefix.font-context {
     background-color: var(--font-context-focused-bg);
     color: var(--font-context-focused-text);
 }
 
 /* AI Context Label & Prompt Prefix - Font Context - Light Theme */
-:root[data-theme="light"] .ai-context-label.font-context,
-:root[data-theme="light"] .ai-prompt-prefix.font-context {
+:root[data-theme="light"] #ai-context-label.font-context,
+:root[data-theme="light"] #ai-prompt-prefix.font-context {
     background-color: var(--font-context-bg);
     color: var(--font-context-text);
 }
 
-:root[data-theme="light"] .view-assistant.focused .ai-context-label.font-context,
-:root[data-theme="light"] .view-assistant.focused .ai-prompt-prefix.font-context {
+:root[data-theme="light"] .view-assistant.focused #ai-context-label.font-context,
+:root[data-theme="light"] .view-assistant.focused #ai-prompt-prefix.font-context {
     background-color: var(--font-context-focused-bg);
     color: var(--font-context-focused-text);
 }
 
 /* AI Context Label & Prompt Prefix - Script Context - Dark Theme */
-:root:not([data-theme="light"]) .ai-context-label.script-context,
-:root:not([data-theme="light"]) .ai-prompt-prefix.script-context {
+:root:not([data-theme="light"]) #ai-context-label.script-context,
+:root:not([data-theme="light"]) #ai-prompt-prefix.script-context {
     background-color: var(--script-context-bg);
     color: var(--script-context-text);
 }
 
-:root:not([data-theme="light"]) .view-assistant.focused .ai-context-label.script-context,
-:root:not([data-theme="light"]) .view-assistant.focused .ai-prompt-prefix.script-context {
+:root:not([data-theme="light"]) .view-assistant.focused #ai-context-label.script-context,
+:root:not([data-theme="light"]) .view-assistant.focused #ai-prompt-prefix.script-context {
     background-color: var(--script-context-focused-bg);
     color: var(--script-context-focused-text);
 }
 
 /* AI Context Label & Prompt Prefix - Script Context - Light Theme */
-:root[data-theme="light"] .ai-context-label.script-context,
-:root[data-theme="light"] .ai-prompt-prefix.script-context {
+:root[data-theme="light"] #ai-context-label.script-context,
+:root[data-theme="light"] #ai-prompt-prefix.script-context {
     background-color: var(--script-context-bg);
     color: var(--script-context-text);
 }
 
-:root[data-theme="light"] .view-assistant.focused .ai-context-label.script-context,
-:root[data-theme="light"] .view-assistant.focused .ai-prompt-prefix.script-context {
+:root[data-theme="light"] .view-assistant.focused #ai-context-label.script-context,
+:root[data-theme="light"] .view-assistant.focused #ai-prompt-prefix.script-context {
     background-color: var(--script-context-focused-bg);
     color: var(--script-context-focused-text);
 }
