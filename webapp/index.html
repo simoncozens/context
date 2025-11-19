@@ -333,16 +333,18 @@
         }, 500);
     </script>
 
-    <!-- AI Assistant Info Modal -->
-    <div id="ai-info-modal" class="modal">
-        <div class="modal-content ai-info-modal-content">
-            <div class="modal-header">
-                <h2>AI Assistant</h2>
-                <button class="modal-close-btn" id="ai-info-modal-close-btn">&times;</button>
+    <!-- AI Assistant Info Popup -->
+    <div class="info-popup-overlay" id="ai-info-modal" style="display: none;">
+        <div class="info-popup">
+            <div class="info-popup-header">
+                <h3>AI Assistant</h3>
+                <button class="info-popup-close" id="ai-info-modal-close-btn">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
             </div>
-            <div class="modal-body">
+            <div class="info-popup-content">
                 <div class="ai-info-section">
-                    <h3>API Key</h3>
+                    <h4>API Key</h4>
                     <p>Enter your Anthropic API key to use the assistant:</p>
                     <input type="password" id="ai-api-key-modal" placeholder="Anthropic API Key"
                         class="ai-api-key-modal-input" />
@@ -350,7 +352,7 @@
                         except to Anthropic's API.</p>
                 </div>
                 <div class="ai-info-section">
-                    <h3>About</h3>
+                    <h4>About</h4>
                     <p>Describe what you want to do with your font in your natural language. The assistant will generate
                         Python code using the <strong>context</strong> library and run it.</p>
                     <ul>
@@ -421,15 +423,60 @@
                     <div class="settings-item-description">Adjust the volume for audio feedback</div>
                 </div>
                 <div class="settings-item">
-                    <label class="settings-item-label">Memory</label>
+                    <label class="settings-item-label">
+                        Memory
+                        <button class="info-icon-btn" id="memory-info-btn" title="Memory usage information">
+                            <span class="material-symbols-outlined">help</span>
+                        </button>
+                    </label>
                     <div class="memory-display-settings">
                         <div class="memory-bar-container">
                             <div class="memory-bar" id="settings-memory-bar"></div>
                         </div>
                         <div class="memory-percentage" id="settings-memory-percentage">---%</div>
                     </div>
+                    <div class="memory-details" id="settings-memory-details">Loading...</div>
                     <div class="settings-item-description">Close all editor browser tabs at 90% to prevent crashes.
                         Remember to save your data.</div>
+                </div>
+                
+                <!-- Memory Info Popup -->
+                <div class="info-popup-overlay" id="memory-info-popup" style="display: none;">
+                    <div class="info-popup">
+                        <div class="info-popup-header">
+                            <h3>Memory Usage</h3>
+                            <button class="info-popup-close" id="memory-info-close">
+                                <span class="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                        <div class="info-popup-content">
+                            <p>This shows how much browser memory the font editor is using.</p>
+                            
+                            <h4>Understanding Memory Usage</h4>
+                            <ul>
+                                <li><strong>Used Memory:</strong> Current memory allocated by the app</li>
+                                <li><strong>Memory Limit:</strong> Maximum memory allowed by your browser</li>
+                                <li><strong>Percentage:</strong> How close you are to the limit</li>
+                            </ul>
+                            
+                            <h4>⚠️ Important: Shared Memory</h4>
+                            <p>A significant portion of memory is <strong>shared across all browser tabs</strong> running this app. This includes:</p>
+                            <ul>
+                                <li>Python runtime (Pyodide)</li>
+                                <li>Core libraries and modules</li>
+                                <li>Compiled WebAssembly code</li>
+                            </ul>
+                            
+                            <p class="info-highlight">💡 To fully free memory, you must <strong>close ALL tabs</strong> with this app, then reopen in a fresh tab.</p>
+                            
+                            <h4>When to Worry</h4>
+                            <ul>
+                                <li><span style="color: var(--accent-green);">🟢 Below 70%:</span> Safe, normal operation</li>
+                                <li><span style="color: var(--accent-yellow);">🟡 70-90%:</span> Warning, consider saving and restarting</li>
+                                <li><span style="color: var(--accent-red);">🔴 Above 90%:</span> Critical, close all tabs and restart</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

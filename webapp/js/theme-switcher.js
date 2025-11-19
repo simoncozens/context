@@ -71,11 +71,19 @@
                 }
             });
 
-            // ESC to close settings
+            // ESC to close settings (only if no popups are open and event not already handled)
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && this.settingsPanel?.classList.contains('open')) {
-                    e.preventDefault();
-                    this.closeSettings();
+                    // Don't close if event was already handled by a popup
+                    if (e.defaultPrevented) {
+                        return;
+                    }
+                    // Check if any popup is currently open
+                    const openPopups = document.querySelectorAll('.info-popup-overlay[style*="display: flex"], .modal.active, .matplotlib-modal.active');
+                    if (openPopups.length === 0) {
+                        e.preventDefault();
+                        this.closeSettings();
+                    }
                 }
             });
         }

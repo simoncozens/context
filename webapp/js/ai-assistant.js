@@ -339,12 +339,12 @@ class AIAssistant {
         // Open modal
         infoButton.addEventListener('click', (event) => {
             event.stopPropagation();
-            modal.classList.add('active');
+            modal.style.display = 'flex';
         });
 
         // Close modal
         const closeModal = () => {
-            modal.classList.remove('active');
+            modal.style.display = 'none';
             // Restore cursor to input field after closing modal
             if (this.promptInput && this.isAssistantViewFocused) {
                 this.promptInput.focus();
@@ -365,7 +365,9 @@ class AIAssistant {
 
         // Close on Escape key
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && modal.classList.contains('active')) {
+            if (e.key === 'Escape' && modal.style.display === 'flex') {
+                e.preventDefault();
+                e.stopPropagation();
                 closeModal();
             }
         });

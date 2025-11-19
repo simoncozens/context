@@ -9,6 +9,7 @@
             this.monitorElement = null;
             this.settingsBarElement = null;
             this.settingsPercentageElement = null;
+            this.settingsDetailsElement = null;
             this.settingsIndicator = null;
             this.updateInterval = null;
             this.warningThreshold = 0.70; // 70% - show warning indicator
@@ -49,7 +50,11 @@
             // Get settings panel elements
             this.settingsBarElement = document.getElementById('settings-memory-bar');
             this.settingsPercentageElement = document.getElementById('settings-memory-percentage');
+            this.settingsDetailsElement = document.getElementById('settings-memory-details');
             this.settingsIndicator = document.getElementById('settings-memory-indicator');
+
+            // Setup memory info popup
+            this.setupInfoPopup();
 
             // Keyboard shortcut: Cmd+M for detailed view
             document.addEventListener('keydown', (e) => {
@@ -69,6 +74,44 @@
             }
         }
 
+        setupInfoPopup() {
+            const infoBtn = document.getElementById('memory-info-btn');
+            const popup = document.getElementById('memory-info-popup');
+            const closeBtn = document.getElementById('memory-info-close');
+
+            if (!infoBtn || !popup || !closeBtn) {
+                console.warn('Memory info popup elements not found');
+                return;
+            }
+
+            // Open popup
+            infoBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                popup.style.display = 'flex';
+            });
+
+            // Close popup - close button
+            closeBtn.addEventListener('click', () => {
+                popup.style.display = 'none';
+            });
+
+            // Close popup - click outside
+            popup.addEventListener('click', (e) => {
+                if (e.target === popup) {
+                    popup.style.display = 'none';
+                }
+            });
+
+            // Close popup - Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && popup.style.display === 'flex') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    popup.style.display = 'none';
+                }
+            });
+        }
+
         updateSettingsDisplay() {
             const info = this.getMemoryInfo();
 
@@ -79,6 +122,9 @@
                 if (this.settingsBarElement) {
                     this.settingsBarElement.style.width = '0%';
                 }
+                if (this.settingsDetailsElement) {
+                    this.settingsDetailsElement.textContent = 'Memory monitoring not supported in this browser';
+                }
                 return;
             }
 
@@ -87,6 +133,11 @@
             // Update percentage display
             if (this.settingsPercentageElement) {
                 this.settingsPercentageElement.textContent = `${percent.toFixed(0)}%`;
+            }
+
+            // Update memory details
+            if (this.settingsDetailsElement) {
+                this.settingsDetailsElement.textContent = `${info.usedMB} MB used of ${info.limitMB} MB`;
             }
 
             // Update bar
