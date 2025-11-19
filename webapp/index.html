@@ -439,7 +439,7 @@
                     <div class="settings-item-description">Close all editor browser tabs at 90% to prevent crashes.
                         Remember to save your data.</div>
                 </div>
-                
+
                 <!-- Memory Info Popup -->
                 <div class="info-popup-overlay" id="memory-info-popup" style="display: none;">
                     <div class="info-popup">
@@ -451,29 +451,34 @@
                         </div>
                         <div class="info-popup-content">
                             <p>This shows how much browser memory the font editor is using.</p>
-                            
+
                             <h4>Understanding Memory Usage</h4>
                             <ul>
                                 <li><strong>Used Memory:</strong> Current memory allocated by the app</li>
                                 <li><strong>Memory Limit:</strong> Maximum memory allowed by your browser</li>
                                 <li><strong>Percentage:</strong> How close you are to the limit</li>
                             </ul>
-                            
+
                             <h4>⚠️ Important: Shared Memory</h4>
-                            <p>A significant portion of memory is <strong>shared across all browser tabs</strong> running this app. This includes:</p>
+                            <p>A significant portion of memory is <strong>shared across all browser tabs</strong>
+                                running this app. This includes:</p>
                             <ul>
                                 <li>Python runtime (Pyodide)</li>
                                 <li>Core libraries and modules</li>
                                 <li>Compiled WebAssembly code</li>
                             </ul>
-                            
-                            <p class="info-highlight">💡 To fully free memory, you must <strong>close ALL tabs</strong> with this app, then reopen in a fresh tab.</p>
-                            
+
+                            <p class="info-highlight">💡 To fully free memory, you must <strong>close ALL tabs</strong>
+                                with this app, then reopen in a fresh tab.</p>
+
                             <h4>When to Worry</h4>
                             <ul>
-                                <li><span style="color: var(--accent-green);">🟢 Below 70%:</span> Safe, normal operation</li>
-                                <li><span style="color: var(--accent-yellow);">🟡 70-90%:</span> Warning, consider saving and restarting</li>
-                                <li><span style="color: var(--accent-red);">🔴 Above 90%:</span> Critical, close all tabs and restart</li>
+                                <li><span style="color: var(--accent-green);">🟢 Below 70%:</span> Safe, normal
+                                    operation</li>
+                                <li><span style="color: var(--accent-yellow);">🟡 70-90%:</span> Warning, consider
+                                    saving and restarting</li>
+                                <li><span style="color: var(--accent-red);">🔴 Above 90%:</span> Critical, close all
+                                    tabs and restart</li>
                             </ul>
                         </div>
                     </div>
