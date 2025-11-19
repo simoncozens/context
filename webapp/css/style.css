@@ -869,7 +869,7 @@ body {
     background-color: transparent;
     border: none;
     border-left: 1px solid var(--text-secondary);
-    color: var(--text-primary) !important;
+    color: var(--text-primary);
     padding: 0 8px;
     border-radius: 0;
     cursor: pointer;
