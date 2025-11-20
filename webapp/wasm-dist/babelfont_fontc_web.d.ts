@@ -1,6 +1,15 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+ * Get version information
+ */
+export function version(): string;
+export function init(): void;
+/**
+ * Legacy function for compatibility
+ */
+export function compile_glyphs(_glyphs_json: string): Uint8Array;
+/**
  * Compile a font from babelfont JSON directly to TTF
  * 
  * This is the main entry point that takes a .babelfont JSON string
@@ -13,15 +22,6 @@
  * * `Vec<u8>` - Compiled TTF font bytes
  */
 export function compile_babelfont(babelfont_json: string): Uint8Array;
-/**
- * Legacy function for compatibility
- */
-export function compile_glyphs(_glyphs_json: string): Uint8Array;
-/**
- * Get version information
- */
-export function version(): string;
-export function init(): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
