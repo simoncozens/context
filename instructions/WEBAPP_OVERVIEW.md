@@ -20,3 +20,7 @@ A browser-based font editor with live compilation and rendering capabilities.
 ## Live Feedback
 
 The editor provides real-time visualization of how outline edits affect the final rendered font, combining the precision of the compiled font with the interactivity of editable vector paths.
+
+## Development Instructions
+
+If necessary, create command-line workflows for development and testing, for instance to proof font compilation via node using the compiled fontc wasm binary ("test-compiler" folder), as you can easily debug its output without user interaction.
