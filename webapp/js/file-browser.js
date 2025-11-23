@@ -441,7 +441,16 @@ async function initFileBrowser() {
         }
 
         console.log("Initializing file browser...");
-        await navigateToPath('/');
+
+        // Create /user folder if it doesn't exist
+        await window.pyodide.runPython(`
+import os
+if not os.path.exists('/user'):
+    os.makedirs('/user')
+        `);
+
+        // Navigate to /user folder
+        await navigateToPath('/user');
         console.log("File browser initialized");
     } catch (error) {
         console.error("Error initializing file browser:", error);
