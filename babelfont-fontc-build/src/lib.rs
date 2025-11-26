@@ -27,10 +27,13 @@ pub fn compile_babelfont(babelfont_json: &str) -> Result<Vec<u8>, JsValue> {
         .map_err(|e| JsValue::from_str(&format!("Failed to create IR source: {}", e)))?;
     
     // Step 3: Use fontc to compile
-    // Create a temporary directory for fontc's intermediate files
-    // Note: In WASM, this doesn't actually write to disk
-    let build_dir = std::path::Path::new("/tmp/fontc_build");
-    let flags = fontir::orchestration::Flags::default();
+    // Use empty path - fontc will keep everything in memory when flags are disabled
+    let build_dir = std::path::Path::new("");
+    
+    // Disable filesystem-dependent flags to keep everything in memory
+    let mut flags = fontir::orchestration::Flags::default();
+    flags.remove(fontir::orchestration::Flags::EMIT_IR);
+    flags.remove(fontir::orchestration::Flags::EMIT_DEBUG);
     
     let compiled_font = fontc::generate_font(
         Box::new(source),

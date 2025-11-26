@@ -7,15 +7,22 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-babelfont = { git = "https://github.com/simoncozens/babelfont-rs.git", features = ["fontir"] }
-# Use the same versions that babelfont uses
-fontc = { git = "https://github.com/googlefonts/fontc.git", branch = "edit-edits" }
-fontir = { git = "https://github.com/googlefonts/fontc.git", branch = "edit-edits" }
+babelfont = { git = "https://github.com/simoncozens/babelfont-rs.git", default-features = false, features = ["fontir"] }
+# Use local fontc with rayon completely removed
+fontc = { path = "../fontc-no-rayon/fontc" }
+fontir = { path = "../fontc-no-rayon/fontir" }
 wasm-bindgen = "0.2"
 serde_json = "1.0"
 console_error_panic_hook = "0.1"
 tempfile = "3"
 
+[dependencies.web-sys]
+version = "0.3"
+features = ["console"]
+
 [profile.release]
 opt-level = "z"
 lto = true
+
+[patch.'https://github.com/simoncozens/babelfont-rs.git']
+babelfont = { path = "../babelfont-rs-local" }

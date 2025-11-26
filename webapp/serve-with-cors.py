@@ -6,6 +6,7 @@ Based on Simon Cozens' approach in fontc-web
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import sys
+import os
 
 
 class CORSRequestHandler(SimpleHTTPRequestHandler):
@@ -26,23 +27,20 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         return mime_type
 
 
-def run(port=8000):
-    server_address = ("", port)
+def run(port=8080):
+    server_address = ('', port)
     httpd = HTTPServer(server_address, CORSRequestHandler)
-    print(f"🚀 Starting server with CORS headers on port {port}")
-    print(f"📡 Server URL: http://localhost:{port}")
+    print(f"🌐 Server running at http://localhost:{port}/")
+    print(f"📂 Serving from: {os.getcwd()}")
     print(f"")
-    print(f"✅ CORS headers enabled for WASM threading:")
-    print(f"   - Cross-Origin-Embedder-Policy: require-corp")
-    print(f"   - Cross-Origin-Opener-Policy: same-origin")
+    print(f"📄 Main app: http://localhost:{port}/")
+    print(f"🧪 Test compilation: http://localhost:{port}/test-compile.html")
     print(f"")
-    print(f"Press Ctrl+C to stop the server")
-    print(f"")
-
+    print(f"Press Ctrl+C to stop")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print(f"\n👋 Server stopped")
+        print("\n\n👋 Server stopped")
         sys.exit(0)
 
 
