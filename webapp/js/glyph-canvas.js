@@ -128,16 +128,6 @@ class GlyphCanvas {
         // Mouse move for hover detection
         this.canvas.addEventListener('mousemove', (e) => this.onMouseMoveHover(e));
 
-        // Focus/blur events for background color
-        this.canvas.addEventListener('focus', () => {
-            this.isFocused = true;
-            this.render();
-        });
-        this.canvas.addEventListener('blur', () => {
-            this.isFocused = false;
-            this.render();
-        });
-
         // Window resize
         window.addEventListener('resize', () => this.onResize());
 
@@ -553,10 +543,11 @@ class GlyphCanvas {
         // Get computed CSS variable values
         const computedStyle = getComputedStyle(document.documentElement);
 
-        // Check if canvas actually has focus
-        const actuallyFocused = document.activeElement === this.canvas;
+        // Check if the editor view has the 'focused' class
+        const editorView = document.querySelector('#view-editor');
+        const isViewFocused = editorView && editorView.classList.contains('focused');
 
-        if (actuallyFocused) {
+        if (isViewFocused) {
             // Active/focused background (same as .view.focused)
             this.ctx.fillStyle = computedStyle.getPropertyValue('--bg-active').trim();
         } else {
@@ -908,6 +899,20 @@ document.addEventListener('DOMContentLoaded', () => {
             // Store reference to sidebar for later updates
             window.glyphCanvas.sidebar = sidebar;
             window.glyphCanvas.axesSection = axesSection;
+
+            // Observe when the editor view gains/loses focus (via 'focused' class)
+            const editorView = document.querySelector('#view-editor');
+            if (editorView) {
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                            // Render when focused class changes
+                            window.glyphCanvas.render();
+                        }
+                    });
+                });
+                observer.observe(editorView, { attributes: true, attributeFilter: ['class'] });
+            }
 
             // Listen for font compilation events
             setupFontLoadingListener();
