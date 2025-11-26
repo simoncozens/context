@@ -179,20 +179,9 @@ babelfont_json = orjson.dumps(font_dict).decode('utf-8')
             const outputFilename = `${basename}.ttf`;
             const outputPath = sourceDir === '.' ? outputFilename : `${sourceDir}/${outputFilename}`;
 
-            // Save to Pyodide's virtual filesystem in the same directory as source
-            await window.pyodide.runPythonAsync(`
-import os
-
-# Convert JavaScript Uint8Array to Python bytes
-output_data = bytes(${JSON.stringify(Array.from(ttfBytes))})
-
-# Save to virtual filesystem
-output_path = '${outputPath}'
-with open(output_path, 'wb') as f:
-    f.write(output_data)
-
-print(f"✅ Compiled font saved to: {output_path} ({len(output_data)} bytes)")
-            `);
+            // Save directly to Pyodide's virtual filesystem using FS API (much faster than JSON roundtrip)
+            window.pyodide.FS.writeFile(outputPath, ttfBytes);
+            console.log(`💾 Saved to: ${outputPath}`);
 
             const totalTime = performance.now() - startTime;
 
