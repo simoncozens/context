@@ -28,6 +28,13 @@ class GlyphCanvas {
         this.variationSettings = {}; // Store variable axis values
         this.sourceGlyphNames = {}; // Map of GID to glyph names from source font
 
+        // Animation state
+        this.animationFrames = parseInt(localStorage.getItem('animationFrames') || '10', 10);
+        this.isAnimating = false;
+        this.animationStartValues = {};
+        this.animationTargetValues = {};
+        this.animationCurrentFrame = 0;
+
         // Focus state for background color
         this.isFocused = false;
 
@@ -390,9 +397,51 @@ class GlyphCanvas {
     }
 
     setVariation(axisTag, value) {
-        this.variationSettings[axisTag] = value;
-        console.log('Variation settings updated:', this.variationSettings);
+        const previousValue = this.variationSettings[axisTag] !== undefined
+            ? this.variationSettings[axisTag]
+            : this.getVariationAxes().find(a => a.tag === axisTag)?.defaultValue || 0;
+
+        // Cancel any ongoing animation
+        if (this.isAnimating) {
+            this.isAnimating = false;
+        }
+
+        // Set up animation
+        this.animationStartValues = { ...this.variationSettings };
+        this.animationTargetValues = { ...this.variationSettings, [axisTag]: value };
+        this.animationCurrentFrame = 0;
+        this.isAnimating = true;
+
+        // Start animation loop
+        this.animateVariation();
+    }
+
+    animateVariation() {
+        if (!this.isAnimating) return;
+
+        this.animationCurrentFrame++;
+        const progress = Math.min(this.animationCurrentFrame / this.animationFrames, 1.0);
+
+        // Ease-out cubic for smoother animation
+        const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+        // Interpolate all axes
+        for (const axisTag in this.animationTargetValues) {
+            const startValue = this.animationStartValues[axisTag] || this.animationTargetValues[axisTag];
+            const targetValue = this.animationTargetValues[axisTag];
+            this.variationSettings[axisTag] = startValue + (targetValue - startValue) * easedProgress;
+        }
+
         this.shapeText();
+
+        if (progress < 1.0) {
+            requestAnimationFrame(() => this.animateVariation());
+        } else {
+            // Ensure we end exactly at target values
+            this.variationSettings = { ...this.animationTargetValues };
+            this.isAnimating = false;
+            this.shapeText();
+        }
     }
 
     getVariationAxes() {
