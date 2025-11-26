@@ -30,6 +30,7 @@ function afterPythonExecution() {
 
     // Skip dirty checks if we're loading a font or if dropdown manager not ready
     if (isLoadingFont || !window.fontDropdownManager) {
+        console.log('⏭️ Skipping dirty checks (loading font or dropdown not ready)');
         return;
     }
 
@@ -42,6 +43,11 @@ function afterPythonExecution() {
             window.fontDropdownManager.updateDirtyIndicator();
         }
     }, 100); // Wait 100ms after last execution before checking
+
+    // Check if font needs recompilation and schedule auto-compile
+    if (window.autoCompileManager) {
+        window.autoCompileManager.checkAndSchedule();
+    }
 }
 
 // Make functions globally available
