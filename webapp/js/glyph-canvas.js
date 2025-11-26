@@ -26,6 +26,7 @@ class GlyphCanvas {
         this.fontBlob = null;
         this.opentypeFont = null; // For glyph path extraction
         this.variationSettings = {}; // Store variable axis values
+        this.sourceGlyphNames = {}; // Map of GID to glyph names from source font
 
         // Focus state for background color
         this.isFocused = false;
@@ -148,7 +149,7 @@ class GlyphCanvas {
     onMouseDown(e) {
         // Focus the canvas when clicked
         this.canvas.focus();
-        
+
         this.isDragging = true;
         this.lastMouseX = e.clientX;
         this.lastMouseY = e.clientY;
@@ -471,10 +472,10 @@ class GlyphCanvas {
             slider.style.width = '100%';
 
             // Restore previous value if it exists, otherwise use default
-            const initialValue = this.variationSettings[axis.tag] !== undefined 
+            const initialValue = this.variationSettings[axis.tag] !== undefined
                 ? this.variationSettings[axis.tag]
                 : axis.defaultValue;
-            
+
             slider.value = initialValue;
             valueLabel.textContent = initialValue.toFixed(0);
 
@@ -551,10 +552,10 @@ class GlyphCanvas {
         // Fill background (different color based on focus state)
         // Get computed CSS variable values
         const computedStyle = getComputedStyle(document.documentElement);
-        
+
         // Check if canvas actually has focus
         const actuallyFocused = document.activeElement === this.canvas;
-        
+
         if (actuallyFocused) {
             // Active/focused background (same as .view.focused)
             this.ctx.fillStyle = computedStyle.getPropertyValue('--bg-active').trim();
@@ -756,7 +757,7 @@ class GlyphCanvas {
             const glyphId = this.shapedGlyphs[this.hoveredGlyphIndex].g;
             let glyphName = `GID ${glyphId}`;
 
-            // Try to get glyph name from OpenType.js
+            // Get glyph name from compiled font via OpenType.js
             if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
                 const glyph = this.opentypeFont.glyphs.get(glyphId);
                 if (glyph.name) {
@@ -768,12 +769,12 @@ class GlyphCanvas {
             const tooltipX = (this.mouseCanvasX || this.mouseX) + 15;
             const tooltipY = (this.mouseCanvasY || this.mouseY) - 10;
 
-            // Measure text for background
-            this.ctx.font = '14px monospace';
+            // Measure text for background (bigger size)
+            this.ctx.font = '20px monospace';
             const metrics = this.ctx.measureText(glyphName);
-            const padding = 6;
+            const padding = 16;
             const bgWidth = metrics.width + padding * 2;
-            const bgHeight = 20;
+            const bgHeight = 40;
 
             // Draw background
             this.ctx.fillStyle = isDarkTheme ? 'rgba(40, 40, 40, 0.95)' : 'rgba(255, 255, 255, 0.95)';
@@ -786,7 +787,7 @@ class GlyphCanvas {
 
             // Draw text
             this.ctx.fillStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)';
-            this.ctx.fillText(glyphName, tooltipX + padding, tooltipY);
+            this.ctx.fillText(glyphName, tooltipX + padding, tooltipY + 2);
         }
 
         this.ctx.restore();

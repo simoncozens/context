@@ -31,9 +31,11 @@ pub fn compile_babelfont(babelfont_json: &str) -> Result<Vec<u8>, JsValue> {
     let build_dir = std::path::Path::new("");
     
     // Disable filesystem-dependent flags to keep everything in memory
+    // Also disable PRODUCTION_NAMES to use source glyph names instead of production names
     let mut flags = fontir::orchestration::Flags::default();
     flags.remove(fontir::orchestration::Flags::EMIT_IR);
     flags.remove(fontir::orchestration::Flags::EMIT_DEBUG);
+    flags.remove(fontir::orchestration::Flags::PRODUCTION_NAMES);
     
     let compiled_font = fontc::generate_font(
         Box::new(source),
