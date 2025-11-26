@@ -25,6 +25,7 @@ class GlyphCanvas {
         this.currentFont = null;
         this.fontBlob = null;
         this.opentypeFont = null; // For glyph path extraction
+        this.variationSettings = {}; // Store variable axis values
 
         // HarfBuzz instance and objects
         this.hb = null;
@@ -262,6 +263,9 @@ class GlyphCanvas {
 
                 console.log('Font loaded into HarfBuzz');
 
+                // Update axes UI
+                this.updateAxesUI();
+                
                 // Shape text with new font
                 this.shapeText();
             }
@@ -283,6 +287,97 @@ class GlyphCanvas {
         this.shapeText();
     }
 
+    setVariation(axisTag, value) {
+        this.variationSettings[axisTag] = value;
+        console.log('Variation settings updated:', this.variationSettings);
+        this.shapeText();
+    }
+
+    getVariationAxes() {
+        if (!this.opentypeFont || !this.opentypeFont.tables.fvar) {
+            return [];
+        }
+        return this.opentypeFont.tables.fvar.axes || [];
+    }
+
+    updateAxesUI() {
+        if (!this.axesSection) return;
+        
+        // Clear existing axes
+        this.axesSection.innerHTML = '';
+        
+        const axes = this.getVariationAxes();
+        
+        if (axes.length === 0) {
+            return; // No variable axes
+        }
+        
+        // Add section title
+        const title = document.createElement('div');
+        title.textContent = 'Variable Axes';
+        title.style.fontSize = '12px';
+        title.style.fontWeight = '600';
+        title.style.color = 'var(--text-secondary)';
+        title.style.textTransform = 'uppercase';
+        title.style.letterSpacing = '0.5px';
+        title.style.marginTop = '8px';
+        this.axesSection.appendChild(title);
+        
+        // Create slider for each axis
+        axes.forEach(axis => {
+            const axisContainer = document.createElement('div');
+            axisContainer.style.display = 'flex';
+            axisContainer.style.flexDirection = 'column';
+            axisContainer.style.gap = '4px';
+            
+            // Label row (axis name and value)
+            const labelRow = document.createElement('div');
+            labelRow.style.display = 'flex';
+            labelRow.style.justifyContent = 'space-between';
+            labelRow.style.alignItems = 'center';
+            labelRow.style.fontSize = '13px';
+            
+            const axisLabel = document.createElement('span');
+            axisLabel.textContent = axis.name.en || axis.tag;
+            axisLabel.style.color = 'var(--text-primary)';
+            axisLabel.style.fontWeight = '500';
+            
+            const valueLabel = document.createElement('span');
+            valueLabel.style.color = 'var(--text-secondary)';
+            valueLabel.style.fontFamily = 'var(--font-mono)';
+            valueLabel.style.fontSize = '12px';
+            valueLabel.textContent = axis.defaultValue.toFixed(0);
+            
+            labelRow.appendChild(axisLabel);
+            labelRow.appendChild(valueLabel);
+            
+            // Slider
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = axis.minValue;
+            slider.max = axis.maxValue;
+            slider.value = axis.defaultValue;
+            slider.step = 1;
+            slider.style.width = '100%';
+            
+            // Initialize variation setting to default
+            this.variationSettings[axis.tag] = axis.defaultValue;
+            
+            // Update on change
+            slider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                valueLabel.textContent = value.toFixed(0);
+                this.setVariation(axis.tag, value);
+            });
+            
+            axisContainer.appendChild(labelRow);
+            axisContainer.appendChild(slider);
+            this.axesSection.appendChild(axisContainer);
+        });
+        
+        console.log(`Created ${axes.length} variable axis sliders`);
+    }
+
     shapeText() {
         if (!this.hb || !this.hbFont || !this.textBuffer) {
             this.shapedGlyphs = [];
@@ -291,6 +386,11 @@ class GlyphCanvas {
         }
 
         try {
+            // Apply variation settings if any
+            if (Object.keys(this.variationSettings).length > 0) {
+                this.hbFont.setVariations(this.variationSettings);
+            }
+            
             // Create HarfBuzz buffer
             const buffer = this.hb.createBuffer();
             buffer.addText(this.textBuffer);
@@ -401,15 +501,12 @@ class GlyphCanvas {
             return;
         }
 
-        if (!this.opentypeFont) {
+        if (!this.hbFont) {
             return;
         }
 
         const invScale = 1 / this.scale;
         let xPosition = 0;
-
-        // Set font size for path extraction (in font units)
-        const fontSize = 1000; // Use font units directly
 
         // Use black on white or white on black based on theme
         const isDarkTheme = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -425,58 +522,61 @@ class GlyphCanvas {
             const x = xPosition + xOffset;
             const y = yOffset;
 
-            // Get glyph from opentype.js
-            const otGlyph = this.opentypeFont.glyphs.get(glyphId);
+            try {
+                // Get glyph outline from HarfBuzz (supports variations)
+                const glyphData = this.hbFont.glyphToPath(glyphId);
+                
+                if (glyphData) {
+                    this.ctx.save();
+                    this.ctx.translate(x, y);
 
-            if (otGlyph) {
-                this.ctx.save();
-                this.ctx.translate(x, y);
+                    // Draw the path from HarfBuzz data
+                    // No need to flip Y here - the main transform matrix already flips Y
+                    this.ctx.beginPath();
+                    
+                    // Parse the SVG path data
+                    const path = new Path2D(glyphData);
+                    
+                    this.ctx.fill(path);
 
-                // Get the glyph path
-                const path = otGlyph.getPath(0, 0, fontSize);
+                    this.ctx.restore();
+                }
+            } catch (error) {
+                // Fallback to OpenType.js if HarfBuzz glyph drawing fails
+                if (this.opentypeFont) {
+                    const otGlyph = this.opentypeFont.glyphs.get(glyphId);
+                    
+                    if (otGlyph) {
+                        this.ctx.save();
+                        this.ctx.translate(x, y);
 
-                // Draw the path
-                this.ctx.beginPath();
+                        const path = otGlyph.getPath(0, 0, 1000);
+                        this.ctx.beginPath();
 
-                // Convert opentype.js path commands to canvas commands
-                for (const cmd of path.commands) {
-                    switch (cmd.type) {
-                        case 'M': // moveTo
-                            this.ctx.moveTo(cmd.x, -cmd.y); // Flip Y
-                            break;
-                        case 'L': // lineTo
-                            this.ctx.lineTo(cmd.x, -cmd.y);
-                            break;
-                        case 'Q': // quadratic curve
-                            this.ctx.quadraticCurveTo(cmd.x1, -cmd.y1, cmd.x, -cmd.y);
-                            break;
-                        case 'C': // cubic curve
-                            this.ctx.bezierCurveTo(cmd.x1, -cmd.y1, cmd.x2, -cmd.y2, cmd.x, -cmd.y);
-                            break;
-                        case 'Z': // closePath
-                            this.ctx.closePath();
-                            break;
+                        for (const cmd of path.commands) {
+                            switch (cmd.type) {
+                                case 'M':
+                                    this.ctx.moveTo(cmd.x, -cmd.y);
+                                    break;
+                                case 'L':
+                                    this.ctx.lineTo(cmd.x, -cmd.y);
+                                    break;
+                                case 'Q':
+                                    this.ctx.quadraticCurveTo(cmd.x1, -cmd.y1, cmd.x, -cmd.y);
+                                    break;
+                                case 'C':
+                                    this.ctx.bezierCurveTo(cmd.x1, -cmd.y1, cmd.x2, -cmd.y2, cmd.x, -cmd.y);
+                                    break;
+                                case 'Z':
+                                    this.ctx.closePath();
+                                    break;
+                            }
+                        }
+
+                        this.ctx.fill();
+                        this.ctx.restore();
                     }
                 }
-
-                this.ctx.fill();
-
-                this.ctx.restore();
-            } else {
-                // Fallback: draw a placeholder box if glyph not found
-                this.ctx.save();
-                this.ctx.translate(x, y);
-
-                const glyphWidth = xAdvance * 0.8;
-                const glyphHeight = 700;
-
-                const isDarkTheme = document.documentElement.getAttribute('data-theme') !== 'light';
-                this.ctx.fillStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)';
-                this.ctx.beginPath();
-                this.ctx.rect(0, -glyphHeight, glyphWidth, glyphHeight);
-                this.ctx.fill();
-
-                this.ctx.restore();
             }
 
             xPosition += xAdvance;
@@ -545,40 +645,62 @@ document.addEventListener('DOMContentLoaded', () => {
     const initCanvas = () => {
         const editorContent = document.querySelector('#view-editor .view-content');
         if (editorContent) {
-            // Create canvas container
-            const canvasContainer = document.createElement('div');
-            canvasContainer.id = 'glyph-canvas-container';
-            canvasContainer.style.width = '100%';
-            canvasContainer.style.height = '100%';
-            canvasContainer.style.position = 'relative';
-            editorContent.appendChild(canvasContainer);
-
-            // Create text input
-            const textInputContainer = document.createElement('div');
-            textInputContainer.style.position = 'absolute';
-            textInputContainer.style.top = '10px';
-            textInputContainer.style.right = '10px';
-            textInputContainer.style.zIndex = '100';
-            textInputContainer.style.backgroundColor = 'var(--bg-secondary)';
-            textInputContainer.style.border = '1px solid var(--border-primary)';
-            textInputContainer.style.borderRadius = '4px';
-            textInputContainer.style.padding = '8px';
-
+            // Create main container with flexbox layout
+            const mainContainer = document.createElement('div');
+            mainContainer.style.display = 'flex';
+            mainContainer.style.width = '100%';
+            mainContainer.style.height = '100%';
+            mainContainer.style.overflow = 'hidden';
+            
+            // Create sidebar toolbar
+            const sidebar = document.createElement('div');
+            sidebar.id = 'glyph-editor-sidebar';
+            sidebar.style.width = '300px';
+            sidebar.style.minWidth = '300px';
+            sidebar.style.height = '100%';
+            sidebar.style.backgroundColor = 'var(--bg-secondary)';
+            sidebar.style.borderRight = '1px solid var(--border-primary)';
+            sidebar.style.padding = '16px';
+            sidebar.style.overflowY = 'auto';
+            sidebar.style.display = 'flex';
+            sidebar.style.flexDirection = 'column';
+            sidebar.style.gap = '16px';
+            
+            // Create text input section
+            const textInputSection = document.createElement('div');
+            
+            const textInputLabel = document.createElement('label');
+            textInputLabel.textContent = 'Text to Render';
+            textInputLabel.style.display = 'block';
+            textInputLabel.style.marginBottom = '8px';
+            textInputLabel.style.fontSize = '12px';
+            textInputLabel.style.fontWeight = '600';
+            textInputLabel.style.color = 'var(--text-secondary)';
+            textInputLabel.style.textTransform = 'uppercase';
+            textInputLabel.style.letterSpacing = '0.5px';
+            
             const textInput = document.createElement('input');
             textInput.type = 'text';
             textInput.id = 'glyph-text-input';
             textInput.placeholder = 'Enter text to render...';
-            textInput.style.width = '300px';
-            textInput.style.padding = '6px';
-            textInput.style.border = '1px solid var(--border-secondary)';
-            textInput.style.borderRadius = '3px';
-            textInput.style.backgroundColor = 'var(--input-bg)';
-            textInput.style.color = 'var(--text-primary)';
-            textInput.style.fontFamily = 'var(--font-mono)';
-            textInput.style.fontSize = '14px';
-
-            textInputContainer.appendChild(textInput);
-            editorContent.appendChild(textInputContainer);
+            textInput.style.width = '100%';
+            textInput.style.boxSizing = 'border-box';
+            
+            textInputSection.appendChild(textInputLabel);
+            textInputSection.appendChild(textInput);
+            sidebar.appendChild(textInputSection);
+            
+            // Create canvas container
+            const canvasContainer = document.createElement('div');
+            canvasContainer.id = 'glyph-canvas-container';
+            canvasContainer.style.flex = '1';
+            canvasContainer.style.height = '100%';
+            canvasContainer.style.position = 'relative';
+            
+            // Assemble layout
+            mainContainer.appendChild(sidebar);
+            mainContainer.appendChild(canvasContainer);
+            editorContent.appendChild(mainContainer);
 
             // Initialize canvas
             window.glyphCanvas = new GlyphCanvas('glyph-canvas-container');
@@ -592,6 +714,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.glyphCanvas.setTextBuffer(e.target.value);
                 }
             });
+            
+            // Create variable axes container (initially empty)
+            const axesSection = document.createElement('div');
+            axesSection.id = 'glyph-axes-section';
+            axesSection.style.display = 'flex';
+            axesSection.style.flexDirection = 'column';
+            axesSection.style.gap = '12px';
+            sidebar.appendChild(axesSection);
+            
+            // Store reference to sidebar for later updates
+            window.glyphCanvas.sidebar = sidebar;
+            window.glyphCanvas.axesSection = axesSection;
 
             // Listen for font compilation events
             setupFontLoadingListener();
