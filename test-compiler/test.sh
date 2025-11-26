@@ -1,1 +1,1 @@
-./compile-font.sh Fustat.babelfont output.ttf
+node compile.js Fustat.babelfont output.ttf
