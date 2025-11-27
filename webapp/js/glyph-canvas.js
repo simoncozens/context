@@ -1841,6 +1841,18 @@ class GlyphCanvas {
             }
         }
 
+        // Ensure we don't return a position beyond the text length
+        if (closestPos > this.textBuffer.length) {
+            closestPos = this.textBuffer.length;
+        }
+        
+        // If the closest position is too far away from the click, return null (allow panning)
+        // This prevents clicking in empty space where text used to be
+        const maxDistance = 500; // Maximum distance in font units to consider a valid click
+        if (closestDist > maxDistance) {
+            return null;
+        }
+
         return closestPos;
     }
 
