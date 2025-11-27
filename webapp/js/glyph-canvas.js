@@ -85,7 +85,7 @@ class GlyphCanvas {
         this.canvas.style.width = '100%';
         this.canvas.style.height = '100%';
         this.canvas.style.display = 'block';
-        this.canvas.style.cursor = 'grab';
+        this.canvas.style.cursor = 'default';
         this.canvas.style.outline = 'none'; // Remove focus outline
         this.canvas.tabIndex = 0; // Make canvas focusable
         this.container.appendChild(this.canvas);
@@ -181,6 +181,8 @@ class GlyphCanvas {
                 this.cursorPosition = clickedPos;
                 this.updateCursorVisualPosition();
                 this.render();
+                // Keep text cursor
+                this.canvas.style.cursor = 'text';
                 return; // Don't start dragging if clicking on text
             }
         }
@@ -208,7 +210,8 @@ class GlyphCanvas {
 
     onMouseUp(e) {
         this.isDragging = false;
-        this.canvas.style.cursor = 'grab';
+        // Update cursor based on current mouse position
+        this.updateCursorStyle(e);
     }
 
     onWheel(e) {
@@ -244,8 +247,31 @@ class GlyphCanvas {
         this.mouseCanvasX = this.mouseX * this.canvas.width / rect.width;
         this.mouseCanvasY = this.mouseY * this.canvas.height / rect.height;
 
+        // Update cursor style based on position
+        this.updateCursorStyle(e);
+
         // Check which glyph is being hovered
         this.updateHoveredGlyph();
+    }
+
+    updateCursorStyle(e) {
+        // Update cursor style based on mouse position
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Transform mouse coordinates to glyph space to check if over text area
+        const transform = this.getTransformMatrix();
+        const det = transform.a * transform.d - transform.b * transform.c;
+        const glyphX = (transform.d * (mouseX - transform.e) - transform.c * (mouseY - transform.f)) / det;
+        const glyphY = (transform.a * (mouseY - transform.f) - transform.b * (mouseX - transform.e)) / det;
+
+        // Check if hovering within cursor height range (same as click detection)
+        if (glyphY <= 1000 && glyphY >= -300) {
+            this.canvas.style.cursor = 'text';
+        } else {
+            this.canvas.style.cursor = 'grab';
+        }
     }
 
     updateHoveredGlyph() {
@@ -1448,9 +1474,10 @@ class GlyphCanvas {
         const glyphX = (transform.d * (mouseX - transform.e) - transform.c * (mouseY - transform.f)) / det;
         const glyphY = (transform.a * (mouseY - transform.f) - transform.b * (mouseX - transform.e)) / det;
 
-        // Check if clicking near baseline (within reasonable Y range)
-        if (Math.abs(glyphY) > 1500) {
-            return null; // Clicked too far from text
+        // Check if clicking within cursor height range (same as cursor drawing)
+        // Cursor goes from 1000 (top) to -300 (bottom)
+        if (glyphY > 1000 || glyphY < -300) {
+            return null; // Clicked outside cursor height - allow panning
         }
 
         if (!this.clusterMap || this.clusterMap.length === 0) {
