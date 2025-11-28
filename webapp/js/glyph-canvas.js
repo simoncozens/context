@@ -272,8 +272,8 @@ class GlyphCanvas {
             }
         }
 
-        // In outline editor mode with layer selected
-        if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
+        // In outline editor mode with layer selected (but not in preview mode)
+        if (this.isGlyphEditMode && this.selectedLayerId && this.layerData && !this.isPreviewMode) {
             // Check if clicking on an anchor first (anchors take priority)
             if (this.hoveredAnchorIndex !== null) {
                 if (e.shiftKey) {
@@ -545,8 +545,8 @@ class GlyphCanvas {
         this.mouseCanvasX = this.mouseX * this.canvas.width / rect.width;
         this.mouseCanvasY = this.mouseY * this.canvas.height / rect.height;
 
-        // In outline editor mode, check for hovered anchors and points first, then other glyphs
-        if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
+        // In outline editor mode, check for hovered anchors and points first (unless in preview mode), then other glyphs
+        if (this.isGlyphEditMode && this.selectedLayerId && this.layerData && !this.isPreviewMode) {
             this.updateHoveredAnchor();
             this.updateHoveredPoint();
             // Also check for hovering over other glyphs (for switching)
@@ -567,8 +567,11 @@ class GlyphCanvas {
         const mouseY = e.clientY - rect.top;
 
         // In outline editing mode, use pointer for points/anchors, grab for panning (NO text cursor)
+        // In preview mode, always show grab cursor
         if (this.isGlyphEditMode) {
-            if (this.selectedLayerId && this.layerData && (this.hoveredPointIndex || this.hoveredAnchorIndex !== null)) {
+            if (this.isPreviewMode || !this.selectedLayerId || !this.layerData) {
+                this.canvas.style.cursor = 'grab';
+            } else if (this.hoveredPointIndex || this.hoveredAnchorIndex !== null) {
                 this.canvas.style.cursor = 'pointer';
             } else {
                 this.canvas.style.cursor = 'grab';
