@@ -700,13 +700,50 @@ json.dumps(result)
         layersTitle.style.marginBottom = '8px';
         this.propertiesSection.appendChild(layersTitle);
 
+        // Sort layers by their axis values (userspace locations)
+        const sortedLayers = [...this.fontData.layers].sort((a, b) => {
+            const masterA = this.fontData.masters.find(m => m.id === a._master);
+            const masterB = this.fontData.masters.find(m => m.id === b._master);
+
+            if (!masterA?.location || !masterB?.location) return 0;
+
+            // Get sorted axis tags
+            const axisTagsA = Object.keys(masterA.location).sort();
+            const axisTagsB = Object.keys(masterB.location).sort();
+
+            // Compare each axis value in order
+            for (let i = 0; i < Math.max(axisTagsA.length, axisTagsB.length); i++) {
+                const tagA = axisTagsA[i];
+                const tagB = axisTagsB[i];
+
+                // If one has fewer axes, it comes first
+                if (!tagA) return -1;
+                if (!tagB) return 1;
+
+                // Compare axis tags alphabetically
+                if (tagA !== tagB) {
+                    return tagA.localeCompare(tagB);
+                }
+
+                // Same tag, compare values
+                const valueA = masterA.location[tagA] || 0;
+                const valueB = masterB.location[tagB] || 0;
+
+                if (valueA !== valueB) {
+                    return valueA - valueB;
+                }
+            }
+
+            return 0;
+        });
+
         // Create layers list
         const layersList = document.createElement('div');
         layersList.style.display = 'flex';
         layersList.style.flexDirection = 'column';
         layersList.style.gap = '4px';
 
-        for (const layer of this.fontData.layers) {
+        for (const layer of sortedLayers) {
             const layerItem = document.createElement('div');
             layerItem.setAttribute('data-layer-id', layer.id); // Add data attribute for selection updates
             layerItem.style.padding = '8px';
