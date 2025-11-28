@@ -76,7 +76,10 @@ class GlyphCanvas {
         this.layerData = null; // Cached layer data with shapes
         this.selectedPoints = []; // Array of {contourIndex, nodeIndex} for selected points
         this.hoveredPointIndex = null; // {contourIndex, nodeIndex} for hovered point
+        this.selectedAnchors = []; // Array of anchor indices for selected anchors
+        this.hoveredAnchorIndex = null; // Index for hovered anchor
         this.isDraggingPoint = false;
+        this.isDraggingAnchor = false;
         this.layerDataDirty = false; // Track if layer data needs saving
         this.isPreviewMode = false; // Preview mode hides outline editor
 
@@ -271,10 +274,45 @@ class GlyphCanvas {
 
         // In outline editor mode with layer selected
         if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
+            // Check if clicking on an anchor first (anchors take priority)
+            if (this.hoveredAnchorIndex !== null) {
+                if (e.shiftKey) {
+                    // Shift-click: add to or remove from selection (keep points selected for mixed selection)
+                    const existingIndex = this.selectedAnchors.indexOf(this.hoveredAnchorIndex);
+                    if (existingIndex >= 0) {
+                        // Remove from selection
+                        this.selectedAnchors.splice(existingIndex, 1);
+                    } else {
+                        // Add to selection
+                        this.selectedAnchors.push(this.hoveredAnchorIndex);
+                    }
+                    this.render();
+                } else {
+                    // Check if clicked anchor is already in selection
+                    const isInSelection = this.selectedAnchors.includes(this.hoveredAnchorIndex);
+
+                    if (!isInSelection) {
+                        // Regular click on unselected anchor: select only this anchor, clear points
+                        this.selectedAnchors = [this.hoveredAnchorIndex];
+                        this.selectedPoints = []; // Clear point selection
+                    }
+                    // If already in selection, keep all selected anchors and points
+
+                    // Start dragging (all selected anchors and points)
+                    this.isDraggingAnchor = true;
+                    this.lastMouseX = e.clientX;
+                    this.lastMouseY = e.clientY;
+                    this.lastGlyphX = null; // Reset for delta calculation
+                    this.lastGlyphY = null;
+                    this.render();
+                }
+                return; // Don't start canvas panning
+            }
+
             // Check if clicking on a point
             if (this.hoveredPointIndex) {
                 if (e.shiftKey) {
-                    // Shift-click: add to or remove from selection
+                    // Shift-click: add to or remove from selection (keep anchors selected for mixed selection)
                     const existingIndex = this.selectedPoints.findIndex(p =>
                         p.contourIndex === this.hoveredPointIndex.contourIndex &&
                         p.nodeIndex === this.hoveredPointIndex.nodeIndex
@@ -295,12 +333,13 @@ class GlyphCanvas {
                     );
 
                     if (!isInSelection) {
-                        // Regular click on unselected point: select only this point
+                        // Regular click on unselected point: select only this point, clear anchors
                         this.selectedPoints = [{ ...this.hoveredPointIndex }];
+                        this.selectedAnchors = []; // Clear anchor selection
                     }
-                    // If already in selection, keep all selected points
+                    // If already in selection, keep all selected points and anchors
 
-                    // Start dragging (all selected points)
+                    // Start dragging (all selected points and anchors)
                     this.isDraggingPoint = true;
                     this.lastMouseX = e.clientX;
                     this.lastMouseY = e.clientY;
@@ -312,6 +351,7 @@ class GlyphCanvas {
             } else if (!e.shiftKey) {
                 // Clicked on empty space without shift: clear selection
                 this.selectedPoints = [];
+                this.selectedAnchors = [];
                 this.render();
             }
         }
@@ -337,6 +377,61 @@ class GlyphCanvas {
     }
 
     onMouseMove(e) {
+        // Handle anchor dragging in outline editor (takes priority)
+        if (this.isDraggingAnchor && this.selectedAnchors.length > 0 && this.layerData) {
+            const rect = this.canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // Transform to glyph space
+            const transform = this.getTransformMatrix();
+            const det = transform.a * transform.d - transform.b * transform.c;
+            let glyphX = (transform.d * (mouseX - transform.e) - transform.c * (mouseY - transform.f)) / det;
+            let glyphY = (transform.a * (mouseY - transform.f) - transform.b * (mouseX - transform.e)) / det;
+
+            // Adjust for selected glyph position
+            let xPosition = 0;
+            for (let i = 0; i < this.selectedGlyphIndex; i++) {
+                xPosition += (this.shapedGlyphs[i].ax || 0);
+            }
+            const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
+            const xOffset = glyph.dx || 0;
+            const yOffset = glyph.dy || 0;
+            glyphX -= (xPosition + xOffset);
+            glyphY -= yOffset;
+
+            // Calculate delta from last position
+            const deltaX = Math.round(glyphX) - Math.round(this.lastGlyphX || glyphX);
+            const deltaY = Math.round(glyphY) - Math.round(this.lastGlyphY || glyphY);
+
+            this.lastGlyphX = glyphX;
+            this.lastGlyphY = glyphY;
+
+            // Update all selected anchors
+            for (const anchorIndex of this.selectedAnchors) {
+                const anchor = this.layerData.anchors[anchorIndex];
+                if (anchor) {
+                    anchor.x += deltaX;
+                    anchor.y += deltaY;
+                }
+            }
+
+            // Also update any selected points (mixed selection)
+            for (const point of this.selectedPoints) {
+                const { contourIndex, nodeIndex } = point;
+                if (this.layerData.shapes[contourIndex] && this.layerData.shapes[contourIndex].nodes[nodeIndex]) {
+                    this.layerData.shapes[contourIndex].nodes[nodeIndex][0] += deltaX;
+                    this.layerData.shapes[contourIndex].nodes[nodeIndex][1] += deltaY;
+                }
+            }
+
+            // Save to Python immediately (non-blocking)
+            this.saveLayerData();
+
+            this.render();
+            return; // Don't do canvas panning while dragging anchor
+        }
+
         // Handle point dragging in outline editor (takes priority over canvas panning)
         if (this.isDraggingPoint && this.selectedPoints.length > 0 && this.layerData) {
             const rect = this.canvas.getBoundingClientRect();
@@ -376,6 +471,15 @@ class GlyphCanvas {
                 }
             }
 
+            // Also update any selected anchors (mixed selection)
+            for (const anchorIndex of this.selectedAnchors) {
+                const anchor = this.layerData.anchors[anchorIndex];
+                if (anchor) {
+                    anchor.x += deltaX;
+                    anchor.y += deltaY;
+                }
+            }
+
             // Save to Python immediately (non-blocking)
             // This lets the auto-compile system detect changes
             this.saveLayerData();
@@ -402,6 +506,7 @@ class GlyphCanvas {
     onMouseUp(e) {
         this.isDragging = false;
         this.isDraggingPoint = false;
+        this.isDraggingAnchor = false;
         // Update cursor based on current mouse position
         this.updateCursorStyle(e);
     }
@@ -429,7 +534,7 @@ class GlyphCanvas {
     }
 
     onMouseMoveHover(e) {
-        if (this.isDragging || this.isDraggingPoint) return; // Don't detect hover while dragging
+        if (this.isDragging || this.isDraggingPoint || this.isDraggingAnchor) return; // Don't detect hover while dragging
 
         const rect = this.canvas.getBoundingClientRect();
         // Store both canvas and client coordinates
@@ -439,8 +544,9 @@ class GlyphCanvas {
         this.mouseCanvasX = this.mouseX * this.canvas.width / rect.width;
         this.mouseCanvasY = this.mouseY * this.canvas.height / rect.height;
 
-        // In outline editor mode, check for hovered points first, then other glyphs
+        // In outline editor mode, check for hovered anchors and points first, then other glyphs
         if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
+            this.updateHoveredAnchor();
             this.updateHoveredPoint();
             // Also check for hovering over other glyphs (for switching)
             this.updateHoveredGlyph();
@@ -459,9 +565,9 @@ class GlyphCanvas {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // In outline editing mode, use pointer for points, grab for panning (NO text cursor)
+        // In outline editing mode, use pointer for points/anchors, grab for panning (NO text cursor)
         if (this.isGlyphEditMode) {
-            if (this.selectedLayerId && this.layerData && this.hoveredPointIndex) {
+            if (this.selectedLayerId && this.layerData && (this.hoveredPointIndex || this.hoveredAnchorIndex !== null)) {
                 this.canvas.style.cursor = 'pointer';
             } else {
                 this.canvas.style.cursor = 'grab';
@@ -545,6 +651,50 @@ class GlyphCanvas {
         }
     }
 
+    updateHoveredAnchor() {
+        // Check which anchor is being hovered in outline editor mode
+        if (!this.layerData || !this.layerData.anchors) {
+            return;
+        }
+
+        // Use NON-HiDPI mouse coordinates for transformation
+        const mouseX = this.mouseX;
+        const mouseY = this.mouseY;
+
+        // Transform mouse coordinates to glyph space
+        const transform = this.getTransformMatrix();
+        const det = transform.a * transform.d - transform.b * transform.c;
+        let glyphX = (transform.d * (mouseX - transform.e) - transform.c * (mouseY - transform.f)) / det;
+        let glyphY = (transform.a * (mouseY - transform.f) - transform.b * (mouseX - transform.e)) / det;
+
+        // Adjust for selected glyph position
+        let xPosition = 0;
+        for (let i = 0; i < this.selectedGlyphIndex; i++) {
+            xPosition += (this.shapedGlyphs[i].ax || 0);
+        }
+        const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
+        const xOffset = glyph.dx || 0;
+        const yOffset = glyph.dy || 0;
+        glyphX -= (xPosition + xOffset);
+        glyphY -= yOffset;
+
+        // Check each anchor
+        const hitRadius = 10 / this.scale; // 10 pixels in screen space
+        let foundAnchorIndex = null;
+
+        this.layerData.anchors.forEach((anchor, index) => {
+            const dist = Math.sqrt((anchor.x - glyphX) ** 2 + (anchor.y - glyphY) ** 2);
+            if (dist <= hitRadius) {
+                foundAnchorIndex = index;
+            }
+        });
+
+        if (foundAnchorIndex !== this.hoveredAnchorIndex) {
+            this.hoveredAnchorIndex = foundAnchorIndex;
+            this.render();
+        }
+    }
+
     updateHoveredPoint() {
         // Check which point is being hovered in outline editor mode
         if (!this.layerData || !this.layerData.shapes) {
@@ -619,6 +769,25 @@ class GlyphCanvas {
             if (shape && shape.nodes && shape.nodes[nodeIndex]) {
                 shape.nodes[nodeIndex][0] += deltaX;
                 shape.nodes[nodeIndex][1] += deltaY;
+            }
+        }
+
+        // Save to Python (non-blocking)
+        this.saveLayerData();
+        this.render();
+    }
+
+    moveSelectedAnchors(deltaX, deltaY) {
+        // Move all selected anchors by the given delta
+        if (!this.layerData || !this.layerData.anchors || this.selectedAnchors.length === 0) {
+            return;
+        }
+
+        for (const anchorIndex of this.selectedAnchors) {
+            const anchor = this.layerData.anchors[anchorIndex];
+            if (anchor) {
+                anchor.x += deltaX;
+                anchor.y += deltaY;
             }
         }
 
@@ -2214,6 +2383,42 @@ except Exception as e:
             });
         });
 
+        // Draw anchors
+        if (this.layerData.anchors && this.layerData.anchors.length > 0) {
+            const anchorSize = 8 * invScale;
+            const fontSize = 12 * invScale;
+
+            this.layerData.anchors.forEach((anchor, index) => {
+                const { x, y, name } = anchor;
+                const isHovered = this.hoveredAnchorIndex === index;
+                const isSelected = this.selectedAnchors.includes(index);
+
+                // Draw anchor as diamond
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(Math.PI / 4); // Rotate 45 degrees to make diamond
+
+                this.ctx.fillStyle = isSelected ? '#ff00ff' : (isHovered ? '#ff88ff' : '#8800ff');
+                this.ctx.fillRect(-anchorSize, -anchorSize, anchorSize * 2, anchorSize * 2);
+                this.ctx.strokeStyle = isDarkTheme ? '#ffffff' : '#000000';
+                this.ctx.lineWidth = 1 * invScale;
+                this.ctx.strokeRect(-anchorSize, -anchorSize, anchorSize * 2, anchorSize * 2);
+
+                this.ctx.restore();
+
+                // Draw anchor name
+                if (name) {
+                    this.ctx.save();
+                    this.ctx.translate(x, y);
+                    this.ctx.scale(1, -1); // Flip Y axis to fix upside-down text
+                    this.ctx.font = `${fontSize}px monospace`;
+                    this.ctx.fillStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+                    this.ctx.fillText(name, anchorSize * 1.5, anchorSize);
+                    this.ctx.restore();
+                }
+            });
+        }
+
         this.ctx.restore();
     }
 
@@ -2305,26 +2510,46 @@ except Exception as e:
         // Handle cursor navigation and text editing
         // Note: Escape key is handled globally in constructor for better focus handling
 
-        // Handle arrow keys for point movement in glyph edit mode
-        if (this.isGlyphEditMode && this.selectedLayerId && this.selectedPoints.length > 0) {
+        // Handle arrow keys for point/anchor movement in glyph edit mode
+        if (this.isGlyphEditMode && this.selectedLayerId && (this.selectedPoints.length > 0 || this.selectedAnchors.length > 0)) {
             const multiplier = e.shiftKey ? 10 : 1;
             let moved = false;
 
             if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                this.moveSelectedPoints(-multiplier, 0);
+                if (this.selectedPoints.length > 0) {
+                    this.moveSelectedPoints(-multiplier, 0);
+                }
+                if (this.selectedAnchors.length > 0) {
+                    this.moveSelectedAnchors(-multiplier, 0);
+                }
                 moved = true;
             } else if (e.key === 'ArrowRight') {
                 e.preventDefault();
-                this.moveSelectedPoints(multiplier, 0);
+                if (this.selectedPoints.length > 0) {
+                    this.moveSelectedPoints(multiplier, 0);
+                }
+                if (this.selectedAnchors.length > 0) {
+                    this.moveSelectedAnchors(multiplier, 0);
+                }
                 moved = true;
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                this.moveSelectedPoints(0, multiplier);
+                if (this.selectedPoints.length > 0) {
+                    this.moveSelectedPoints(0, multiplier);
+                }
+                if (this.selectedAnchors.length > 0) {
+                    this.moveSelectedAnchors(0, multiplier);
+                }
                 moved = true;
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                this.moveSelectedPoints(0, -multiplier);
+                if (this.selectedPoints.length > 0) {
+                    this.moveSelectedPoints(0, -multiplier);
+                }
+                if (this.selectedAnchors.length > 0) {
+                    this.moveSelectedAnchors(0, -multiplier);
+                }
                 moved = true;
             }
 
