@@ -476,7 +476,7 @@ class GlyphCanvas {
                         // Initialize transform if it doesn't exist
                         shape.Component.transform = [1, 0, 0, 1, 0, 0];
                     }
-                    
+
                     // Update translation part of transform (always array format)
                     if (Array.isArray(shape.Component.transform)) {
                         shape.Component.transform[4] += deltaX;
@@ -853,25 +853,25 @@ class GlyphCanvas {
                     tx = shape.Component.transform[4] || 0;
                     ty = shape.Component.transform[5] || 0;
                 }
-                
+
                 // Check distance to origin marker first
                 const dist = Math.sqrt((tx - glyphX) ** 2 + (ty - glyphY) ** 2);
                 if (dist <= hitRadius) {
                     foundComponentIndex = index;
                     return;
                 }
-                
+
                 // Check if inside component outline
                 if (shape.Component.layerData && shape.Component.layerData.shapes) {
                     // Build the component path and test with canvas transform
                     for (const componentShape of shape.Component.layerData.shapes) {
                         if (componentShape.nodes && componentShape.nodes.length > 0) {
                             const path = new Path2D();
-                            
+
                             for (let i = 0; i < componentShape.nodes.length; i++) {
                                 const node = componentShape.nodes[i];
                                 const type = node[2];
-                                
+
                                 if (i === 0 || type === 'm') {
                                     path.moveTo(node[0], node[1]);
                                 } else if (type === 'l' || type === 'ls') {
@@ -887,22 +887,22 @@ class GlyphCanvas {
                                     }
                                 }
                             }
-                            
+
                             path.closePath();
-                            
+
                             // Apply transform to canvas for hit testing
                             this.ctx.save();
                             this.ctx.setTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
                             this.ctx.translate(xPosition + xOffset, yOffset);
                             this.ctx.transform(a, b, c, d, tx, ty);
-                            
+
                             // Test if mouse point is in path (in canvas coordinates)
                             if (this.ctx.isPointInPath(path, mouseX, mouseY)) {
                                 foundComponentIndex = index;
                                 this.ctx.restore();
                                 return;
                             }
-                            
+
                             this.ctx.restore();
                         }
                     }
@@ -1721,7 +1721,7 @@ json.dumps(result)
 `);
 
             this.layerData = JSON.parse(dataJson);
-            
+
             // Parse component layer data nodes strings into arrays
             if (this.layerData && this.layerData.shapes) {
                 this.layerData.shapes.forEach(shape => {
@@ -1732,7 +1732,7 @@ json.dumps(result)
                                 const nodesStr = componentShape.Path.nodes.trim();
                                 const tokens = nodesStr.split(/\s+/);
                                 const nodesArray = [];
-                                
+
                                 for (let i = 0; i + 2 < tokens.length; i += 3) {
                                     nodesArray.push([
                                         parseFloat(tokens[i]),
@@ -1740,14 +1740,14 @@ json.dumps(result)
                                         tokens[i + 2]
                                     ]);
                                 }
-                                
+
                                 componentShape.nodes = nodesArray;
                             }
                         });
                     }
                 });
             }
-            
+
             console.log('Fetched layer data:', this.layerData);
             this.render();
         } catch (error) {
@@ -2723,6 +2723,8 @@ except Exception as e:
                 return; // Not a component
             }
 
+            console.log(`Component ${index}: reference="${shape.Component.reference}", has layerData=${!!shape.Component.layerData}, shapes=${shape.Component.layerData?.shapes?.length || 0}`);
+
             const isHovered = this.hoveredComponentIndex === index;
             const isSelected = this.selectedComponents.includes(index);
 
@@ -2738,7 +2740,7 @@ except Exception as e:
             }
 
             this.ctx.save();
-            
+
             // Apply component transform
             this.ctx.transform(a, b, c, d, tx, ty);
 
@@ -2746,49 +2748,73 @@ except Exception as e:
             if (shape.Component.layerData && shape.Component.layerData.shapes) {
                 // Draw each contour in the component
                 shape.Component.layerData.shapes.forEach(componentShape => {
-                    if (componentShape.nodes) {
-                        this.ctx.beginPath();
-                        
+                    if (componentShape.nodes && componentShape.nodes.length > 0) {
                         const nodes = componentShape.nodes;
-                        let prevX = null, prevY = null;
-                        
+
+                        this.ctx.beginPath();
+
+                        // Find first on-curve point to start
+                        let startIdx = 0;
                         for (let i = 0; i < nodes.length; i++) {
-                            const node = nodes[i];
-                            const x = node[0];
-                            const y = node[1];
-                            const type = node[2];
-                            
-                            if (type === 'm' || (prevX === null && prevY === null)) {
-                                this.ctx.moveTo(x, y);
-                            } else if (type === 'l') {
-                                this.ctx.lineTo(x, y);
-                            } else if (type === 'c') {
-                                // Cubic bezier - need 3 points
-                                const cp1 = node;
-                                const cp2 = nodes[(i + 1) % nodes.length];
-                                const end = nodes[(i + 2) % nodes.length];
-                                this.ctx.bezierCurveTo(cp1[0], cp1[1], cp2[0], cp2[1], end[0], end[1]);
-                                i += 2; // Skip the next two points as they were part of the curve
-                            } else if (type === 'q') {
-                                // Quadratic bezier
-                                const cp = node;
-                                const end = nodes[(i + 1) % nodes.length];
-                                this.ctx.quadraticCurveTo(cp[0], cp[1], end[0], end[1]);
-                                i += 1;
+                            const [, , type] = nodes[i];
+                            if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
+                                startIdx = i;
+                                break;
                             }
-                            
-                            prevX = x;
-                            prevY = y;
                         }
-                        
+
+                        const [startX, startY] = nodes[startIdx];
+                        this.ctx.moveTo(startX, startY);
+
+                        // Draw contour by looking ahead for control points
+                        let i = 0;
+                        while (i < nodes.length) {
+                            const idx = (startIdx + i) % nodes.length;
+                            const nextIdx = (startIdx + i + 1) % nodes.length;
+                            const next2Idx = (startIdx + i + 2) % nodes.length;
+                            const next3Idx = (startIdx + i + 3) % nodes.length;
+
+                            const [, , type] = nodes[idx];
+                            const [next1X, next1Y, next1Type] = nodes[nextIdx];
+
+                            if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
+                                // We're at an on-curve point, look ahead for next segment
+                                if (next1Type === 'o' || next1Type === 'os') {
+                                    // Next is off-curve - check if cubic (two consecutive off-curve)
+                                    const [next2X, next2Y, next2Type] = nodes[next2Idx];
+                                    const [next3X, next3Y] = nodes[next3Idx];
+
+                                    if (next2Type === 'o' || next2Type === 'os') {
+                                        // Cubic bezier: two off-curve control points + on-curve endpoint
+                                        this.ctx.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
+                                        i += 3; // Skip the two control points and endpoint
+                                    } else {
+                                        // Single off-curve - shouldn't happen with cubic, just draw line
+                                        this.ctx.lineTo(next2X, next2Y);
+                                        i += 2;
+                                    }
+                                } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
+                                    // Next is on-curve - draw line
+                                    this.ctx.lineTo(next1X, next1Y);
+                                    i++;
+                                } else {
+                                    // Skip quadratic
+                                    i++;
+                                }
+                            } else {
+                                // Skip off-curve or quadratic points (should be handled by looking ahead)
+                                i++;
+                            }
+                        }
+
                         this.ctx.closePath();
-                        
+
                         // Fill with semi-transparent color
-                        this.ctx.fillStyle = isDarkTheme 
+                        this.ctx.fillStyle = isDarkTheme
                             ? (isSelected ? 'rgba(255, 0, 255, 0.3)' : (isHovered ? 'rgba(255, 136, 255, 0.2)' : 'rgba(0, 255, 255, 0.15)'))
                             : (isSelected ? 'rgba(255, 0, 255, 0.2)' : (isHovered ? 'rgba(255, 136, 255, 0.15)' : 'rgba(0, 255, 255, 0.1)'));
                         this.ctx.fill();
-                        
+
                         // Stroke the outline
                         this.ctx.strokeStyle = isSelected ? '#ff00ff' : (isHovered ? '#ff88ff' : '#00ffff');
                         this.ctx.lineWidth = 1 * invScale;
