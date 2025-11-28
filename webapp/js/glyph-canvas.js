@@ -2116,6 +2116,58 @@ except Exception as e:
             this.ctx.closePath();
             this.ctx.stroke();
 
+            // Draw control point handle lines (from off-curve to adjacent on-curve points)
+            this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)';
+            this.ctx.lineWidth = 1 * invScale;
+
+            nodes.forEach((node, nodeIndex) => {
+                const [x, y, type] = node;
+
+                // Only draw lines from off-curve points
+                if (type === 'o' || type === 'os') {
+                    // Check if this is the first or second control point in a cubic bezier pair
+                    let prevIdx = nodeIndex - 1;
+                    if (prevIdx < 0) prevIdx = nodes.length - 1;
+                    const [, , prevType] = nodes[prevIdx];
+
+                    let nextIdx = nodeIndex + 1;
+                    if (nextIdx >= nodes.length) nextIdx = 0;
+                    const [, , nextType] = nodes[nextIdx];
+
+                    const isPrevOffCurve = prevType === 'o' || prevType === 'os';
+                    const isNextOffCurve = nextType === 'o' || nextType === 'os';
+
+                    if (isPrevOffCurve) {
+                        // This is the second control point - connect to NEXT on-curve point
+                        let targetIdx = nextIdx;
+                        // Skip the other off-curve point if needed
+                        if (isNextOffCurve) {
+                            targetIdx++;
+                            if (targetIdx >= nodes.length) targetIdx = 0;
+                        }
+
+                        const [targetX, targetY, targetType] = nodes[targetIdx];
+                        if (targetType === 'c' || targetType === 'cs' || targetType === 'l' || targetType === 'ls') {
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(x, y);
+                            this.ctx.lineTo(targetX, targetY);
+                            this.ctx.stroke();
+                        }
+                    } else {
+                        // This is the first control point - connect to PREVIOUS on-curve point
+                        let targetIdx = prevIdx;
+
+                        const [targetX, targetY, targetType] = nodes[targetIdx];
+                        if (targetType === 'c' || targetType === 'cs' || targetType === 'l' || targetType === 'ls') {
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(x, y);
+                            this.ctx.lineTo(targetX, targetY);
+                            this.ctx.stroke();
+                        }
+                    }
+                }
+            });
+
             // Draw nodes (points)
             shape.nodes.forEach((node, nodeIndex) => {
                 const [x, y, type] = node;
