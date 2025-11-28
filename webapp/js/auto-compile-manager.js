@@ -5,7 +5,7 @@
 (function () {
     'use strict';
 
-    const AUTO_COMPILE_DELAY = 500; // 1 second of inactivity before compiling
+    const AUTO_COMPILE_DELAY = window.APP_SETTINGS?.COMPILE_DEBOUNCE_DELAY || 500; // Use setting or fallback to 500ms
     let compileTimeout = null;
     let isEnabled = true;
     let isChecking = false; // Prevent recursive checks
