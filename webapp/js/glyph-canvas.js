@@ -1639,7 +1639,7 @@ json.dumps(result)
             console.log('Skipping fetchLayerData - currently editing component');
             return;
         }
-        
+
         // Fetch full layer data including shapes using to_dict()
         if (!window.pyodide || !this.selectedLayerId) {
             this.layerData = null;
@@ -1937,7 +1937,7 @@ except Exception as e:
         // Set the component as the current editing context
         this.editingComponentIndex = componentIndex;
         this.layerData = componentLayerData;
-        
+
         console.log('Set layerData to component. this.layerData.shapes.length:', this.layerData?.shapes?.length);
 
         // Clear selections
@@ -2765,9 +2765,6 @@ except Exception as e:
 
         // Draw parent glyph outlines in background if editing a component
         if (this.componentStack.length > 0) {
-            // Get the root layer data (bottom of stack)
-            const rootLayerData = this.componentStack[0].layerData;
-
             this.ctx.save();
 
             // Apply inverse transform to draw parent in original (untransformed) position
@@ -2786,61 +2783,26 @@ except Exception as e:
                 this.ctx.transform(invA, invB, invC, invD, invTx, invTy);
             }
 
-            this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
-            this.ctx.lineWidth = 1 * invScale;
-
-            if (rootLayerData && rootLayerData.shapes) {
-                rootLayerData.shapes.forEach(shape => {
-                    if (shape.Component) return; // Skip components in background
-
-                    const nodes = shape.nodes;
-                    if (!nodes || nodes.length === 0) return;
-
-                    // Draw simple outline
-                    this.ctx.beginPath();
-                    let startIdx = 0;
-                    for (let i = 0; i < nodes.length; i++) {
-                        const [, , type] = nodes[i];
-                        if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
-                            startIdx = i;
-                            break;
-                        }
+            // Draw the compiled HarfBuzz outline of the parent glyph
+            const glyphIndex = this.selectedGlyphIndex;
+            if (glyphIndex >= 0 && glyphIndex < this.shapedGlyphs.length && this.hbFont) {
+                const shapedGlyph = this.shapedGlyphs[glyphIndex];
+                const glyphId = shapedGlyph.g;
+                
+                try {
+                    // Get glyph outline from HarfBuzz
+                    const glyphData = this.hbFont.glyphToPath(glyphId);
+                    
+                    if (glyphData) {
+                        this.ctx.beginPath();
+                        const path = new Path2D(glyphData);
+                        this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
+                        this.ctx.lineWidth = 1 * invScale;
+                        this.ctx.stroke(path);
                     }
-                    this.ctx.moveTo(nodes[startIdx][0], nodes[startIdx][1]);
-
-                    let i = 0;
-                    while (i < nodes.length) {
-                        const idx = (startIdx + i) % nodes.length;
-                        const nextIdx = (startIdx + i + 1) % nodes.length;
-                        const [, , type] = nodes[idx];
-                        const [next1X, next1Y, next1Type] = nodes[nextIdx];
-
-                        if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
-                            if (next1Type === 'o' || next1Type === 'os') {
-                                const next2Idx = (startIdx + i + 2) % nodes.length;
-                                const next3Idx = (startIdx + i + 3) % nodes.length;
-                                const [next2X, next2Y, next2Type] = nodes[next2Idx];
-                                const [next3X, next3Y] = nodes[next3Idx];
-                                if (next2Type === 'o' || next2Type === 'os') {
-                                    this.ctx.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
-                                    i += 3;
-                                } else {
-                                    this.ctx.lineTo(next2X, next2Y);
-                                    i += 2;
-                                }
-                            } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
-                                this.ctx.lineTo(next1X, next1Y);
-                                i++;
-                            } else {
-                                i++;
-                            }
-                        } else {
-                            i++;
-                        }
-                    }
-                    this.ctx.closePath();
-                    this.ctx.stroke();
-                });
+                } catch (error) {
+                    console.error('Failed to draw parent glyph:', error);
+                }
             }
 
             this.ctx.restore(); // Restore to component-transformed state
