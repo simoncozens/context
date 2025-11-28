@@ -317,8 +317,9 @@ class GlyphCanvas {
                 this.layerData.shapes[contourIndex].nodes[nodeIndex][0] = Math.round(glyphX);
                 this.layerData.shapes[contourIndex].nodes[nodeIndex][1] = Math.round(glyphY);
 
-                // Mark as needing save
-                this.layerDataDirty = true;
+                // Save to Python immediately (non-blocking)
+                // This lets the auto-compile system detect changes
+                this.saveLayerData();
 
                 this.render();
             }
@@ -341,17 +342,6 @@ class GlyphCanvas {
     }
 
     onMouseUp(e) {
-        // Save layer data if point was being dragged
-        if (this.isDraggingPoint && this.layerDataDirty) {
-            console.log('Saving layer data after drag');
-            this.saveLayerData().then(() => {
-                console.log('Layer data save completed');
-                this.layerDataDirty = false;
-            }).catch(error => {
-                console.error('Failed to save layer data:', error);
-            });
-        }
-
         this.isDragging = false;
         this.isDraggingPoint = false;
         // Update cursor based on current mouse position
@@ -594,8 +584,7 @@ class GlyphCanvas {
 
         node[2] = newType;
 
-        // Mark as needing save and update
-        this.layerDataDirty = true;
+        // Save to Python (non-blocking)
         this.saveLayerData();
         this.render();
 
@@ -1255,7 +1244,6 @@ try:
                 if glyph and hasattr(glyph, 'mark_dirty'):
                     glyph.mark_dirty()
                 
-                print(f"Layer data saved successfully and marked dirty")
 except Exception as e:
     print(f"Error saving layer data: {e}")
     import traceback
