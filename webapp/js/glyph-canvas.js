@@ -17,7 +17,7 @@ class GlyphCanvas {
         this.panX = 0;
         this.panY = 0;
         this.scale = 1.0;
-        this.initialScale = 0.5; // Start zoomed out to see glyphs better
+        this.initialScale = 0.2; // Start zoomed out to see glyphs better
 
         // Text buffer and shaping
         this.textBuffer = localStorage.getItem('glyphCanvasTextBuffer') || "Hamburgevons";
@@ -1096,6 +1096,13 @@ class GlyphCanvas {
     onKeyDown(e) {
         // Handle cursor navigation and text editing
 
+        // Cmd+0 / Ctrl+0 - Reset zoom and position
+        if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+            e.preventDefault();
+            this.resetZoomAndPosition();
+            return;
+        }
+
         // Cmd+A / Ctrl+A - Select All
         if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
             e.preventDefault();
@@ -2003,6 +2010,52 @@ class GlyphCanvas {
 
         // Start animation
         this.animatePan(targetPanX, this.panY);
+    }
+
+    resetZoomAndPosition() {
+        // Reset zoom to initial scale and position to origin with animation
+        const rect = this.canvas.getBoundingClientRect();
+        const targetScale = this.initialScale;
+        const targetPanX = rect.width / 4;  // Same as initial position
+        const targetPanY = rect.height / 2; // Same as initial position
+
+        this.animateZoomAndPan(targetScale, targetPanX, targetPanY);
+    }
+
+    animateZoomAndPan(targetScale, targetPanX, targetPanY) {
+        // Animate zoom and pan together
+        const startScale = this.scale;
+        const startPanX = this.panX;
+        const startPanY = this.panY;
+        const frames = 10;
+        let currentFrame = 0;
+
+        const animate = () => {
+            currentFrame++;
+            const progress = Math.min(currentFrame / frames, 1.0);
+
+            // Ease-out cubic for smooth deceleration
+            const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+            // Interpolate scale and pan values
+            this.scale = startScale + (targetScale - startScale) * easedProgress;
+            this.panX = startPanX + (targetPanX - startPanX) * easedProgress;
+            this.panY = startPanY + (targetPanY - startPanY) * easedProgress;
+
+            this.render();
+
+            if (progress < 1.0) {
+                requestAnimationFrame(animate);
+            } else {
+                // Ensure we end exactly at target
+                this.scale = targetScale;
+                this.panX = targetPanX;
+                this.panY = targetPanY;
+                this.render();
+            }
+        };
+
+        animate();
     }
 
     animatePan(targetPanX, targetPanY) {
