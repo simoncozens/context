@@ -556,6 +556,9 @@ class GlyphCanvas {
             this.variationSettings[axisTag] = startValue + (targetValue - startValue) * easedProgress;
         }
 
+        // Update sliders during animation
+        this.updateAxisSliders();
+
         this.shapeText();
 
         if (progress < 1.0) {
@@ -565,6 +568,12 @@ class GlyphCanvas {
             this.variationSettings = { ...this.animationTargetValues };
             this.isAnimating = false;
             this.updateAxisSliders(); // Update slider UI to match final values
+            
+            // Check if new variation settings match any layer
+            if (this.isGlyphEditMode && this.fontData) {
+                this.autoSelectMatchingLayer();
+            }
+            
             this.shapeText();
         }
     }
@@ -811,10 +820,10 @@ json.dumps(result)
                 continue;
             }
 
-            // Check if all axis values match (within tolerance of 0.5)
+            // Check if all axis values match exactly
             let allMatch = true;
             for (const [tag, value] of Object.entries(master.location)) {
-                if (Math.abs((currentLocation[tag] || 0) - value) > 0.5) {
+                if ((currentLocation[tag] || 0) !== value) {
                     allMatch = false;
                     break;
                 }
@@ -827,6 +836,13 @@ json.dumps(result)
                 console.log(`Auto-selected layer: ${layer.name || 'Default'} (${layer.id})`);
                 return;
             }
+        }
+
+        // No matching layer found - deselect current layer
+        if (this.selectedLayerId !== null) {
+            this.selectedLayerId = null;
+            this.updateLayerSelection();
+            console.log('No matching layer - deselected');
         }
     }
 
