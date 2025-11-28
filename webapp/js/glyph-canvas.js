@@ -255,8 +255,10 @@ class GlyphCanvas {
             if (this.hoveredPointIndex) {
                 this.selectedPointIndex = { ...this.hoveredPointIndex };
                 this.isDraggingPoint = true;
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
                 this.render();
-                return;
+                return; // Don't start canvas panning
             }
         }
 
@@ -281,7 +283,7 @@ class GlyphCanvas {
     }
 
     onMouseMove(e) {
-        // Handle point dragging in outline editor
+        // Handle point dragging in outline editor (takes priority over canvas panning)
         if (this.isDraggingPoint && this.selectedPointIndex && this.layerData) {
             const rect = this.canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -315,9 +317,10 @@ class GlyphCanvas {
 
                 this.render();
             }
-            return;
+            return; // Don't do canvas panning while dragging point
         }
 
+        // Canvas panning (only when not dragging a point)
         if (!this.isDragging) return;
 
         const dx = e.clientX - this.lastMouseX;
@@ -335,8 +338,13 @@ class GlyphCanvas {
     onMouseUp(e) {
         // Save layer data if point was being dragged
         if (this.isDraggingPoint && this.layerDataDirty) {
-            this.saveLayerData();
-            this.layerDataDirty = false;
+            console.log('Saving layer data after drag');
+            this.saveLayerData().then(() => {
+                console.log('Layer data save completed');
+                this.layerDataDirty = false;
+            }).catch(error => {
+                console.error('Failed to save layer data:', error);
+            });
         }
 
         this.isDragging = false;
@@ -478,8 +486,9 @@ class GlyphCanvas {
             return;
         }
 
-        const mouseX = this.mouseCanvasX || this.mouseX;
-        const mouseY = this.mouseCanvasY || this.mouseY;
+        // Use NON-HiDPI mouse coordinates for transformation (same as drawing uses)
+        const mouseX = this.mouseX;
+        const mouseY = this.mouseY;
 
         // Transform mouse coordinates to glyph space
         const transform = this.getTransformMatrix();
@@ -503,6 +512,18 @@ class GlyphCanvas {
         let foundPoint = null;
 
         this.layerData.shapes.forEach((shape, contourIndex) => {
+            // Parse nodes if not already done
+            if (!shape.nodes && shape.Path && shape.Path.nodes) {
+                const nodesString = shape.Path.nodes;
+                const parts = nodesString.trim().split(/\s+/);
+                shape.nodes = [];
+                for (let i = 0; i < parts.length; i += 3) {
+                    if (i + 2 < parts.length) {
+                        shape.nodes.push([parseFloat(parts[i]), parseFloat(parts[i + 1]), parts[i + 2]]);
+                    }
+                }
+            }
+
             if (shape.ref || !shape.nodes) return;
 
             shape.nodes.forEach((node, nodeIndex) => {
@@ -1203,9 +1224,21 @@ try:
             if layer:
                 # Parse the JSON data
                 layer_dict = json.loads('''${layerDataJson}''')
-                # Use from_dict() to update the layer
-                layer.from_dict(layer_dict)
-                print(f"Layer data saved successfully")
+                
+                # Update the layer's _data dictionary directly
+                # from_dict() is a classmethod that creates a NEW object,
+                # so we need to update the existing layer's internal data
+                layer._data.update(layer_dict)
+                
+                # Mark layer and parent glyph as dirty to trigger recompilation
+                if hasattr(layer, 'mark_dirty'):
+                    layer.mark_dirty()
+                
+                # Also mark glyph dirty
+                if glyph and hasattr(glyph, 'mark_dirty'):
+                    glyph.mark_dirty()
+                
+                print(f"Layer data saved successfully and marked dirty")
 except Exception as e:
     print(f"Error saving layer data: {e}")
     import traceback
@@ -1858,21 +1891,11 @@ except Exception as e:
     drawOutlineEditor() {
         // Draw outline editor when a layer is selected
         if (!this.selectedLayerId || !this.layerData || !this.layerData.shapes) {
-            console.log('Outline editor not drawing:', {
-                selectedLayerId: this.selectedLayerId,
-                hasLayerData: !!this.layerData,
-                hasShapes: this.layerData?.shapes ? true : false,
-                shapesCount: this.layerData?.shapes?.length
-            });
             return;
         }
 
-        console.log('Drawing outline editor with', this.layerData.shapes.length, 'shapes');
-        console.log('Layer data shapes:', this.layerData.shapes);
-
         // Get the position of the selected glyph
         if (this.selectedGlyphIndex < 0 || this.selectedGlyphIndex >= this.shapedGlyphs.length) {
-            console.log('Invalid selected glyph index:', this.selectedGlyphIndex);
             return;
         }
 
@@ -1887,8 +1910,6 @@ except Exception as e:
         const x = xPosition + xOffset;
         const y = yOffset;
 
-        console.log('Drawing at position:', x, y, 'with scale:', this.scale);
-
         this.ctx.save();
         this.ctx.translate(x, y);
 
@@ -1897,11 +1918,8 @@ except Exception as e:
 
         // Draw each shape (contour)
         this.layerData.shapes.forEach((shape, contourIndex) => {
-            console.log('Processing shape', contourIndex, ':', shape);
-
             if (shape.ref) {
                 // Component - skip for now
-                console.log('Skipping component');
                 return;
             }
 
@@ -1910,7 +1928,6 @@ except Exception as e:
             if (!nodes && shape.Path && shape.Path.nodes) {
                 // Nodes are in a string format from to_dict() - parse them
                 const nodesString = shape.Path.nodes;
-                console.log('Parsing nodes string:', nodesString);
 
                 // Parse string format: "x y type x y type ..."
                 const parts = nodesString.trim().split(/\s+/);
@@ -1926,17 +1943,11 @@ except Exception as e:
 
                 // Cache parsed nodes back to shape for reuse
                 shape.nodes = nodes;
-                console.log('Parsed', nodes.length, 'nodes');
             }
 
             if (!nodes || nodes.length === 0) {
-                console.log('No nodes in shape after parsing');
                 return;
-            }
-
-            console.log('Drawing shape with', nodes.length, 'nodes');
-
-            // Draw the outline path
+            }            // Draw the outline path
             this.ctx.beginPath();
             this.ctx.strokeStyle = isDarkTheme ? '#ffffff' : '#000000';
             this.ctx.lineWidth = 2 * invScale;
