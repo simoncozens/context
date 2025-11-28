@@ -60,6 +60,9 @@ class GlyphCanvas {
         this.hoveredGlyphIndex = -1; // Index of glyph being hovered
         this.glyphBounds = []; // Store bounding boxes for hit testing
 
+        // Selected glyph (glyph after cursor in logical order)
+        this.selectedGlyphIndex = -1;
+
         // HarfBuzz instance and objects
         this.hb = null;
         this.hbFont = null;
@@ -177,6 +180,15 @@ class GlyphCanvas {
     onMouseDown(e) {
         // Focus the canvas when clicked
         this.canvas.focus();
+
+        // Check for double-click on glyph
+        if (e.detail === 2) {
+            // Double-click - select glyph
+            if (this.hoveredGlyphIndex >= 0) {
+                this.selectGlyphByIndex(this.hoveredGlyphIndex);
+                return;
+            }
+        }
 
         // Check if clicking on text to position cursor
         if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
@@ -518,6 +530,92 @@ class GlyphCanvas {
             return [];
         }
         return this.opentypeFont.tables.fvar.axes || [];
+    }
+
+    selectGlyphByIndex(glyphIndex) {
+        // Select a glyph by its index in the shaped glyphs array
+        if (glyphIndex >= 0 && glyphIndex < this.shapedGlyphs.length) {
+            this.selectedGlyphIndex = glyphIndex;
+            console.log(`Selected glyph at index ${this.selectedGlyphIndex}`);
+        } else {
+            this.selectedGlyphIndex = -1;
+            console.log(`Deselected glyph`);
+        }
+        this.updatePropertiesUI();
+        this.render();
+    }
+
+    updatePropertiesUI() {
+        if (!this.propertiesSection) return;
+
+        // Clear existing content
+        this.propertiesSection.innerHTML = '';
+
+        // Add section title
+        const title = document.createElement('div');
+        title.textContent = 'Glyph Properties';
+        title.style.fontSize = '12px';
+        title.style.fontWeight = '600';
+        title.style.color = 'var(--text-secondary)';
+        title.style.textTransform = 'uppercase';
+        title.style.letterSpacing = '0.5px';
+        title.style.marginBottom = '8px';
+        this.propertiesSection.appendChild(title);
+
+        if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
+            const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
+            let glyphName = `GID ${glyphId}`;
+
+            // Get glyph name from compiled font via OpenType.js
+            if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+                const glyph = this.opentypeFont.glyphs.get(glyphId);
+                if (glyph.name) {
+                    glyphName = glyph.name;
+                }
+            }
+
+            // Display glyph name
+            const nameLabel = document.createElement('div');
+            nameLabel.style.fontSize = '14px';
+            nameLabel.style.color = 'var(--text-primary)';
+            nameLabel.style.marginBottom = '4px';
+            nameLabel.textContent = 'Name:';
+
+            const nameValue = document.createElement('div');
+            nameValue.style.fontSize = '16px';
+            nameValue.style.fontWeight = '600';
+            nameValue.style.color = 'var(--text-primary)';
+            nameValue.style.fontFamily = 'var(--font-mono)';
+            nameValue.style.marginBottom = '12px';
+            nameValue.textContent = glyphName;
+
+            this.propertiesSection.appendChild(nameLabel);
+            this.propertiesSection.appendChild(nameValue);
+
+            // Display glyph ID
+            const idLabel = document.createElement('div');
+            idLabel.style.fontSize = '14px';
+            idLabel.style.color = 'var(--text-primary)';
+            idLabel.style.marginBottom = '4px';
+            idLabel.textContent = 'Glyph ID:';
+
+            const idValue = document.createElement('div');
+            idValue.style.fontSize = '14px';
+            idValue.style.color = 'var(--text-secondary)';
+            idValue.style.fontFamily = 'var(--font-mono)';
+            idValue.textContent = glyphId.toString();
+
+            this.propertiesSection.appendChild(idLabel);
+            this.propertiesSection.appendChild(idValue);
+        } else {
+            // No glyph selected
+            const emptyMessage = document.createElement('div');
+            emptyMessage.style.fontSize = '13px';
+            emptyMessage.style.color = 'var(--text-secondary)';
+            emptyMessage.style.fontStyle = 'italic';
+            emptyMessage.textContent = 'No glyph selected';
+            this.propertiesSection.appendChild(emptyMessage);
+        }
     }
 
     updateAxesUI() {
@@ -889,9 +987,18 @@ class GlyphCanvas {
                 height: 1000 // Font units height approximation
             });
 
-            // Set color based on hover state
+            // Set color based on hover and selection state
             const isHovered = glyphIndex === this.hoveredGlyphIndex;
-            this.ctx.fillStyle = isHovered ? hoverColor : normalColor;
+            const isSelected = glyphIndex === this.selectedGlyphIndex;
+            const selectedColor = '#00ff00'; // Green for selected (glyph after cursor)
+
+            if (isHovered) {
+                this.ctx.fillStyle = hoverColor;
+            } else if (isSelected) {
+                this.ctx.fillStyle = selectedColor;
+            } else {
+                this.ctx.fillStyle = normalColor;
+            }
 
             try {
                 // Get glyph outline from HarfBuzz (supports variations)
@@ -1696,6 +1803,19 @@ class GlyphCanvas {
         }
 
         console.log('===========================');
+    }
+
+    selectGlyphByIndex(glyphIndex) {
+        // Select a glyph by its index in the shaped glyphs array
+        if (glyphIndex >= 0 && glyphIndex < this.shapedGlyphs.length) {
+            this.selectedGlyphIndex = glyphIndex;
+            console.log(`Selected glyph at index ${this.selectedGlyphIndex}`);
+        } else {
+            this.selectedGlyphIndex = -1;
+            console.log(`Deselected glyph`);
+        }
+        this.updatePropertiesUI();
+        this.render();
     }
 
     updateCursorVisualPosition() {
