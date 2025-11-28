@@ -2144,19 +2144,33 @@ document.addEventListener('DOMContentLoaded', () => {
             mainContainer.style.height = '100%';
             mainContainer.style.overflow = 'hidden';
 
-            // Create sidebar toolbar
-            const sidebar = document.createElement('div');
-            sidebar.id = 'glyph-editor-sidebar';
-            sidebar.style.width = '300px';
-            sidebar.style.minWidth = '300px';
-            sidebar.style.height = '100%';
-            sidebar.style.backgroundColor = 'var(--bg-secondary)';
-            sidebar.style.borderLeft = '1px solid var(--border-primary)';
-            sidebar.style.padding = '16px';
-            sidebar.style.overflowY = 'auto';
-            sidebar.style.display = 'flex';
-            sidebar.style.flexDirection = 'column';
-            sidebar.style.gap = '16px';
+            // Create left sidebar for glyph properties
+            const leftSidebar = document.createElement('div');
+            leftSidebar.id = 'glyph-properties-sidebar';
+            leftSidebar.style.width = '300px';
+            leftSidebar.style.minWidth = '300px';
+            leftSidebar.style.height = '100%';
+            leftSidebar.style.backgroundColor = 'var(--bg-secondary)';
+            leftSidebar.style.borderRight = '1px solid var(--border-primary)';
+            leftSidebar.style.padding = '16px';
+            leftSidebar.style.overflowY = 'auto';
+            leftSidebar.style.display = 'flex';
+            leftSidebar.style.flexDirection = 'column';
+            leftSidebar.style.gap = '16px';
+
+            // Create right sidebar for axes
+            const rightSidebar = document.createElement('div');
+            rightSidebar.id = 'glyph-editor-sidebar';
+            rightSidebar.style.width = '300px';
+            rightSidebar.style.minWidth = '300px';
+            rightSidebar.style.height = '100%';
+            rightSidebar.style.backgroundColor = 'var(--bg-secondary)';
+            rightSidebar.style.borderLeft = '1px solid var(--border-primary)';
+            rightSidebar.style.padding = '16px';
+            rightSidebar.style.overflowY = 'auto';
+            rightSidebar.style.display = 'flex';
+            rightSidebar.style.flexDirection = 'column';
+            rightSidebar.style.gap = '16px';
 
             // Create canvas container
             const canvasContainer = document.createElement('div');
@@ -2165,13 +2179,22 @@ document.addEventListener('DOMContentLoaded', () => {
             canvasContainer.style.height = '100%';
             canvasContainer.style.position = 'relative';
 
-            // Assemble layout (canvas first, then sidebar on the right)
+            // Assemble layout (left sidebar, canvas, right sidebar)
+            mainContainer.appendChild(leftSidebar);
             mainContainer.appendChild(canvasContainer);
-            mainContainer.appendChild(sidebar);
+            mainContainer.appendChild(rightSidebar);
             editorContent.appendChild(mainContainer);
 
             // Initialize canvas
             window.glyphCanvas = new GlyphCanvas('glyph-canvas-container');
+
+            // Create glyph properties container (initially empty)
+            const propertiesSection = document.createElement('div');
+            propertiesSection.id = 'glyph-properties-section';
+            propertiesSection.style.display = 'flex';
+            propertiesSection.style.flexDirection = 'column';
+            propertiesSection.style.gap = '12px';
+            leftSidebar.appendChild(propertiesSection);
 
             // Create variable axes container (initially empty)
             const axesSection = document.createElement('div');
@@ -2179,10 +2202,12 @@ document.addEventListener('DOMContentLoaded', () => {
             axesSection.style.display = 'flex';
             axesSection.style.flexDirection = 'column';
             axesSection.style.gap = '12px';
-            sidebar.appendChild(axesSection);
+            rightSidebar.appendChild(axesSection);
 
-            // Store reference to sidebar for later updates
-            window.glyphCanvas.sidebar = sidebar;
+            // Store reference to sidebars for later updates
+            window.glyphCanvas.leftSidebar = leftSidebar;
+            window.glyphCanvas.propertiesSection = propertiesSection;
+            window.glyphCanvas.rightSidebar = rightSidebar;
             window.glyphCanvas.axesSection = axesSection;
 
             // Observe when the editor view gains/loses focus (via 'focused' class)
