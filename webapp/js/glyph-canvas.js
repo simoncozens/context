@@ -236,6 +236,34 @@ class GlyphCanvas {
         // Container resize (for when view dividers are moved)
         this.resizeObserver = new ResizeObserver(() => this.onResize());
         this.resizeObserver.observe(this.container);
+
+        // Sidebar click handlers to restore canvas focus in editor mode
+        this.setupSidebarFocusHandlers();
+    }
+
+    setupSidebarFocusHandlers() {
+        // Add event listeners to both sidebars to restore canvas focus when clicked in editor mode
+        const leftSidebar = document.getElementById('glyph-properties-sidebar');
+        const rightSidebar = document.getElementById('glyph-editor-sidebar');
+
+        const restoreFocus = (e) => {
+            // Only restore focus when in editor mode
+            if (this.isGlyphEditMode) {
+                // Use setTimeout to allow the click event to complete first
+                // (e.g., slider interaction, button click)
+                setTimeout(() => {
+                    this.canvas.focus();
+                }, 0);
+            }
+        };
+
+        if (leftSidebar) {
+            leftSidebar.addEventListener('mousedown', restoreFocus);
+        }
+
+        if (rightSidebar) {
+            rightSidebar.addEventListener('mousedown', restoreFocus);
+        }
     }
 
     onMouseDown(e) {
