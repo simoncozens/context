@@ -66,6 +66,10 @@ class GlyphCanvas {
         // Edit mode: false = text edit mode, true = glyph edit mode
         this.isGlyphEditMode = false;
 
+        // Font data and selected layer for layer switching
+        this.fontData = null;
+        this.selectedLayerId = null;
+
         // HarfBuzz instance and objects
         this.hb = null;
         this.hbFont = null;
@@ -524,6 +528,7 @@ class GlyphCanvas {
             // Ensure we end exactly at target values
             this.variationSettings = { ...this.animationTargetValues };
             this.isAnimating = false;
+            this.updateAxisSliders(); // Update slider UI to match final values
             this.shapeText();
         }
     }
@@ -554,9 +559,230 @@ class GlyphCanvas {
         // Exit glyph edit mode and return to text edit mode
         this.isGlyphEditMode = false;
         this.selectedGlyphIndex = -1;
+        this.selectedLayerId = null;
         console.log(`Exited glyph edit mode - returned to text edit mode`);
         this.updatePropertiesUI();
         this.render();
+    }
+
+    async fetchGlyphData() {
+        // Fetch glyph and font data from Python
+        if (!window.pyodide || this.selectedGlyphIndex < 0) {
+            return null;
+        }
+
+        try {
+            const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
+            let glyphName = `GID ${glyphId}`;
+
+            // Get glyph name from compiled font
+            if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+                const glyph = this.opentypeFont.glyphs.get(glyphId);
+                if (glyph.name) {
+                    glyphName = glyph.name;
+                }
+            }
+
+            // Fetch glyph and font data from Python
+            const dataJson = await window.pyodide.runPythonAsync(`
+import json
+
+result = None
+try:
+    current_font = CurrentFont()
+    if current_font and hasattr(current_font, 'glyphs'):
+        glyph = current_font.glyphs.get('${glyphName}')
+        if glyph:
+            # Get foreground layers (filter out background layers)
+            layers_data = []
+            for layer in glyph.layers:
+                if not layer.isBackground:
+                    # For master layers, _master is None and the layer.id IS the master ID
+                    # For alternate/intermediate layers, _master points to the parent master
+                    master_id = layer._master if layer._master else layer.id
+                    layer_info = {
+                        'id': layer.id,
+                        'name': layer.name or 'Default',
+                        '_master': master_id,
+                        'location': layer.location
+                    }
+                    layers_data.append(layer_info)
+            
+            # Get masters data
+            masters_data = []
+            for master in current_font.masters:
+                masters_data.append({
+                    'id': master.id,
+                    'name': master.name,
+                    'location': master.location
+                })
+            
+            result = {
+                'glyphName': glyph.name,
+                'layers': layers_data,
+                'masters': masters_data
+            }
+except Exception as e:
+    print(f"Error fetching glyph data: {e}")
+    result = None
+
+json.dumps(result)
+`);
+
+            return JSON.parse(dataJson);
+        } catch (error) {
+            console.error('Error fetching glyph data from Python:', error);
+            return null;
+        }
+    }
+
+    async displayLayersList() {
+        // Fetch and display layers list
+        this.fontData = await this.fetchGlyphData();
+
+        if (!this.fontData || !this.fontData.layers || this.fontData.layers.length === 0) {
+            return;
+        }
+
+        // Add layers section title
+        const layersTitle = document.createElement('div');
+        layersTitle.textContent = 'Foreground Layers';
+        layersTitle.style.fontSize = '12px';
+        layersTitle.style.fontWeight = '600';
+        layersTitle.style.color = 'var(--text-secondary)';
+        layersTitle.style.textTransform = 'uppercase';
+        layersTitle.style.letterSpacing = '0.5px';
+        layersTitle.style.marginTop = '16px';
+        layersTitle.style.marginBottom = '8px';
+        this.propertiesSection.appendChild(layersTitle);
+
+        // Create layers list
+        const layersList = document.createElement('div');
+        layersList.style.display = 'flex';
+        layersList.style.flexDirection = 'column';
+        layersList.style.gap = '4px';
+
+        for (const layer of this.fontData.layers) {
+            const layerItem = document.createElement('div');
+            layerItem.setAttribute('data-layer-id', layer.id); // Add data attribute for selection updates
+            layerItem.style.padding = '8px';
+            layerItem.style.borderRadius = '4px';
+            layerItem.style.cursor = 'pointer';
+            layerItem.style.fontSize = '13px';
+            layerItem.style.color = 'var(--text-primary)';
+            layerItem.style.backgroundColor = this.selectedLayerId === layer.id ? 'var(--bg-active)' : 'transparent';
+            layerItem.style.border = '1px solid var(--border-primary)';
+            layerItem.style.transition = 'background-color 0.15s ease';
+
+            // Find the master for this layer
+            const master = this.fontData.masters.find(m => m.id === layer._master);
+            const masterName = master ? master.name : 'Unknown Master';
+
+            layerItem.textContent = `${layer.name} (${masterName})`;
+
+            // Hover effect
+            layerItem.addEventListener('mouseenter', () => {
+                if (this.selectedLayerId !== layer.id) {
+                    layerItem.style.backgroundColor = 'var(--bg-secondary)';
+                }
+            });
+            layerItem.addEventListener('mouseleave', () => {
+                if (this.selectedLayerId !== layer.id) {
+                    layerItem.style.backgroundColor = 'transparent';
+                }
+            });
+
+            // Click handler
+            layerItem.addEventListener('click', () => {
+                this.selectLayer(layer);
+            });
+
+            layersList.appendChild(layerItem);
+        }
+
+        this.propertiesSection.appendChild(layersList);
+    }
+
+    selectLayer(layer) {
+        // Select a layer and update axis sliders to match its master location
+        this.selectedLayerId = layer.id;
+        console.log(`Selected layer: ${layer.name} (ID: ${layer.id})`);
+        console.log('Layer data:', layer);
+        console.log('Available masters:', this.fontData.masters);
+
+        // Find the master for this layer
+        const master = this.fontData.masters.find(m => m.id === layer._master);
+        if (!master || !master.location) {
+            console.warn('No master location found for layer', {
+                layer_master: layer._master,
+                available_master_ids: this.fontData.masters.map(m => m.id),
+                master_found: master
+            });
+            return;
+        }
+
+        console.log(`Setting axis values to master location:`, master.location);
+
+        // Cancel any ongoing animation
+        if (this.isAnimating) {
+            this.isAnimating = false;
+        }
+
+        // Set up animation to all axes at once
+        this.animationStartValues = { ...this.variationSettings };
+        this.animationTargetValues = { ...this.variationSettings };
+
+        // Update target values for all axes in the master location
+        for (const [axisTag, value] of Object.entries(master.location)) {
+            this.animationTargetValues[axisTag] = value;
+        }
+
+        // Start animation
+        this.animationCurrentFrame = 0;
+        this.isAnimating = true;
+        this.animateVariation();
+
+        // Update the visual selection highlight for layers without rebuilding the entire UI
+        this.updateLayerSelection();
+    }
+
+    updateLayerSelection() {
+        // Update the visual selection highlight for layer items without rebuilding
+        if (!this.propertiesSection) return;
+
+        // Find all layer items and update their background color
+        const layerItems = this.propertiesSection.querySelectorAll('[data-layer-id]');
+        layerItems.forEach(item => {
+            const layerId = item.getAttribute('data-layer-id');
+            if (layerId === this.selectedLayerId) {
+                item.style.backgroundColor = 'var(--bg-active)';
+            } else {
+                item.style.backgroundColor = 'transparent';
+            }
+        });
+    }
+
+    updateAxisSliders() {
+        // Update axis slider positions to match current variationSettings
+        if (!this.axesSection) return;
+
+        // Update all sliders
+        const sliders = this.axesSection.querySelectorAll('input[data-axis-tag]');
+        sliders.forEach(slider => {
+            const axisTag = slider.getAttribute('data-axis-tag');
+            if (this.variationSettings[axisTag] !== undefined) {
+                slider.value = this.variationSettings[axisTag];
+            }
+        });
+
+        // Update all value labels
+        const valueLabels = this.axesSection.querySelectorAll('span[data-axis-tag]');
+        valueLabels.forEach(label => {
+            const axisTag = label.getAttribute('data-axis-tag');
+            if (this.variationSettings[axisTag] !== undefined) {
+                label.textContent = this.variationSettings[axisTag].toFixed(0);
+            }
+        });
     }
 
     updatePropertiesUI() {
@@ -611,21 +837,8 @@ class GlyphCanvas {
             this.propertiesSection.appendChild(nameLabel);
             this.propertiesSection.appendChild(nameValue);
 
-            // Display glyph ID
-            const idLabel = document.createElement('div');
-            idLabel.style.fontSize = '14px';
-            idLabel.style.color = 'var(--text-primary)';
-            idLabel.style.marginBottom = '4px';
-            idLabel.textContent = 'Glyph ID:';
-
-            const idValue = document.createElement('div');
-            idValue.style.fontSize = '14px';
-            idValue.style.color = 'var(--text-secondary)';
-            idValue.style.fontFamily = 'var(--font-mono)';
-            idValue.textContent = glyphId.toString();
-
-            this.propertiesSection.appendChild(idLabel);
-            this.propertiesSection.appendChild(idValue);
+            // Display layers section
+            this.displayLayersList();
         } else {
             // No glyph selected
             const emptyMessage = document.createElement('div');
@@ -684,6 +897,7 @@ class GlyphCanvas {
             valueLabel.style.fontFamily = 'var(--font-mono)';
             valueLabel.style.fontSize = '12px';
             valueLabel.textContent = axis.defaultValue.toFixed(0);
+            valueLabel.setAttribute('data-axis-tag', axis.tag); // Add identifier for programmatic updates
 
             labelRow.appendChild(axisLabel);
             labelRow.appendChild(valueLabel);
@@ -695,6 +909,7 @@ class GlyphCanvas {
             slider.max = axis.maxValue;
             slider.step = 1;
             slider.style.width = '100%';
+            slider.setAttribute('data-axis-tag', axis.tag); // Add identifier for programmatic updates
 
             // Restore previous value if it exists, otherwise use default
             const initialValue = this.variationSettings[axis.tag] !== undefined
