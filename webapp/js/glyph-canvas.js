@@ -86,6 +86,10 @@ class GlyphCanvas {
         this.layerDataDirty = false; // Track if layer data needs saving
         this.isPreviewMode = false; // Preview mode hides outline editor
 
+        // Component recursion state
+        this.componentStack = []; // Stack of {componentIndex, transform, layerData, glyphName} for nested editing
+        this.editingComponentIndex = null; // Index of component being edited (null = editing main glyph)
+
         // HarfBuzz instance and objects
         this.hb = null;
         this.hbFont = null;
@@ -194,6 +198,13 @@ class GlyphCanvas {
             if (e.key === 'Escape' && this.isGlyphEditMode) {
                 e.preventDefault();
 
+                // First check if we're in component editing mode
+                if (this.componentStack.length > 0) {
+                    // Exit one level of component editing
+                    this.exitComponentEditing();
+                    return;
+                }
+
                 // If a layer is currently selected, just exit edit mode directly
                 // Otherwise, restore previous layer selection if exists
                 if (this.selectedLayerId !== null) {
@@ -275,8 +286,15 @@ class GlyphCanvas {
 
         // Check for double-click
         if (e.detail === 2) {
+            console.log('Double-click detected. isGlyphEditMode:', this.isGlyphEditMode, 'selectedLayerId:', this.selectedLayerId, 'hoveredComponentIndex:', this.hoveredComponentIndex);
             // In outline editor mode with layer selected
             if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
+                // Double-click on component - enter component editing
+                if (this.hoveredComponentIndex !== null) {
+                    console.log('Entering component editing for index:', this.hoveredComponentIndex);
+                    this.enterComponentEditing(this.hoveredComponentIndex);
+                    return;
+                }
                 // Double-click on point - toggle smooth for all selected points
                 if (this.hoveredPointIndex) {
                     if (this.selectedPoints.length > 0) {
@@ -819,7 +837,6 @@ class GlyphCanvas {
 
         const mouseX = this.mouseX;
         const mouseY = this.mouseY;
-
         const transform = this.getTransformMatrix();
 
         // Calculate glyph offset for selected glyph
@@ -834,12 +851,8 @@ class GlyphCanvas {
         const hitRadius = 20 / this.scale; // Larger hit radius for origin marker
         let foundComponentIndex = null;
 
-        // Transform mouse to glyph space for origin marker hit test
-        const det = transform.a * transform.d - transform.b * transform.c;
-        let glyphX = (transform.d * (mouseX - transform.e) - transform.c * (mouseY - transform.f)) / det;
-        let glyphY = (transform.a * (mouseY - transform.f) - transform.b * (mouseX - transform.e)) / det;
-        glyphX -= (xPosition + xOffset);
-        glyphY -= yOffset;
+        // Transform mouse to component local space
+        const { glyphX, glyphY } = this.transformMouseToComponentSpace(mouseX, mouseY);
 
         this.layerData.shapes.forEach((shape, index) => {
             if (shape.Component) {
@@ -922,26 +935,8 @@ class GlyphCanvas {
             return;
         }
 
-        // Use NON-HiDPI mouse coordinates for transformation
-        const mouseX = this.mouseX;
-        const mouseY = this.mouseY;
-
-        // Transform mouse coordinates to glyph space
-        const transform = this.getTransformMatrix();
-        const det = transform.a * transform.d - transform.b * transform.c;
-        let glyphX = (transform.d * (mouseX - transform.e) - transform.c * (mouseY - transform.f)) / det;
-        let glyphY = (transform.a * (mouseY - transform.f) - transform.b * (mouseX - transform.e)) / det;
-
-        // Adjust for selected glyph position
-        let xPosition = 0;
-        for (let i = 0; i < this.selectedGlyphIndex; i++) {
-            xPosition += (this.shapedGlyphs[i].ax || 0);
-        }
-        const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
-        const xOffset = glyph.dx || 0;
-        const yOffset = glyph.dy || 0;
-        glyphX -= (xPosition + xOffset);
-        glyphY -= yOffset;
+        // Transform mouse coordinates to component local space
+        const { glyphX, glyphY } = this.transformMouseToComponentSpace(this.mouseX, this.mouseY);
 
         // Check each anchor
         const hitRadius = 10 / this.scale; // 10 pixels in screen space
@@ -966,26 +961,8 @@ class GlyphCanvas {
             return;
         }
 
-        // Use NON-HiDPI mouse coordinates for transformation (same as drawing uses)
-        const mouseX = this.mouseX;
-        const mouseY = this.mouseY;
-
-        // Transform mouse coordinates to glyph space
-        const transform = this.getTransformMatrix();
-        const det = transform.a * transform.d - transform.b * transform.c;
-        let glyphX = (transform.d * (mouseX - transform.e) - transform.c * (mouseY - transform.f)) / det;
-        let glyphY = (transform.a * (mouseY - transform.f) - transform.b * (mouseX - transform.e)) / det;
-
-        // Adjust for selected glyph position
-        let xPosition = 0;
-        for (let i = 0; i < this.selectedGlyphIndex; i++) {
-            xPosition += (this.shapedGlyphs[i].ax || 0);
-        }
-        const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
-        const xOffset = glyph.dx || 0;
-        const yOffset = glyph.dy || 0;
-        glyphX -= (xPosition + xOffset);
-        glyphY -= yOffset;
+        // Transform mouse coordinates to component local space
+        const { glyphX, glyphY } = this.transformMouseToComponentSpace(this.mouseX, this.mouseY);
 
         // Check each point in each contour
         const hitRadius = 10 / this.scale; // 10 pixels in screen space
@@ -1657,6 +1634,12 @@ json.dumps(result)
     }
 
     async fetchLayerData() {
+        // Don't fetch if we're editing a component - we already have the component's data
+        if (this.componentStack.length > 0) {
+            console.log('Skipping fetchLayerData - currently editing component');
+            return;
+        }
+        
         // Fetch full layer data including shapes using to_dict()
         if (!window.pyodide || !this.selectedLayerId) {
             this.layerData = null;
@@ -1756,6 +1739,47 @@ json.dumps(result)
         }
     }
 
+    async fetchComponentLayerData(componentGlyphName) {
+        // Fetch layer data for a specific component glyph
+        if (!window.pyodide || !this.selectedLayerId) {
+            return null;
+        }
+
+        try {
+            const dataJson = await window.pyodide.runPythonAsync(`
+import json
+
+result = None
+try:
+    current_font = CurrentFont()
+    if current_font and hasattr(current_font, 'glyphs'):
+        glyph = current_font.glyphs.get('${componentGlyphName}')
+        if glyph:
+            # Find the layer by ID
+            layer = None
+            for l in glyph.layers:
+                if l.id == '${this.selectedLayerId}':
+                    layer = l
+                    break
+            
+            if layer:
+                result = layer.to_dict()
+except Exception as e:
+    print(f"Error fetching component layer data: {e}")
+    import traceback
+    traceback.print_exc()
+    result = None
+
+json.dumps(result)
+`);
+
+            return JSON.parse(dataJson);
+        } catch (error) {
+            console.error('Error fetching component layer data from Python:', error);
+            return null;
+        }
+    }
+
     async saveLayerData() {
         // Save layer data back to Python using from_dict()
         if (!window.pyodide || !this.selectedLayerId || !this.layerData) {
@@ -1763,13 +1787,25 @@ json.dumps(result)
         }
 
         try {
-            const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
-            let glyphName = `GID ${glyphId}`;
+            // Determine which glyph to save to
+            let glyphName;
 
-            if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
-                const glyph = this.opentypeFont.glyphs.get(glyphId);
-                if (glyph.name) {
-                    glyphName = glyph.name;
+            if (this.componentStack.length > 0) {
+                // We're editing a component - save to the component's glyph
+                // Get the component reference from the parent layer
+                const parentState = this.componentStack[this.componentStack.length - 1];
+                const componentShape = parentState.layerData.shapes[this.editingComponentIndex];
+                glyphName = componentShape.Component.reference;
+            } else {
+                // We're editing the main glyph
+                const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
+                glyphName = `GID ${glyphId}`;
+
+                if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+                    const glyph = this.opentypeFont.glyphs.get(glyphId);
+                    if (glyph.name) {
+                        glyphName = glyph.name;
+                    }
                 }
             }
 
@@ -1837,6 +1873,189 @@ except Exception as e:
         }
     }
 
+    async enterComponentEditing(componentIndex) {
+        // Enter editing mode for a component
+        if (!this.layerData || !this.layerData.shapes[componentIndex]) {
+            return;
+        }
+
+        const componentShape = this.layerData.shapes[componentIndex];
+        if (!componentShape.Component || !componentShape.Component.reference) {
+            console.log('Component has no reference');
+            return;
+        }
+
+        // Fetch the component's layer data
+        const componentLayerData = await this.fetchComponentLayerData(componentShape.Component.reference);
+        if (!componentLayerData) {
+            console.error('Failed to fetch component layer data for:', componentShape.Component.reference);
+            return;
+        }
+
+        console.log('Fetched component layer data:', componentLayerData);
+
+        // Parse nodes in component layer data
+        if (componentLayerData.shapes) {
+            componentLayerData.shapes.forEach(shape => {
+                if (shape.Path && shape.Path.nodes) {
+                    // Parse "x y type x y type ..." into [[x, y, type], ...]
+                    const nodesStr = shape.Path.nodes.trim();
+                    const tokens = nodesStr.split(/\s+/);
+                    const nodesArray = [];
+
+                    for (let i = 0; i + 2 < tokens.length; i += 3) {
+                        nodesArray.push([
+                            parseFloat(tokens[i]),
+                            parseFloat(tokens[i + 1]),
+                            tokens[i + 2]
+                        ]);
+                    }
+
+                    shape.nodes = nodesArray;
+                    console.log('Parsed component shape nodes:', nodesArray.length, 'nodes');
+                }
+            });
+        }
+
+        console.log('About to set layerData to component data. Current shapes:', this.layerData?.shapes?.length, '-> New shapes:', componentLayerData.shapes?.length);
+
+        // Get component transform
+        const transform = componentShape.Component.transform || [1, 0, 0, 1, 0, 0];
+
+        // Push current state onto stack (before changing this.layerData)
+        this.componentStack.push({
+            componentIndex: this.editingComponentIndex,
+            transform: this.getAccumulatedTransform(),
+            layerData: this.layerData,
+            selectedPoints: this.selectedPoints,
+            selectedAnchors: this.selectedAnchors,
+            selectedComponents: this.selectedComponents
+        });
+
+        console.log('Pushed to stack. Stack depth:', this.componentStack.length);
+
+        // Set the component as the current editing context
+        this.editingComponentIndex = componentIndex;
+        this.layerData = componentLayerData;
+        
+        console.log('Set layerData to component. this.layerData.shapes.length:', this.layerData?.shapes?.length);
+
+        // Clear selections
+        this.selectedPoints = [];
+        this.selectedAnchors = [];
+        this.selectedComponents = [];
+        this.hoveredPointIndex = null;
+        this.hoveredAnchorIndex = null;
+        this.hoveredComponentIndex = null;
+
+        console.log(`Entered component editing: ${componentShape.Component.reference}, stack depth: ${this.componentStack.length}`);
+        this.updatePropertiesUI();
+        this.render();
+    }
+
+    exitComponentEditing() {
+        // Exit current component editing level
+        if (this.componentStack.length === 0) {
+            return false; // No component stack to exit from
+        }
+
+        const previousState = this.componentStack.pop();
+
+        // Restore previous state
+        this.editingComponentIndex = previousState.componentIndex;
+        this.layerData = previousState.layerData;
+        this.selectedPoints = previousState.selectedPoints || [];
+        this.selectedAnchors = previousState.selectedAnchors || [];
+        this.selectedComponents = previousState.selectedComponents || [];
+        this.hoveredPointIndex = null;
+        this.hoveredAnchorIndex = null;
+        this.hoveredComponentIndex = null;
+
+        console.log(`Exited component editing, stack depth: ${this.componentStack.length}`);
+        this.updatePropertiesUI();
+        this.render();
+        return true;
+    }
+
+    getAccumulatedTransform() {
+        // Get the accumulated transform matrix from all component levels
+        let a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0;
+
+        // Apply transforms from bottom of stack to current level
+        for (const level of this.componentStack) {
+            if (level.componentIndex !== null && level.layerData && level.layerData.shapes[level.componentIndex]) {
+                const comp = level.layerData.shapes[level.componentIndex].Component;
+                if (comp && comp.transform) {
+                    const t = comp.transform;
+                    // Multiply transforms: new = current * level
+                    const newA = a * t[0] + c * t[1];
+                    const newB = b * t[0] + d * t[1];
+                    const newC = a * t[2] + c * t[3];
+                    const newD = b * t[2] + d * t[3];
+                    const newTx = a * t[4] + c * t[5] + tx;
+                    const newTy = b * t[4] + d * t[5] + ty;
+                    a = newA; b = newB; c = newC; d = newD; tx = newTx; ty = newTy;
+                }
+            }
+        }
+
+        // Apply current component transform if editing a component
+        if (this.editingComponentIndex !== null && this.componentStack.length > 0) {
+            const parentState = this.componentStack[this.componentStack.length - 1];
+            if (parentState.layerData && parentState.layerData.shapes[this.editingComponentIndex]) {
+                const comp = parentState.layerData.shapes[this.editingComponentIndex].Component;
+                if (comp && comp.transform) {
+                    const t = comp.transform;
+                    const newA = a * t[0] + c * t[1];
+                    const newB = b * t[0] + d * t[1];
+                    const newC = a * t[2] + c * t[3];
+                    const newD = b * t[2] + d * t[3];
+                    const newTx = a * t[4] + c * t[5] + tx;
+                    const newTy = b * t[4] + d * t[5] + ty;
+                    a = newA; b = newB; c = newC; d = newD; tx = newTx; ty = newTy;
+                }
+            }
+        }
+
+        return [a, b, c, d, tx, ty];
+    }
+
+    transformMouseToComponentSpace(mouseX, mouseY) {
+        // Transform mouse coordinates from canvas to component local space
+        const transform = this.getTransformMatrix();
+        const det = transform.a * transform.d - transform.b * transform.c;
+        let glyphX = (transform.d * (mouseX - transform.e) - transform.c * (mouseY - transform.f)) / det;
+        let glyphY = (transform.a * (mouseY - transform.f) - transform.b * (mouseX - transform.e)) / det;
+
+        // Adjust for selected glyph position
+        let xPosition = 0;
+        for (let i = 0; i < this.selectedGlyphIndex; i++) {
+            xPosition += (this.shapedGlyphs[i].ax || 0);
+        }
+        const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
+        const xOffset = glyph.dx || 0;
+        const yOffset = glyph.dy || 0;
+        glyphX -= (xPosition + xOffset);
+        glyphY -= yOffset;
+
+        // Apply inverse component transform if editing a component
+        if (this.componentStack.length > 0) {
+            const compTransform = this.getAccumulatedTransform();
+            const [a, b, c, d, tx, ty] = compTransform;
+            const det = a * d - b * c;
+
+            if (Math.abs(det) > 0.0001) {
+                // Inverse transform: (x', y') = inverse(T) * (x - tx, y - ty)
+                const localX = glyphX - tx;
+                const localY = glyphY - ty;
+                glyphX = (d * localX - c * localY) / det;
+                glyphY = (a * localY - b * localX) / det;
+            }
+        }
+
+        return { glyphX, glyphY };
+    }
+
     updateAxisSliders() {
         // Update axis slider positions to match current variationSettings
         if (!this.axesSection) return;
@@ -1883,23 +2102,36 @@ except Exception as e:
         this.propertiesSection.appendChild(title);
 
         if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
-            const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
-            let glyphName = `GID ${glyphId}`;
+            let glyphName;
+            let isComponentContext = false;
 
-            // Get glyph name from compiled font via OpenType.js
-            if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
-                const glyph = this.opentypeFont.glyphs.get(glyphId);
-                if (glyph.name) {
-                    glyphName = glyph.name;
+            // Check if we're editing a component
+            if (this.componentStack.length > 0) {
+                // Get the component reference from the parent layer
+                const parentState = this.componentStack[this.componentStack.length - 1];
+                const componentShape = parentState.layerData.shapes[this.editingComponentIndex];
+                glyphName = componentShape.Component.reference;
+                isComponentContext = true;
+            } else {
+                // Get the main glyph name
+                const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
+                glyphName = `GID ${glyphId}`;
+
+                // Get glyph name from compiled font via OpenType.js
+                if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+                    const glyph = this.opentypeFont.glyphs.get(glyphId);
+                    if (glyph.name) {
+                        glyphName = glyph.name;
+                    }
                 }
             }
 
             // Display glyph name
             const nameLabel = document.createElement('div');
             nameLabel.style.fontSize = '14px';
-            nameLabel.style.color = 'var(--text-primary)';
+            nameLabel.style.color = 'var(--text-secondary)';
             nameLabel.style.marginBottom = '4px';
-            nameLabel.textContent = 'Name:';
+            nameLabel.textContent = isComponentContext ? 'Component:' : 'Name:';
 
             const nameValue = document.createElement('div');
             nameValue.style.fontSize = '16px';
@@ -2521,11 +2753,103 @@ except Exception as e:
         this.ctx.save();
         this.ctx.translate(x, y);
 
+        // Apply accumulated component transform if editing a component
+        // This positions the editor at the component's location in the parent
+        if (this.componentStack.length > 0) {
+            const transform = this.getAccumulatedTransform();
+            this.ctx.transform(transform[0], transform[1], transform[2], transform[3], transform[4], transform[5]);
+        }
+
         const invScale = 1 / this.scale;
         const isDarkTheme = document.documentElement.getAttribute('data-theme') !== 'light';
 
+        // Draw parent glyph outlines in background if editing a component
+        if (this.componentStack.length > 0) {
+            // Get the root layer data (bottom of stack)
+            const rootLayerData = this.componentStack[0].layerData;
+
+            this.ctx.save();
+
+            // Apply inverse transform to draw parent in original (untransformed) position
+            const compTransform = this.getAccumulatedTransform();
+            const [a, b, c, d, tx, ty] = compTransform;
+            const det = a * d - b * c;
+
+            if (Math.abs(det) > 0.0001) {
+                // Apply inverse transform to cancel out component transform
+                const invA = d / det;
+                const invB = -b / det;
+                const invC = -c / det;
+                const invD = a / det;
+                const invTx = (c * ty - d * tx) / det;
+                const invTy = (b * tx - a * ty) / det;
+                this.ctx.transform(invA, invB, invC, invD, invTx, invTy);
+            }
+
+            this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
+            this.ctx.lineWidth = 1 * invScale;
+
+            if (rootLayerData && rootLayerData.shapes) {
+                rootLayerData.shapes.forEach(shape => {
+                    if (shape.Component) return; // Skip components in background
+
+                    const nodes = shape.nodes;
+                    if (!nodes || nodes.length === 0) return;
+
+                    // Draw simple outline
+                    this.ctx.beginPath();
+                    let startIdx = 0;
+                    for (let i = 0; i < nodes.length; i++) {
+                        const [, , type] = nodes[i];
+                        if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
+                            startIdx = i;
+                            break;
+                        }
+                    }
+                    this.ctx.moveTo(nodes[startIdx][0], nodes[startIdx][1]);
+
+                    let i = 0;
+                    while (i < nodes.length) {
+                        const idx = (startIdx + i) % nodes.length;
+                        const nextIdx = (startIdx + i + 1) % nodes.length;
+                        const [, , type] = nodes[idx];
+                        const [next1X, next1Y, next1Type] = nodes[nextIdx];
+
+                        if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
+                            if (next1Type === 'o' || next1Type === 'os') {
+                                const next2Idx = (startIdx + i + 2) % nodes.length;
+                                const next3Idx = (startIdx + i + 3) % nodes.length;
+                                const [next2X, next2Y, next2Type] = nodes[next2Idx];
+                                const [next3X, next3Y] = nodes[next3Idx];
+                                if (next2Type === 'o' || next2Type === 'os') {
+                                    this.ctx.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
+                                    i += 3;
+                                } else {
+                                    this.ctx.lineTo(next2X, next2Y);
+                                    i += 2;
+                                }
+                            } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
+                                this.ctx.lineTo(next1X, next1Y);
+                                i++;
+                            } else {
+                                i++;
+                            }
+                        } else {
+                            i++;
+                        }
+                    }
+                    this.ctx.closePath();
+                    this.ctx.stroke();
+                });
+            }
+
+            this.ctx.restore(); // Restore to component-transformed state
+        }
+
         // Draw each shape (contour or component)
+        console.log('Drawing shapes. Component stack depth:', this.componentStack.length, 'layerData.shapes.length:', this.layerData?.shapes?.length);
         this.layerData.shapes.forEach((shape, contourIndex) => {
+            console.log('Drawing shape', contourIndex, ':', shape.Component ? 'Component' : 'Path', shape.Component ? `ref=${shape.Component.reference}` : `nodes=${shape.nodes?.length || 0}`);
             if (shape.ref) {
                 // Component - will be drawn separately as markers
                 return;
