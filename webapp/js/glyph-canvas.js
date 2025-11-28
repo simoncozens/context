@@ -74,7 +74,7 @@ class GlyphCanvas {
 
         // Outline editor state
         this.layerData = null; // Cached layer data with shapes
-        this.selectedPointIndex = null; // {contourIndex, nodeIndex} for selected point
+        this.selectedPoints = []; // Array of {contourIndex, nodeIndex} for selected points
         this.hoveredPointIndex = null; // {contourIndex, nodeIndex} for hovered point
         this.isDraggingPoint = false;
         this.layerDataDirty = false; // Track if layer data needs saving
@@ -243,9 +243,16 @@ class GlyphCanvas {
         if (e.detail === 2) {
             // In outline editor mode with layer selected
             if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
-                // Double-click on point - toggle smooth
+                // Double-click on point - toggle smooth for all selected points
                 if (this.hoveredPointIndex) {
-                    this.togglePointSmooth(this.hoveredPointIndex);
+                    if (this.selectedPoints.length > 0) {
+                        // Toggle smooth for all selected points
+                        for (const point of this.selectedPoints) {
+                            this.togglePointSmooth(point);
+                        }
+                    } else {
+                        this.togglePointSmooth(this.hoveredPointIndex);
+                    }
                     return;
                 }
                 // Double-click on other glyph - switch to that glyph
@@ -266,12 +273,46 @@ class GlyphCanvas {
         if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
             // Check if clicking on a point
             if (this.hoveredPointIndex) {
-                this.selectedPointIndex = { ...this.hoveredPointIndex };
-                this.isDraggingPoint = true;
-                this.lastMouseX = e.clientX;
-                this.lastMouseY = e.clientY;
-                this.render();
+                if (e.shiftKey) {
+                    // Shift-click: add to or remove from selection
+                    const existingIndex = this.selectedPoints.findIndex(p =>
+                        p.contourIndex === this.hoveredPointIndex.contourIndex &&
+                        p.nodeIndex === this.hoveredPointIndex.nodeIndex
+                    );
+                    if (existingIndex >= 0) {
+                        // Remove from selection
+                        this.selectedPoints.splice(existingIndex, 1);
+                    } else {
+                        // Add to selection
+                        this.selectedPoints.push({ ...this.hoveredPointIndex });
+                    }
+                    this.render();
+                } else {
+                    // Check if clicked point is already in selection
+                    const isInSelection = this.selectedPoints.some(p =>
+                        p.contourIndex === this.hoveredPointIndex.contourIndex &&
+                        p.nodeIndex === this.hoveredPointIndex.nodeIndex
+                    );
+
+                    if (!isInSelection) {
+                        // Regular click on unselected point: select only this point
+                        this.selectedPoints = [{ ...this.hoveredPointIndex }];
+                    }
+                    // If already in selection, keep all selected points
+
+                    // Start dragging (all selected points)
+                    this.isDraggingPoint = true;
+                    this.lastMouseX = e.clientX;
+                    this.lastMouseY = e.clientY;
+                    this.lastGlyphX = null; // Reset for delta calculation
+                    this.lastGlyphY = null;
+                    this.render();
+                }
                 return; // Don't start canvas panning
+            } else if (!e.shiftKey) {
+                // Clicked on empty space without shift: clear selection
+                this.selectedPoints = [];
+                this.render();
             }
         }
 
@@ -297,7 +338,7 @@ class GlyphCanvas {
 
     onMouseMove(e) {
         // Handle point dragging in outline editor (takes priority over canvas panning)
-        if (this.isDraggingPoint && this.selectedPointIndex && this.layerData) {
+        if (this.isDraggingPoint && this.selectedPoints.length > 0 && this.layerData) {
             const rect = this.canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
@@ -319,18 +360,27 @@ class GlyphCanvas {
             glyphX -= (xPosition + xOffset);
             glyphY -= yOffset;
 
-            // Update point position
-            const { contourIndex, nodeIndex } = this.selectedPointIndex;
-            if (this.layerData.shapes[contourIndex] && this.layerData.shapes[contourIndex].nodes[nodeIndex]) {
-                this.layerData.shapes[contourIndex].nodes[nodeIndex][0] = Math.round(glyphX);
-                this.layerData.shapes[contourIndex].nodes[nodeIndex][1] = Math.round(glyphY);
+            // Calculate delta from last position
+            const deltaX = Math.round(glyphX) - Math.round(this.lastGlyphX || glyphX);
+            const deltaY = Math.round(glyphY) - Math.round(this.lastGlyphY || glyphY);
 
-                // Save to Python immediately (non-blocking)
-                // This lets the auto-compile system detect changes
-                this.saveLayerData();
+            this.lastGlyphX = glyphX;
+            this.lastGlyphY = glyphY;
 
-                this.render();
+            // Update all selected points
+            for (const point of this.selectedPoints) {
+                const { contourIndex, nodeIndex } = point;
+                if (this.layerData.shapes[contourIndex] && this.layerData.shapes[contourIndex].nodes[nodeIndex]) {
+                    this.layerData.shapes[contourIndex].nodes[nodeIndex][0] += deltaX;
+                    this.layerData.shapes[contourIndex].nodes[nodeIndex][1] += deltaY;
+                }
             }
+
+            // Save to Python immediately (non-blocking)
+            // This lets the auto-compile system detect changes
+            this.saveLayerData();
+
+            this.render();
             return; // Don't do canvas panning while dragging point
         }
 
@@ -555,6 +605,26 @@ class GlyphCanvas {
             this.hoveredPointIndex = foundPoint;
             this.render();
         }
+    }
+
+    moveSelectedPoints(deltaX, deltaY) {
+        // Move all selected points by the given delta
+        if (!this.layerData || !this.layerData.shapes || this.selectedPoints.length === 0) {
+            return;
+        }
+
+        for (const point of this.selectedPoints) {
+            const { contourIndex, nodeIndex } = point;
+            const shape = this.layerData.shapes[contourIndex];
+            if (shape && shape.nodes && shape.nodes[nodeIndex]) {
+                shape.nodes[nodeIndex][0] += deltaX;
+                shape.nodes[nodeIndex][1] += deltaY;
+            }
+        }
+
+        // Save to Python (non-blocking)
+        this.saveLayerData();
+        this.render();
     }
 
     togglePointSmooth(pointIndex) {
@@ -811,7 +881,7 @@ class GlyphCanvas {
 
         // Clear outline editor state
         this.layerData = null;
-        this.selectedPointIndex = null;
+        this.selectedPoints = [];
         this.hoveredPointIndex = null;
         this.isDraggingPoint = false;
         this.layerDataDirty = false;
@@ -2052,9 +2122,9 @@ except Exception as e:
                 const isHovered = this.hoveredPointIndex &&
                     this.hoveredPointIndex.contourIndex === contourIndex &&
                     this.hoveredPointIndex.nodeIndex === nodeIndex;
-                const isSelected = this.selectedPointIndex &&
-                    this.selectedPointIndex.contourIndex === contourIndex &&
-                    this.selectedPointIndex.nodeIndex === nodeIndex;
+                const isSelected = this.selectedPoints.some(p =>
+                    p.contourIndex === contourIndex && p.nodeIndex === nodeIndex
+                );
 
                 // Skip quadratic bezier points for now
                 if (type === 'q' || type === 'qs') {
@@ -2183,7 +2253,35 @@ except Exception as e:
         // Handle cursor navigation and text editing
         // Note: Escape key is handled globally in constructor for better focus handling
 
-        // Prevent all text editing and cursor movement in glyph edit mode
+        // Handle arrow keys for point movement in glyph edit mode
+        if (this.isGlyphEditMode && this.selectedLayerId && this.selectedPoints.length > 0) {
+            const multiplier = e.shiftKey ? 10 : 1;
+            let moved = false;
+
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                this.moveSelectedPoints(-multiplier, 0);
+                moved = true;
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                this.moveSelectedPoints(multiplier, 0);
+                moved = true;
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                this.moveSelectedPoints(0, multiplier);
+                moved = true;
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.moveSelectedPoints(0, -multiplier);
+                moved = true;
+            }
+
+            if (moved) {
+                return;
+            }
+        }
+
+        // Prevent all other text editing and cursor movement in glyph edit mode
         if (this.isGlyphEditMode) {
             e.preventDefault();
             return;
