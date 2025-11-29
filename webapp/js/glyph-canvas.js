@@ -1395,6 +1395,13 @@ class GlyphCanvas {
 
     selectGlyphByIndex(glyphIndex) {
         // Select a glyph by its index in the shaped glyphs array
+        
+        // If we're in nested component mode, exit all levels first
+        // Skip UI updates during batch exit to avoid duplicate layer interfaces
+        while (this.componentStack.length > 0) {
+            this.exitComponentEditing(true); // Skip UI updates
+        }
+        
         if (glyphIndex >= 0 && glyphIndex < this.shapedGlyphs.length) {
             this.selectedGlyphIndex = glyphIndex;
             this.isGlyphEditMode = true;
@@ -1404,6 +1411,9 @@ class GlyphCanvas {
             this.isGlyphEditMode = false;
             console.log(`Deselected glyph`);
         }
+        
+        // Update breadcrumb (will hide it since componentStack is now empty)
+        this.updateComponentBreadcrumb();
         this.updatePropertiesUI();
         this.render();
     }
@@ -2166,7 +2176,7 @@ except Exception as e:
         this.updateComponentBreadcrumb();
         this.updatePropertiesUI();
         this.render();
-        
+
         // Re-check mouse position to detect components/points/anchors at current location
         this.updateHoveredComponent();
         this.updateHoveredAnchor();
@@ -2292,8 +2302,9 @@ json.dumps(result)
         }
     }
 
-    exitComponentEditing() {
+    exitComponentEditing(skipUIUpdate = false) {
         // Exit current component editing level
+        // skipUIUpdate: if true, skip UI updates (useful when exiting multiple levels)
         if (this.componentStack.length === 0) {
             return false; // No component stack to exit from
         }
@@ -2311,15 +2322,18 @@ json.dumps(result)
         this.hoveredComponentIndex = null;
 
         console.log(`Exited component editing, stack depth: ${this.componentStack.length}`);
-        this.updateComponentBreadcrumb();
-        this.updatePropertiesUI();
-        this.render();
         
-        // Re-check mouse position to detect components/points/anchors at current location
-        this.updateHoveredComponent();
-        this.updateHoveredAnchor();
-        this.updateHoveredPoint();
-        
+        if (!skipUIUpdate) {
+            this.updateComponentBreadcrumb();
+            this.updatePropertiesUI();
+            this.render();
+
+            // Re-check mouse position to detect components/points/anchors at current location
+            this.updateHoveredComponent();
+            this.updateHoveredAnchor();
+            this.updateHoveredPoint();
+        }
+
         return true;
     }
 
