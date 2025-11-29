@@ -2537,8 +2537,7 @@ except Exception as e:
 
         // Use black on white or white on black based on theme
         const isDarkTheme = document.documentElement.getAttribute('data-theme') !== 'light';
-        const normalColor = isDarkTheme ? '#ffffff' : '#000000';
-        const hoverColor = '#ff00ff'; // Magenta for hover
+        const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
 
         this.shapedGlyphs.forEach((glyph, glyphIndex) => {
             const glyphId = glyph.g;
@@ -2561,7 +2560,6 @@ except Exception as e:
             // Set color based on hover, selection state, and edit mode
             const isHovered = glyphIndex === this.hoveredGlyphIndex;
             const isSelected = glyphIndex === this.selectedGlyphIndex;
-            const selectedColor = '#00ff00'; // Green for selected (glyph after cursor)
 
             // Skip drawing the selected glyph if we have layer data (outline editor will draw it)
             // UNLESS we're in preview mode, then show it in solid color
@@ -2573,22 +2571,25 @@ except Exception as e:
             if (this.isGlyphEditMode && !this.isPreviewMode) {
                 // Glyph edit mode (not preview): active glyph in solid color, others dimmed
                 if (isSelected) {
-                    this.ctx.fillStyle = normalColor; // Solid black/white for active glyph
+                    this.ctx.fillStyle = colors.GLYPH_ACTIVE_IN_EDITOR;
+                } else if (isHovered) {
+                    // Hovered inactive glyph - darker than normal inactive
+                    this.ctx.fillStyle = colors.GLYPH_HOVERED_IN_EDITOR;
                 } else {
-                    // Dim other glyphs to 20% opacity
-                    this.ctx.fillStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
+                    // Dim other glyphs
+                    this.ctx.fillStyle = colors.GLYPH_INACTIVE_IN_EDITOR;
                 }
             } else if (this.isGlyphEditMode && this.isPreviewMode) {
-                // Preview mode: all glyphs in solid color
-                this.ctx.fillStyle = normalColor;
+                // Preview mode: all glyphs in normal color
+                this.ctx.fillStyle = colors.GLYPH_NORMAL;
             } else {
                 // Text edit mode: normal coloring
                 if (isHovered) {
-                    this.ctx.fillStyle = hoverColor;
+                    this.ctx.fillStyle = colors.GLYPH_HOVERED;
                 } else if (isSelected) {
-                    this.ctx.fillStyle = selectedColor;
+                    this.ctx.fillStyle = colors.GLYPH_SELECTED;
                 } else {
-                    this.ctx.fillStyle = normalColor;
+                    this.ctx.fillStyle = colors.GLYPH_NORMAL;
                 }
             } try {
                 // Get glyph outline from HarfBuzz (supports variations)

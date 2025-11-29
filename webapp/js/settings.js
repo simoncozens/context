@@ -16,13 +16,13 @@ const APP_SETTINGS = {
         NODE_SIZE_AT_MIN_ZOOM: 2,          // px - node size at min zoom
         NODE_SIZE_AT_MAX_ZOOM: 6,          // px - node size at max zoom
         NODE_SIZE_INTERPOLATION_MIN: 0.2,  // zoom level where min size starts
-        NODE_SIZE_INTERPOLATION_MAX: 2.0,  // zoom level where max size is reached
+        NODE_SIZE_INTERPOLATION_MAX: 3.0,  // zoom level where max size is reached
 
         // Anchor sizes
         ANCHOR_SIZE_AT_MIN_ZOOM: 3,        // px - anchor size at min zoom
         ANCHOR_SIZE_AT_MAX_ZOOM: 8,        // px - anchor size at max zoom
         ANCHOR_SIZE_INTERPOLATION_MIN: 0.2, // zoom level where min size starts
-        ANCHOR_SIZE_INTERPOLATION_MAX: 2.0, // zoom level where max size is reached
+        ANCHOR_SIZE_INTERPOLATION_MAX: 3.0, // zoom level where max size is reached
 
         // Component marker size
         COMPONENT_MARKER_SIZE: 10,         // px - size of component origin marker
@@ -34,6 +34,16 @@ const APP_SETTINGS = {
         COLORS_LIGHT: {
             // Grid
             GRID: 'rgba(0, 0, 0, 0.075)',
+
+            // Glyphs in text/preview mode
+            GLYPH_NORMAL: '#000000',
+            GLYPH_HOVERED: '#ff00ff',
+            GLYPH_SELECTED: '#00ff00',
+
+            // Glyphs when outline editor is active
+            GLYPH_ACTIVE_IN_EDITOR: '#000000',           // The glyph being edited
+            GLYPH_INACTIVE_IN_EDITOR: 'rgba(0, 0, 0, 0.2)', // Other glyphs (dimmed)
+            GLYPH_HOVERED_IN_EDITOR: 'rgba(0, 0, 0, 0.4)',  // Hovered inactive glyph (darker)
 
             // Nodes (on-curve points)
             NODE_NORMAL: '#00ff00',
@@ -67,6 +77,16 @@ const APP_SETTINGS = {
         COLORS_DARK: {
             // Grid
             GRID: 'rgba(255, 255, 255, 0.075)',
+
+            // Glyphs in text/preview mode
+            GLYPH_NORMAL: '#ffffff',
+            GLYPH_HOVERED: '#ff00ff',
+            GLYPH_SELECTED: '#00ff00',
+
+            // Glyphs when outline editor is active
+            GLYPH_ACTIVE_IN_EDITOR: '#ffffff',                 // The glyph being edited
+            GLYPH_INACTIVE_IN_EDITOR: 'rgba(255, 255, 255, 0.2)', // Other glyphs (dimmed)
+            GLYPH_HOVERED_IN_EDITOR: 'rgba(255, 255, 255, 0.4)',  // Hovered inactive glyph (darker)
 
             // Nodes (on-curve points)
             NODE_NORMAL: '#00ff00',
