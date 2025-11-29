@@ -2729,6 +2729,12 @@ except Exception as e:
     }
 
     drawOutlineEditor() {
+        // Validate APP_SETTINGS is available
+        if (typeof APP_SETTINGS === 'undefined' || !APP_SETTINGS.OUTLINE_EDITOR) {
+            console.error('APP_SETTINGS not available in drawOutlineEditor!');
+            return;
+        }
+
         // Draw outline editor when a layer is selected (skip in preview mode)
         if (!this.selectedLayerId || !this.layerData || !this.layerData.shapes || this.isPreviewMode) {
             return;
@@ -2788,11 +2794,11 @@ except Exception as e:
             if (glyphIndex >= 0 && glyphIndex < this.shapedGlyphs.length && this.hbFont) {
                 const shapedGlyph = this.shapedGlyphs[glyphIndex];
                 const glyphId = shapedGlyph.g;
-                
+
                 try {
                     // Get glyph outline from HarfBuzz
                     const glyphData = this.hbFont.glyphToPath(glyphId);
-                    
+
                     if (glyphData) {
                         this.ctx.beginPath();
                         const path = new Path2D(glyphData);
@@ -2844,7 +2850,7 @@ except Exception as e:
             }            // Draw the outline path
             this.ctx.beginPath();
             this.ctx.strokeStyle = isDarkTheme ? '#ffffff' : '#000000';
-            this.ctx.lineWidth = 2 * invScale;
+            this.ctx.lineWidth = APP_SETTINGS.OUTLINE_EDITOR.OUTLINE_STROKE_WIDTH * invScale;
 
             // Build the path using proper cubic bezier handling
             let startIdx = 0;
@@ -2958,6 +2964,12 @@ except Exception as e:
             });
 
             // Draw nodes (points)
+            // Skip drawing nodes if zoom is under minimum threshold
+            const minZoomForHandles = APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_HANDLES;
+            if (this.scale < minZoomForHandles) {
+                return;
+            }
+
             shape.nodes.forEach((node, nodeIndex) => {
                 const [x, y, type] = node;
                 const isHovered = this.hoveredPointIndex &&
@@ -2972,10 +2984,21 @@ except Exception as e:
                     return;
                 }
 
-                // Draw point based on type
-                const pointSize = 6 * invScale;
+                // Calculate point size based on zoom level
+                const nodeSizeMax = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MAX_ZOOM;
+                const nodeSizeMin = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MIN_ZOOM;
+                const nodeInterpolationMin = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MIN;
+                const nodeInterpolationMax = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MAX;
 
-                if (type === 'o' || type === 'os') {
+                let pointSize;
+                if (this.scale >= nodeInterpolationMax) {
+                    pointSize = nodeSizeMax * invScale;
+                } else {
+                    // Interpolate between min and max size
+                    const zoomFactor = (this.scale - nodeInterpolationMin) /
+                        (nodeInterpolationMax - nodeInterpolationMin);
+                    pointSize = (nodeSizeMin + (nodeSizeMax - nodeSizeMin) * zoomFactor) * invScale;
+                } if (type === 'o' || type === 'os') {
                     // Off-curve point (cubic bezier control point) - draw as circle
                     this.ctx.beginPath();
                     this.ctx.arc(x, y, pointSize, 0, Math.PI * 2);
@@ -3110,9 +3133,14 @@ except Exception as e:
             }
 
             // Draw component reference marker at origin
-            const markerSize = 10 * invScale;
+            // Skip drawing markers if zoom is under minimum threshold
+            const minZoomForHandles = APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_HANDLES;
+            if (this.scale < minZoomForHandles) {
+                this.ctx.restore();
+                return;
+            }
 
-            // Draw cross marker
+            const markerSize = APP_SETTINGS.OUTLINE_EDITOR.COMPONENT_MARKER_SIZE * invScale;            // Draw cross marker
             this.ctx.strokeStyle = isSelected ? '#ff00ff' : (isHovered ? '#ff88ff' : '#00ffff');
             this.ctx.lineWidth = 2 * invScale;
             this.ctx.beginPath();
@@ -3140,9 +3168,26 @@ except Exception as e:
         });
 
         // Draw anchors
-        if (this.layerData.anchors && this.layerData.anchors.length > 0) {
-            const anchorSize = 8 * invScale;
-            const fontSize = 12 * invScale;
+        // Skip drawing anchors if zoom is under minimum threshold
+        const minZoomForHandles = APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_HANDLES;
+        const minZoomForLabels = APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_ANCHOR_LABELS;
+
+        if (this.scale >= minZoomForHandles && this.layerData.anchors && this.layerData.anchors.length > 0) {
+            // Calculate anchor size based on zoom level
+            const anchorSizeMax = APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_AT_MAX_ZOOM;
+            const anchorSizeMin = APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_AT_MIN_ZOOM;
+            const anchorInterpolationMin = APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_INTERPOLATION_MIN;
+            const anchorInterpolationMax = APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_INTERPOLATION_MAX;
+
+            let anchorSize;
+            if (this.scale >= anchorInterpolationMax) {
+                anchorSize = anchorSizeMax * invScale;
+            } else {
+                // Interpolate between min and max size
+                const zoomFactor = (this.scale - anchorInterpolationMin) /
+                    (anchorInterpolationMax - anchorInterpolationMin);
+                anchorSize = (anchorSizeMin + (anchorSizeMax - anchorSizeMin) * zoomFactor) * invScale;
+            } const fontSize = 12 * invScale;
 
             this.layerData.anchors.forEach((anchor, index) => {
                 const { x, y, name } = anchor;
@@ -3162,8 +3207,8 @@ except Exception as e:
 
                 this.ctx.restore();
 
-                // Draw anchor name
-                if (name) {
+                // Draw anchor name only above minimum zoom threshold
+                if (name && this.scale > minZoomForLabels) {
                     this.ctx.save();
                     this.ctx.translate(x, y);
                     this.ctx.scale(1, -1); // Flip Y axis to fix upside-down text
