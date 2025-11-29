@@ -853,6 +853,7 @@ class GlyphCanvas {
 
         // Transform mouse to component local space
         const { glyphX, glyphY } = this.transformMouseToComponentSpace(mouseX, mouseY);
+        console.log(`updateHoveredComponent: mouseX=${mouseX}, mouseY=${mouseY}, glyphX=${glyphX}, glyphY=${glyphY}, componentStack.length=${this.componentStack.length}`);
 
         this.layerData.shapes.forEach((shape, index) => {
             if (shape.Component) {
@@ -876,11 +877,19 @@ class GlyphCanvas {
 
                 // Check if inside component outline (including nested components)
                 if (shape.Component.layerData && shape.Component.layerData.shapes) {
-                    const checkShapesRecursive = (shapes, parentTransform = [1, 0, 0, 1, 0, 0]) => {
+                    console.log(`Checking component ${index}, componentStack.length=${this.componentStack.length}, outer transform=[${a},${b},${c},${d},${tx},${ty}]`);
+                    if (this.componentStack.length > 0) {
+                        console.log(`ComponentStack[0].transform:`, this.componentStack[0].transform);
+                        console.log(`Accumulated transform:`, this.getAccumulatedTransform());
+                    }
+
+
+                    const checkShapesRecursive = (shapes, parentTransform = [1, 0, 0, 1, 0, 0], depth = 0) => {
                         for (const componentShape of shapes) {
                             // Handle nested components recursively
                             if (componentShape.Component) {
                                 const nestedTransform = componentShape.Component.transform || [1, 0, 0, 1, 0, 0];
+                                console.log(`  ${'  '.repeat(depth)}Nested component at depth ${depth}, transform=[${nestedTransform}]`);
                                 // Multiply parent transform with nested transform
                                 const combinedTransform = [
                                     parentTransform[0] * nestedTransform[0] + parentTransform[2] * nestedTransform[1],
@@ -890,17 +899,20 @@ class GlyphCanvas {
                                     parentTransform[0] * nestedTransform[4] + parentTransform[2] * nestedTransform[5] + parentTransform[4],
                                     parentTransform[1] * nestedTransform[4] + parentTransform[3] * nestedTransform[5] + parentTransform[5]
                                 ];
-                                
+                                console.log(`  ${'  '.repeat(depth)}Combined transform=[${combinedTransform}]`);
+
                                 if (componentShape.Component.layerData && componentShape.Component.layerData.shapes) {
-                                    if (checkShapesRecursive(componentShape.Component.layerData.shapes, combinedTransform)) {
+                                    if (checkShapesRecursive(componentShape.Component.layerData.shapes, combinedTransform, depth + 1)) {
                                         return true;
                                     }
                                 }
                                 continue;
                             }
-                            
+
                             // Handle outline shapes
                             if (componentShape.nodes && componentShape.nodes.length > 0) {
+                                console.log(`  ${'  '.repeat(depth)}Outline shape at depth ${depth}, parentTransform=[${parentTransform}]`);
+                                console.log(`  ${'  '.repeat(depth)}First node: [${componentShape.nodes[0]}]`);
                                 const path = new Path2D();
                                 const nodes = componentShape.nodes;
 
@@ -955,25 +967,41 @@ class GlyphCanvas {
 
                                 // Apply transform to canvas for hit testing
                                 this.ctx.save();
-                                this.ctx.setTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
-                                this.ctx.translate(xPosition + xOffset, yOffset);
-                                this.ctx.transform(a, b, c, d, tx, ty);
-                                
-                                // Apply nested transform if present
-                                if (parentTransform[0] !== 1 || parentTransform[1] !== 0 || parentTransform[2] !== 0 || 
-                                    parentTransform[3] !== 1 || parentTransform[4] !== 0 || parentTransform[5] !== 0) {
-                                    this.ctx.transform(
-                                        parentTransform[0], parentTransform[1], 
-                                        parentTransform[2], parentTransform[3], 
-                                        parentTransform[4], parentTransform[5]
-                                    );
+
+                                // When inside a component, glyphX/glyphY are already in component local space
+                                // (inverse transformed), so we need identity base transform
+                                // When at main level, mouseX/mouseY are in canvas space, so use full view transform
+                                if (this.componentStack.length === 0) {
+                                    this.ctx.setTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
+                                    this.ctx.translate(xPosition + xOffset, yOffset);
+                                    console.log(`  ${'  '.repeat(depth)}Canvas setup: base transform + translate(${xPosition + xOffset}, ${yOffset})`);
+                                } else {
+                                    // Identity transform - glyphX/glyphY are already in the right space
+                                    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+                                    console.log(`  ${'  '.repeat(depth)}Canvas setup: identity (glyphX/Y already transformed)`);
                                 }
 
+                                // Apply the component's own transform
+                                this.ctx.transform(a, b, c, d, tx, ty);
+                                console.log(`  ${'  '.repeat(depth)}Applied component transform: [${a},${b},${c},${d},${tx},${ty}]`);
+                                console.log(`  ${'  '.repeat(depth)}After component transform, canvas would place outline at: x=${78 + tx}, y=${631 + ty} (for first node [78,631])`);
+
+                                // Apply accumulated transforms from nested components within this component
+                                this.ctx.transform(
+                                    parentTransform[0], parentTransform[1],
+                                    parentTransform[2], parentTransform[3],
+                                    parentTransform[4], parentTransform[5]
+                                );
+                                console.log(`  ${'  '.repeat(depth)}Applied nested transform: [${parentTransform}]`);
+
                                 // Test if mouse point is in path
-                                const isInPath = this.ctx.isPointInPath(path, mouseX, mouseY);
-                                this.ctx.restore();
-                                
-                                if (isInPath) {
+                                // At main level: use mouseX, mouseY (canvas coordinates)
+                                // Inside component: use glyphX, glyphY (component local coordinates)
+                                const testX = this.componentStack.length === 0 ? mouseX : glyphX;
+                                const testY = this.componentStack.length === 0 ? mouseY : glyphY;
+                                const isInPath = this.ctx.isPointInPath(path, testX, testY);
+                                console.log(`  ${'  '.repeat(depth)}Hit test at (${testX}, ${testY}): ${isInPath}`);
+                                this.ctx.restore(); if (isInPath) {
                                     return true;
                                 }
                             }
@@ -1810,7 +1838,7 @@ json.dumps(result)
             // Recursively parse component layer data nodes strings into arrays
             const parseComponentNodes = (shapes) => {
                 if (!shapes) return;
-                
+
                 shapes.forEach(shape => {
                     // Parse nodes in Path shapes
                     if (shape.Path && shape.Path.nodes) {
@@ -1828,7 +1856,7 @@ json.dumps(result)
 
                         shape.nodes = nodesArray;
                     }
-                    
+
                     // Recursively parse nested component data
                     if (shape.Component && shape.Component.layerData && shape.Component.layerData.shapes) {
                         parseComponentNodes(shape.Component.layerData.shapes);
@@ -2035,11 +2063,13 @@ except Exception as e:
 
         console.log('Fetched component layer data:', componentLayerData);
 
-        // Parse nodes in component layer data
-        if (componentLayerData.shapes) {
-            componentLayerData.shapes.forEach(shape => {
+        // Recursively parse nodes in component layer data (including nested components)
+        const parseComponentNodes = (shapes) => {
+            if (!shapes) return;
+
+            shapes.forEach(shape => {
+                // Parse nodes in Path shapes
                 if (shape.Path && shape.Path.nodes) {
-                    // Parse "x y type x y type ..." into [[x, y, type], ...]
                     const nodesStr = shape.Path.nodes.trim();
                     const tokens = nodesStr.split(/\s+/);
                     const nodesArray = [];
@@ -2053,16 +2083,25 @@ except Exception as e:
                     }
 
                     shape.nodes = nodesArray;
-                    console.log('Parsed component shape nodes:', nodesArray.length, 'nodes');
+                    console.log('Parsed shape nodes:', nodesArray.length, 'nodes');
+                }
+
+                // Recursively parse nested component data
+                if (shape.Component && shape.Component.layerData && shape.Component.layerData.shapes) {
+                    parseComponentNodes(shape.Component.layerData.shapes);
                 }
             });
+        };
+
+        if (componentLayerData.shapes) {
+            parseComponentNodes(componentLayerData.shapes);
         }
 
         console.log('About to set layerData to component data. Current shapes:', this.layerData?.shapes?.length, '-> New shapes:', componentLayerData.shapes?.length);
 
         // Get component transform
         const transform = componentShape.Component.transform || [1, 0, 0, 1, 0, 0];
-        
+
         // Get current glyph name (for breadcrumb trail)
         let currentGlyphName;
         if (this.componentStack.length > 0) {
@@ -2178,13 +2217,13 @@ except Exception as e:
 
         // Build breadcrumb trail
         const trail = [];
-        
+
         // Add each level from the stack
         for (let i = 0; i < this.componentStack.length; i++) {
             const level = this.componentStack[i];
             trail.push(level.glyphName);
         }
-        
+
         // Add current component
         if (this.editingComponentIndex !== null && this.layerData) {
             const parentState = this.componentStack[this.componentStack.length - 1];
@@ -2211,7 +2250,7 @@ except Exception as e:
                 border-radius: 3px;
                 transition: background 0.15s;
             `;
-            
+
             // Current level is highlighted
             if (index === trail.length - 1) {
                 item.style.fontWeight = 'bold';
@@ -2319,6 +2358,8 @@ except Exception as e:
 
         // Apply inverse component transform if editing a component
         if (this.componentStack.length > 0) {
+            const glyphXBeforeInverse = glyphX;
+            const glyphYBeforeInverse = glyphY;
             const compTransform = this.getAccumulatedTransform();
             const [a, b, c, d, tx, ty] = compTransform;
             const det = a * d - b * c;
@@ -2330,6 +2371,7 @@ except Exception as e:
                 glyphX = (d * localX - c * localY) / det;
                 glyphY = (a * localY - b * localX) / det;
             }
+            console.log(`transformMouseToComponentSpace: before inverse=(${glyphXBeforeInverse}, ${glyphYBeforeInverse}), after inverse=(${glyphX}, ${glyphY}), accumulated transform=[${compTransform}]`);
         }
 
         return { glyphX, glyphY };
@@ -3384,22 +3426,22 @@ except Exception as e:
                         if (componentShape.Component) {
                             // Save context for nested component transform
                             this.ctx.save();
-                            
+
                             // Apply nested component's transform
                             if (componentShape.Component.transform && Array.isArray(componentShape.Component.transform)) {
                                 const t = componentShape.Component.transform;
                                 this.ctx.transform(t[0] || 1, t[1] || 0, t[2] || 0, t[3] || 1, t[4] || 0, t[5] || 0);
                             }
-                            
+
                             // Recursively render nested component's shapes
                             if (componentShape.Component.layerData && componentShape.Component.layerData.shapes) {
                                 renderComponentShapes(componentShape.Component.layerData.shapes);
                             }
-                            
+
                             this.ctx.restore();
                             return;
                         }
-                        
+
                         // Handle outline shapes (with nodes)
                         if (componentShape.nodes && componentShape.nodes.length > 0) {
                             const nodes = componentShape.nodes;
@@ -3474,7 +3516,7 @@ except Exception as e:
                         }
                     });
                 };
-                
+
                 // Start recursive rendering
                 renderComponentShapes(shape.Component.layerData.shapes);
             }
