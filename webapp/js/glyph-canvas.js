@@ -2122,8 +2122,9 @@ except Exception as e:
         }
 
         // Push current state onto stack (before changing this.layerData)
+        // Store the component we're about to enter (componentIndex), not the old editingComponentIndex
         this.componentStack.push({
-            componentIndex: this.editingComponentIndex,
+            componentIndex: componentIndex,
             transform: this.getAccumulatedTransform(),
             layerData: this.layerData,
             selectedPoints: this.selectedPoints,
@@ -2299,31 +2300,14 @@ except Exception as e:
         // Get the accumulated transform matrix from all component levels
         let a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0;
 
-        // Apply transforms from bottom of stack to current level
+        // Apply transforms from all components in the stack
+        // The stack now contains all the components we've entered (level 0, 1, 2, etc.)
         for (const level of this.componentStack) {
             if (level.componentIndex !== null && level.layerData && level.layerData.shapes[level.componentIndex]) {
                 const comp = level.layerData.shapes[level.componentIndex].Component;
                 if (comp && comp.transform) {
                     const t = comp.transform;
                     // Multiply transforms: new = current * level
-                    const newA = a * t[0] + c * t[1];
-                    const newB = b * t[0] + d * t[1];
-                    const newC = a * t[2] + c * t[3];
-                    const newD = b * t[2] + d * t[3];
-                    const newTx = a * t[4] + c * t[5] + tx;
-                    const newTy = b * t[4] + d * t[5] + ty;
-                    a = newA; b = newB; c = newC; d = newD; tx = newTx; ty = newTy;
-                }
-            }
-        }
-
-        // Apply current component transform if editing a component
-        if (this.editingComponentIndex !== null && this.componentStack.length > 0) {
-            const parentState = this.componentStack[this.componentStack.length - 1];
-            if (parentState.layerData && parentState.layerData.shapes[this.editingComponentIndex]) {
-                const comp = parentState.layerData.shapes[this.editingComponentIndex].Component;
-                if (comp && comp.transform) {
-                    const t = comp.transform;
                     const newA = a * t[0] + c * t[1];
                     const newB = b * t[0] + d * t[1];
                     const newC = a * t[2] + c * t[3];
@@ -3083,6 +3067,7 @@ except Exception as e:
         // This positions the editor at the component's location in the parent
         if (this.componentStack.length > 0) {
             const transform = this.getAccumulatedTransform();
+            console.log(`drawOutlineEditor: componentStack.length=${this.componentStack.length}, accumulated transform=[${transform}]`);
             this.ctx.transform(transform[0], transform[1], transform[2], transform[3], transform[4], transform[5]);
         }
 
