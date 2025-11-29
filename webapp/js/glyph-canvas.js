@@ -1643,7 +1643,11 @@ json.dumps(result)
             if (allMatch) {
                 // Found a matching layer - select it
                 this.selectedLayerId = layer.id;
-                await this.fetchLayerData(); // Fetch layer data for outline editor
+                // Only fetch layer data if we're not currently editing a component
+                // If editing a component, the layer switch will be handled by refreshComponentStack
+                if (this.componentStack.length === 0) {
+                    await this.fetchLayerData(); // Fetch layer data for outline editor
+                }
                 this.updateLayerSelection();
                 console.log(`Auto-selected layer: ${layer.name || 'Default'} (${layer.id})`);
                 return;
@@ -1728,9 +1732,10 @@ json.dumps(result)
     }
 
     async fetchLayerData() {
-        // Don't fetch if we're editing a component - we already have the component's data
+        // If we're editing a component, refresh the component's layer data for the new layer
         if (this.componentStack.length > 0) {
-            console.log('Skipping fetchLayerData - currently editing component');
+            console.log('Refreshing component layer data for new layer');
+            await this.refreshComponentStack();
             return;
         }
 
@@ -2153,6 +2158,60 @@ except Exception as e:
         this.updateComponentBreadcrumb();
         this.updatePropertiesUI();
         this.render();
+    }
+
+    async refreshComponentStack() {
+        // Refresh all component layer data in the stack for the current layer
+        // This is called when switching layers while editing a nested component
+
+        if (this.componentStack.length === 0) {
+            return;
+        }
+
+        console.log('Refreshing component stack for new layer, stack depth:', this.componentStack.length);
+
+        // We need to rebuild the component hierarchy from the root
+        // First, fetch the root glyph data
+        const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
+        let rootGlyphName = `GID ${glyphId}`;
+        if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+            const glyph = this.opentypeFont.glyphs.get(glyphId);
+            if (glyph.name) {
+                rootGlyphName = glyph.name;
+            }
+        }
+
+        // Rebuild the stack by re-entering each component level
+        const componentPath = [];
+
+        // Build the path of component indices from the stack
+        for (let i = 0; i < this.componentStack.length; i++) {
+            componentPath.push(this.componentStack[i].componentIndex);
+        }
+
+        // Clear the stack
+        this.componentStack = [];
+        this.layerData = null;
+
+        // Fetch root layer data
+        try {
+            await this.fetchLayerData();
+
+            // Re-enter each component level
+            for (const componentIndex of componentPath) {
+                if (!this.layerData || !this.layerData.shapes[componentIndex]) {
+                    console.error('Failed to refresh component stack - component not found at index', componentIndex);
+                    break;
+                }
+
+                await this.enterComponentEditing(componentIndex);
+            }
+
+            console.log('Component stack refreshed, new depth:', this.componentStack.length);
+            this.render();
+        } catch (error) {
+            console.error('Error refreshing component stack:', error);
+        }
     }
 
     exitComponentEditing() {
