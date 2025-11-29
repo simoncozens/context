@@ -287,9 +287,11 @@ class GlyphCanvas {
             console.log('Double-click detected. isGlyphEditMode:', this.isGlyphEditMode, 'selectedLayerId:', this.selectedLayerId, 'hoveredComponentIndex:', this.hoveredComponentIndex);
             // In outline editor mode with layer selected
             if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
-                // Double-click on component - enter component editing
+                // Double-click on component - enter component editing (without selecting it)
                 if (this.hoveredComponentIndex !== null) {
                     console.log('Entering component editing for index:', this.hoveredComponentIndex);
+                    // Clear component selection before entering
+                    this.selectedComponents = [];
                     this.enterComponentEditing(this.hoveredComponentIndex);
                     return;
                 }
@@ -1395,13 +1397,13 @@ class GlyphCanvas {
 
     selectGlyphByIndex(glyphIndex) {
         // Select a glyph by its index in the shaped glyphs array
-        
+
         // If we're in nested component mode, exit all levels first
         // Skip UI updates during batch exit to avoid duplicate layer interfaces
         while (this.componentStack.length > 0) {
             this.exitComponentEditing(true); // Skip UI updates
         }
-        
+
         if (glyphIndex >= 0 && glyphIndex < this.shapedGlyphs.length) {
             this.selectedGlyphIndex = glyphIndex;
             this.isGlyphEditMode = true;
@@ -1411,7 +1413,7 @@ class GlyphCanvas {
             this.isGlyphEditMode = false;
             console.log(`Deselected glyph`);
         }
-        
+
         // Update breadcrumb (will hide it since componentStack is now empty)
         this.updateComponentBreadcrumb();
         this.updatePropertiesUI();
@@ -2322,7 +2324,7 @@ json.dumps(result)
         this.hoveredComponentIndex = null;
 
         console.log(`Exited component editing, stack depth: ${this.componentStack.length}`);
-        
+
         if (!skipUIUpdate) {
             this.updateComponentBreadcrumb();
             this.updatePropertiesUI();
@@ -2338,119 +2340,154 @@ json.dumps(result)
     }
 
     updateComponentBreadcrumb() {
-        // Update the breadcrumb trail showing component nesting
-        if (!this.propertiesSection) return;
+        // This function now just calls updateEditorTitleBar
+        // Keeping it for backward compatibility with existing calls
+        this.updateEditorTitleBar();
+    }
 
-        // Find or create breadcrumb container
-        let breadcrumbContainer = document.getElementById('component-breadcrumb');
-        if (!breadcrumbContainer) {
-            breadcrumbContainer = document.createElement('div');
-            breadcrumbContainer.id = 'component-breadcrumb';
-            breadcrumbContainer.style.cssText = `
-                padding: 8px 12px;
-                background: var(--bg-secondary);
-                border-bottom: 1px solid var(--border-color);
-                font-size: 12px;
+    updateEditorTitleBar() {
+        // Update the editor title bar with glyph name and breadcrumb
+        const editorView = document.getElementById('view-editor');
+        if (!editorView) return;
+
+        const titleBar = editorView.querySelector('.view-title-bar');
+        if (!titleBar) return;
+
+        const titleLeft = titleBar.querySelector('.view-title-left');
+        if (!titleLeft) return;
+
+        // Find or create the glyph name element
+        let glyphNameElement = titleBar.querySelector('.editor-glyph-name');
+        if (!glyphNameElement) {
+            glyphNameElement = document.createElement('span');
+            glyphNameElement.className = 'editor-glyph-name';
+            glyphNameElement.style.cssText = `
+                margin-left: 12px;
+                margin-top: -2px;
+                font-family: var(--font-mono);
+                font-size: 13px;
+                color: var(--text-secondary);
                 display: flex;
                 align-items: center;
-                gap: 4px;
-                flex-wrap: wrap;
+                gap: 6px;
             `;
-            // Insert at the top of the properties section
-            if (this.propertiesSection.parentElement) {
-                this.propertiesSection.parentElement.insertBefore(breadcrumbContainer, this.propertiesSection);
-            }
+            titleLeft.appendChild(glyphNameElement);
         }
 
-        // Clear existing breadcrumb
-        breadcrumbContainer.innerHTML = '';
+        // Clear existing content
+        glyphNameElement.innerHTML = '';
 
-        // If not editing components, hide breadcrumb
-        if (this.componentStack.length === 0) {
-            breadcrumbContainer.style.display = 'none';
+        // If not in edit mode, hide the glyph name
+        if (!this.isGlyphEditMode || this.selectedGlyphIndex < 0 || this.selectedGlyphIndex >= this.shapedGlyphs.length) {
+            glyphNameElement.style.display = 'none';
             return;
         }
 
-        breadcrumbContainer.style.display = 'flex';
+        glyphNameElement.style.display = 'flex';
+
+        // Get the main glyph name
+        const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
+        let mainGlyphName = `GID ${glyphId}`;
+        if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+            const glyph = this.opentypeFont.glyphs.get(glyphId);
+            if (glyph.name) {
+                mainGlyphName = glyph.name;
+            }
+        }
 
         // Build breadcrumb trail
         const trail = [];
 
-        // Add each level from the stack
-        for (let i = 0; i < this.componentStack.length; i++) {
-            const level = this.componentStack[i];
-            trail.push(level.glyphName);
-        }
+        if (this.componentStack.length > 0) {
+            // Add main glyph name as first item in trail
+            trail.push(mainGlyphName);
+            
+            // Add each level from the stack (skip the first one if it matches main glyph)
+            for (let i = 0; i < this.componentStack.length; i++) {
+                const level = this.componentStack[i];
+                // Only add if different from main glyph name
+                if (level.glyphName !== mainGlyphName) {
+                    trail.push(level.glyphName);
+                }
+            }
 
-        // Add current component
-        if (this.editingComponentIndex !== null && this.layerData) {
-            const parentState = this.componentStack[this.componentStack.length - 1];
-            const currentComponent = parentState.layerData.shapes[this.editingComponentIndex];
-            if (currentComponent && currentComponent.Component) {
-                trail.push(currentComponent.Component.reference);
+            // Add current component
+            if (this.editingComponentIndex !== null && this.layerData) {
+                const parentState = this.componentStack[this.componentStack.length - 1];
+                const currentComponent = parentState.layerData.shapes[this.editingComponentIndex];
+                if (currentComponent && currentComponent.Component) {
+                    trail.push(currentComponent.Component.reference);
+                }
             }
         }
 
-        // Render breadcrumb items
-        trail.forEach((glyphName, index) => {
-            if (index > 0) {
-                const separator = document.createElement('span');
-                separator.textContent = '›';
-                separator.style.cssText = 'opacity: 0.5; padding: 0 2px;';
-                breadcrumbContainer.appendChild(separator);
-            }
+        // If we have a breadcrumb trail (in component editing mode), show it
+        if (trail.length > 0) {
+            // Add breadcrumb trail as clickable text
+            trail.forEach((componentName, index) => {
+                if (index > 0) {
+                    const arrow = document.createElement('span');
+                    arrow.className = 'material-symbols-outlined';
+                    arrow.textContent = 'chevron_right';
+                    arrow.style.cssText = 'opacity: 0.5; font-size: 16px;';
+                    glyphNameElement.appendChild(arrow);
+                }
 
-            const item = document.createElement('span');
-            item.textContent = glyphName;
-            item.style.cssText = `
-                cursor: pointer;
-                padding: 2px 6px;
-                border-radius: 3px;
-                transition: background 0.15s;
+                const item = document.createElement('span');
+                item.textContent = componentName;
+                item.style.cssText = `
+                    cursor: pointer;
+                    transition: opacity 0.15s;
+                `;
+
+                // Current level is highlighted
+                if (index === trail.length - 1) {
+                    item.style.fontWeight = '500';
+                    item.style.color = 'var(--text-primary)';
+                } else {
+                    item.style.opacity = '0.7';
+                    item.style.color = 'var(--text-secondary)';
+                }
+
+                // Hover effect
+                item.addEventListener('mouseenter', () => {
+                    if (index < trail.length - 1) {
+                        item.style.opacity = '1';
+                    }
+                });
+                item.addEventListener('mouseleave', () => {
+                    if (index < trail.length - 1) {
+                        item.style.opacity = '0.7';
+                    }
+                });
+
+                // Click to navigate to that level
+                item.addEventListener('click', () => {
+                    const levelsToExit = trail.length - 1 - index;
+                    // Skip UI updates during batch exit to avoid duplicate layer interfaces
+                    for (let i = 0; i < levelsToExit; i++) {
+                        this.exitComponentEditing(true); // Skip UI updates
+                    }
+                    // Update UI once after all exits
+                    if (levelsToExit > 0) {
+                        this.updateComponentBreadcrumb();
+                        this.updatePropertiesUI();
+                        this.render();
+                    }
+                });
+
+                glyphNameElement.appendChild(item);
+            });
+        } else {
+            // Not in component editing - just show main glyph name
+            const mainNameSpan = document.createElement('span');
+            mainNameSpan.textContent = mainGlyphName;
+            mainNameSpan.style.cssText = `
+                color: var(--text-primary);
+                font-weight: 500;
             `;
-
-            // Current level is highlighted
-            if (index === trail.length - 1) {
-                item.style.fontWeight = 'bold';
-                item.style.background = 'var(--bg-active)';
-            } else {
-                item.style.opacity = '0.7';
-            }
-
-            // Click to navigate to that level
-            item.addEventListener('mouseenter', () => {
-                if (index < trail.length - 1) {
-                    item.style.background = 'var(--bg-hover)';
-                }
-            });
-            item.addEventListener('mouseleave', () => {
-                if (index < trail.length - 1) {
-                    item.style.background = 'transparent';
-                }
-            });
-            item.addEventListener('click', () => {
-                // Exit component editing to reach this level
-                const levelsToExit = trail.length - 1 - index;
-                for (let i = 0; i < levelsToExit; i++) {
-                    this.exitComponentEditing();
-                }
-            });
-
-            breadcrumbContainer.appendChild(item);
-        });
-
-        // Add Escape key hint
-        const hint = document.createElement('span');
-        hint.textContent = 'ESC';
-        hint.style.cssText = `
-            margin-left: auto;
-            opacity: 0.5;
-            font-size: 10px;
-            padding: 2px 6px;
-            border: 1px solid currentColor;
-            border-radius: 3px;
-        `;
-        breadcrumbContainer.appendChild(hint);
+            glyphNameElement.appendChild(mainNameSpan);
+        }
     }
 
     getAccumulatedTransform() {
@@ -2547,65 +2584,15 @@ json.dumps(result)
         // Clear existing content
         this.propertiesSection.innerHTML = '';
 
+        // Update editor title bar with glyph name
+        this.updateEditorTitleBar();
+
         // Don't show properties if not in glyph edit mode
         if (!this.isGlyphEditMode) {
             return;
         }
 
-        // Add section title
-        const title = document.createElement('div');
-        title.textContent = 'Glyph Properties';
-        title.style.fontSize = '12px';
-        title.style.fontWeight = '600';
-        title.style.color = 'var(--text-secondary)';
-        title.style.textTransform = 'uppercase';
-        title.style.letterSpacing = '0.5px';
-        title.style.marginBottom = '8px';
-        this.propertiesSection.appendChild(title);
-
         if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
-            let glyphName;
-            let isComponentContext = false;
-
-            // Check if we're editing a component
-            if (this.componentStack.length > 0) {
-                // Get the component reference from the parent layer
-                const parentState = this.componentStack[this.componentStack.length - 1];
-                const componentShape = parentState.layerData.shapes[this.editingComponentIndex];
-                glyphName = componentShape.Component.reference;
-                isComponentContext = true;
-            } else {
-                // Get the main glyph name
-                const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
-                glyphName = `GID ${glyphId}`;
-
-                // Get glyph name from compiled font via OpenType.js
-                if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
-                    const glyph = this.opentypeFont.glyphs.get(glyphId);
-                    if (glyph.name) {
-                        glyphName = glyph.name;
-                    }
-                }
-            }
-
-            // Display glyph name
-            const nameLabel = document.createElement('div');
-            nameLabel.style.fontSize = '14px';
-            nameLabel.style.color = 'var(--text-secondary)';
-            nameLabel.style.marginBottom = '4px';
-            nameLabel.textContent = isComponentContext ? 'Component:' : 'Name:';
-
-            const nameValue = document.createElement('div');
-            nameValue.style.fontSize = '16px';
-            nameValue.style.fontWeight = '600';
-            nameValue.style.color = 'var(--text-primary)';
-            nameValue.style.fontFamily = 'var(--font-mono)';
-            nameValue.style.marginBottom = '12px';
-            nameValue.textContent = glyphName;
-
-            this.propertiesSection.appendChild(nameLabel);
-            this.propertiesSection.appendChild(nameValue);
-
             // Display layers section
             this.displayLayersList();
         } else {
