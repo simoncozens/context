@@ -10,7 +10,7 @@ const APP_SETTINGS = {
         // Zoom thresholds
         MIN_ZOOM_FOR_HANDLES: 0.2,        // 20% - below this, don't draw nodes/anchors/component markers
         MIN_ZOOM_FOR_ANCHOR_LABELS: 0.7,   // 50% - below this, don't draw anchor names
-        MIN_ZOOM_FOR_GRID: 10.0,            // 500% - above this, show 1-unit grid
+        MIN_ZOOM_FOR_GRID: 7.0,            // 500% - above this, show 1-unit grid
 
         // Node (point) sizes
         NODE_SIZE_AT_MIN_ZOOM: 2,          // px - node size at min zoom
@@ -44,6 +44,7 @@ const APP_SETTINGS = {
             GLYPH_ACTIVE_IN_EDITOR: '#000000',           // The glyph being edited
             GLYPH_INACTIVE_IN_EDITOR: 'rgba(0, 0, 0, 0.2)', // Other glyphs (dimmed)
             GLYPH_HOVERED_IN_EDITOR: 'rgba(0, 0, 0, 0.4)',  // Hovered inactive glyph (darker)
+            GLYPH_BACKGROUND_IN_EDITOR: 'rgba(0, 0, 0, 0.05)', // HB-rendered background of active glyph
 
             // Nodes (on-curve points)
             NODE_NORMAL: '#00ff00',
@@ -87,6 +88,7 @@ const APP_SETTINGS = {
             GLYPH_ACTIVE_IN_EDITOR: '#ffffff',                 // The glyph being edited
             GLYPH_INACTIVE_IN_EDITOR: 'rgba(255, 255, 255, 0.2)', // Other glyphs (dimmed)
             GLYPH_HOVERED_IN_EDITOR: 'rgba(255, 255, 255, 0.4)',  // Hovered inactive glyph (darker)
+            GLYPH_BACKGROUND_IN_EDITOR: 'rgba(255, 255, 255, 0.05)', // HB-rendered background of active glyph
 
             // Nodes (on-curve points)
             NODE_NORMAL: '#00ff00',

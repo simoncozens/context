@@ -2561,14 +2561,12 @@ except Exception as e:
             const isHovered = glyphIndex === this.hoveredGlyphIndex;
             const isSelected = glyphIndex === this.selectedGlyphIndex;
 
-            // Skip drawing the selected glyph if we have layer data (outline editor will draw it)
-            // UNLESS we're in preview mode, then show it in solid color
+            // In outline editor, render the selected glyph with very faint background color
+            // so the outline editor shapes are visible on top
             if (isSelected && this.selectedLayerId && this.layerData && !this.isPreviewMode) {
-                xPosition += xAdvance;
-                return;
-            }
-
-            if (this.isGlyphEditMode && !this.isPreviewMode) {
+                // Render with faint background color instead of skipping
+                this.ctx.fillStyle = colors.GLYPH_BACKGROUND_IN_EDITOR;
+            } else if (this.isGlyphEditMode && !this.isPreviewMode) {
                 // Glyph edit mode (not preview): active glyph in solid color, others dimmed
                 if (isSelected) {
                     this.ctx.fillStyle = colors.GLYPH_ACTIVE_IN_EDITOR;
