@@ -874,50 +874,116 @@ class GlyphCanvas {
                     return;
                 }
 
-                // Check if inside component outline
+                // Check if inside component outline (including nested components)
                 if (shape.Component.layerData && shape.Component.layerData.shapes) {
-                    // Build the component path and test with canvas transform
-                    for (const componentShape of shape.Component.layerData.shapes) {
-                        if (componentShape.nodes && componentShape.nodes.length > 0) {
-                            const path = new Path2D();
-
-                            for (let i = 0; i < componentShape.nodes.length; i++) {
-                                const node = componentShape.nodes[i];
-                                const type = node[2];
-
-                                if (i === 0 || type === 'm') {
-                                    path.moveTo(node[0], node[1]);
-                                } else if (type === 'l' || type === 'ls') {
-                                    path.lineTo(node[0], node[1]);
-                                } else if (type === 'c' || type === 'cs') {
-                                    // Cubic bezier
-                                    if (i + 2 < componentShape.nodes.length) {
-                                        const cp1 = node;
-                                        const cp2 = componentShape.nodes[i + 1];
-                                        const end = componentShape.nodes[i + 2];
-                                        path.bezierCurveTo(cp1[0], cp1[1], cp2[0], cp2[1], end[0], end[1]);
-                                        i += 2;
+                    const checkShapesRecursive = (shapes, parentTransform = [1, 0, 0, 1, 0, 0]) => {
+                        for (const componentShape of shapes) {
+                            // Handle nested components recursively
+                            if (componentShape.Component) {
+                                const nestedTransform = componentShape.Component.transform || [1, 0, 0, 1, 0, 0];
+                                // Multiply parent transform with nested transform
+                                const combinedTransform = [
+                                    parentTransform[0] * nestedTransform[0] + parentTransform[2] * nestedTransform[1],
+                                    parentTransform[1] * nestedTransform[0] + parentTransform[3] * nestedTransform[1],
+                                    parentTransform[0] * nestedTransform[2] + parentTransform[2] * nestedTransform[3],
+                                    parentTransform[1] * nestedTransform[2] + parentTransform[3] * nestedTransform[3],
+                                    parentTransform[0] * nestedTransform[4] + parentTransform[2] * nestedTransform[5] + parentTransform[4],
+                                    parentTransform[1] * nestedTransform[4] + parentTransform[3] * nestedTransform[5] + parentTransform[5]
+                                ];
+                                
+                                if (componentShape.Component.layerData && componentShape.Component.layerData.shapes) {
+                                    if (checkShapesRecursive(componentShape.Component.layerData.shapes, combinedTransform)) {
+                                        return true;
                                     }
                                 }
+                                continue;
                             }
+                            
+                            // Handle outline shapes
+                            if (componentShape.nodes && componentShape.nodes.length > 0) {
+                                const path = new Path2D();
+                                const nodes = componentShape.nodes;
 
-                            path.closePath();
+                                // Find first on-curve point to start
+                                let startIdx = 0;
+                                for (let i = 0; i < nodes.length; i++) {
+                                    const [, , type] = nodes[i];
+                                    if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
+                                        startIdx = i;
+                                        break;
+                                    }
+                                }
 
-                            // Apply transform to canvas for hit testing
-                            this.ctx.save();
-                            this.ctx.setTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
-                            this.ctx.translate(xPosition + xOffset, yOffset);
-                            this.ctx.transform(a, b, c, d, tx, ty);
+                                const [startX, startY] = nodes[startIdx];
+                                path.moveTo(startX, startY);
 
-                            // Test if mouse point is in path (in canvas coordinates)
-                            if (this.ctx.isPointInPath(path, mouseX, mouseY)) {
-                                foundComponentIndex = index;
+                                // Build path using proper cubic bezier handling
+                                let i = 0;
+                                while (i < nodes.length) {
+                                    const idx = (startIdx + i) % nodes.length;
+                                    const nextIdx = (startIdx + i + 1) % nodes.length;
+                                    const next2Idx = (startIdx + i + 2) % nodes.length;
+                                    const next3Idx = (startIdx + i + 3) % nodes.length;
+
+                                    const [, , type] = nodes[idx];
+                                    const [next1X, next1Y, next1Type] = nodes[nextIdx];
+
+                                    if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
+                                        if (next1Type === 'o' || next1Type === 'os') {
+                                            const [next2X, next2Y, next2Type] = nodes[next2Idx];
+                                            const [next3X, next3Y] = nodes[next3Idx];
+
+                                            if (next2Type === 'o' || next2Type === 'os') {
+                                                path.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
+                                                i += 3;
+                                            } else {
+                                                path.lineTo(next2X, next2Y);
+                                                i += 2;
+                                            }
+                                        } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
+                                            path.lineTo(next1X, next1Y);
+                                            i++;
+                                        } else {
+                                            i++;
+                                        }
+                                    } else {
+                                        i++;
+                                    }
+                                }
+
+                                path.closePath();
+
+                                // Apply transform to canvas for hit testing
+                                this.ctx.save();
+                                this.ctx.setTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
+                                this.ctx.translate(xPosition + xOffset, yOffset);
+                                this.ctx.transform(a, b, c, d, tx, ty);
+                                
+                                // Apply nested transform if present
+                                if (parentTransform[0] !== 1 || parentTransform[1] !== 0 || parentTransform[2] !== 0 || 
+                                    parentTransform[3] !== 1 || parentTransform[4] !== 0 || parentTransform[5] !== 0) {
+                                    this.ctx.transform(
+                                        parentTransform[0], parentTransform[1], 
+                                        parentTransform[2], parentTransform[3], 
+                                        parentTransform[4], parentTransform[5]
+                                    );
+                                }
+
+                                // Test if mouse point is in path
+                                const isInPath = this.ctx.isPointInPath(path, mouseX, mouseY);
                                 this.ctx.restore();
-                                return;
+                                
+                                if (isInPath) {
+                                    return true;
+                                }
                             }
-
-                            this.ctx.restore();
                         }
+                        return false;
+                    };
+
+                    if (checkShapesRecursive(shape.Component.layerData.shapes)) {
+                        foundComponentIndex = index;
+                        return;
                     }
                 }
             }
@@ -1661,6 +1727,50 @@ json.dumps(result)
             const dataJson = await window.pyodide.runPythonAsync(`
 import json
 
+def fetch_component_recursive(glyph_name, layer_id, visited=None):
+    """Recursively fetch component data including nested components"""
+    if visited is None:
+        visited = set()
+    
+    if glyph_name in visited:
+        print(f"Warning: Circular component reference detected for {glyph_name}")
+        return None
+    
+    visited.add(glyph_name)
+    
+    current_font = CurrentFont()
+    if not current_font or not hasattr(current_font, 'glyphs'):
+        return None
+    
+    glyph = current_font.glyphs.get(glyph_name)
+    if not glyph:
+        return None
+    
+    # Find the layer by ID
+    layer = None
+    for l in glyph.layers:
+        if l.id == layer_id:
+            layer = l
+            break
+    
+    if not layer:
+        return None
+    
+    # Serialize the layer
+    result = layer.to_dict()
+    
+    # Recursively fetch nested component data
+    if result and 'shapes' in result:
+        for shape in result['shapes']:
+            if 'Component' in shape and 'reference' in shape['Component']:
+                ref_name = shape['Component']['reference']
+                # Fetch nested component data
+                nested_data = fetch_component_recursive(ref_name, layer_id, visited.copy())
+                if nested_data:
+                    shape['Component']['layerData'] = nested_data
+    
+    return result
+
 result = None
 try:
     current_font = CurrentFont()
@@ -1678,22 +1788,14 @@ try:
                 # Use to_dict() to serialize the layer
                 result = layer.to_dict()
                 
-                # Fetch component layer data
+                # Recursively fetch component layer data
                 if result and 'shapes' in result:
                     for shape in result['shapes']:
                         if 'Component' in shape and 'reference' in shape['Component']:
                             ref_name = shape['Component']['reference']
-                            ref_glyph = current_font.glyphs.get(ref_name)
-                            if ref_glyph:
-                                # Get the same layer from the referenced glyph
-                                ref_layer = None
-                                for l in ref_glyph.layers:
-                                    if l.id == '${this.selectedLayerId}':
-                                        ref_layer = l
-                                        break
-                                
-                                if ref_layer:
-                                    shape['Component']['layerData'] = ref_layer.to_dict()
+                            nested_data = fetch_component_recursive(ref_name, '${this.selectedLayerId}')
+                            if nested_data:
+                                shape['Component']['layerData'] = nested_data
 except Exception as e:
     print(f"Error fetching layer data: {e}")
     import traceback
@@ -1705,30 +1807,37 @@ json.dumps(result)
 
             this.layerData = JSON.parse(dataJson);
 
-            // Parse component layer data nodes strings into arrays
-            if (this.layerData && this.layerData.shapes) {
-                this.layerData.shapes.forEach(shape => {
+            // Recursively parse component layer data nodes strings into arrays
+            const parseComponentNodes = (shapes) => {
+                if (!shapes) return;
+                
+                shapes.forEach(shape => {
+                    // Parse nodes in Path shapes
+                    if (shape.Path && shape.Path.nodes) {
+                        const nodesStr = shape.Path.nodes.trim();
+                        const tokens = nodesStr.split(/\s+/);
+                        const nodesArray = [];
+
+                        for (let i = 0; i + 2 < tokens.length; i += 3) {
+                            nodesArray.push([
+                                parseFloat(tokens[i]),
+                                parseFloat(tokens[i + 1]),
+                                tokens[i + 2]
+                            ]);
+                        }
+
+                        shape.nodes = nodesArray;
+                    }
+                    
+                    // Recursively parse nested component data
                     if (shape.Component && shape.Component.layerData && shape.Component.layerData.shapes) {
-                        shape.Component.layerData.shapes.forEach(componentShape => {
-                            if (componentShape.Path && componentShape.Path.nodes) {
-                                // Parse "x y type x y type ..." into [[x, y, type], ...]
-                                const nodesStr = componentShape.Path.nodes.trim();
-                                const tokens = nodesStr.split(/\s+/);
-                                const nodesArray = [];
-
-                                for (let i = 0; i + 2 < tokens.length; i += 3) {
-                                    nodesArray.push([
-                                        parseFloat(tokens[i]),
-                                        parseFloat(tokens[i + 1]),
-                                        tokens[i + 2]
-                                    ]);
-                                }
-
-                                componentShape.nodes = nodesArray;
-                            }
-                        });
+                        parseComponentNodes(shape.Component.layerData.shapes);
                     }
                 });
+            };
+
+            if (this.layerData && this.layerData.shapes) {
+                parseComponentNodes(this.layerData.shapes);
             }
 
             console.log('Fetched layer data:', this.layerData);
@@ -1740,7 +1849,7 @@ json.dumps(result)
     }
 
     async fetchComponentLayerData(componentGlyphName) {
-        // Fetch layer data for a specific component glyph
+        // Fetch layer data for a specific component glyph, including nested components
         if (!window.pyodide || !this.selectedLayerId) {
             return null;
         }
@@ -1749,21 +1858,53 @@ json.dumps(result)
             const dataJson = await window.pyodide.runPythonAsync(`
 import json
 
+def fetch_component_recursive(glyph_name, layer_id, visited=None):
+    """Recursively fetch component data including nested components"""
+    if visited is None:
+        visited = set()
+    
+    if glyph_name in visited:
+        print(f"Warning: Circular component reference detected for {glyph_name}")
+        return None
+    
+    visited.add(glyph_name)
+    
+    current_font = CurrentFont()
+    if not current_font or not hasattr(current_font, 'glyphs'):
+        return None
+    
+    glyph = current_font.glyphs.get(glyph_name)
+    if not glyph:
+        return None
+    
+    # Find the layer by ID
+    layer = None
+    for l in glyph.layers:
+        if l.id == layer_id:
+            layer = l
+            break
+    
+    if not layer:
+        return None
+    
+    # Serialize the layer
+    result = layer.to_dict()
+    
+    # Recursively fetch nested component data
+    if result and 'shapes' in result:
+        for shape in result['shapes']:
+            if 'Component' in shape and 'reference' in shape['Component']:
+                ref_name = shape['Component']['reference']
+                # Fetch nested component data
+                nested_data = fetch_component_recursive(ref_name, layer_id, visited.copy())
+                if nested_data:
+                    shape['Component']['layerData'] = nested_data
+    
+    return result
+
 result = None
 try:
-    current_font = CurrentFont()
-    if current_font and hasattr(current_font, 'glyphs'):
-        glyph = current_font.glyphs.get('${componentGlyphName}')
-        if glyph:
-            # Find the layer by ID
-            layer = None
-            for l in glyph.layers:
-                if l.id == '${this.selectedLayerId}':
-                    layer = l
-                    break
-            
-            if layer:
-                result = layer.to_dict()
+    result = fetch_component_recursive('${componentGlyphName}', '${this.selectedLayerId}')
 except Exception as e:
     print(f"Error fetching component layer data: {e}")
     import traceback
@@ -1921,6 +2062,25 @@ except Exception as e:
 
         // Get component transform
         const transform = componentShape.Component.transform || [1, 0, 0, 1, 0, 0];
+        
+        // Get current glyph name (for breadcrumb trail)
+        let currentGlyphName;
+        if (this.componentStack.length > 0) {
+            // We're already in a component, get name from last stack entry
+            const parentState = this.componentStack[this.componentStack.length - 1];
+            const parentComponent = parentState.layerData.shapes[this.editingComponentIndex];
+            currentGlyphName = parentComponent.Component.reference;
+        } else {
+            // We're at the top level - get main glyph name
+            const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
+            currentGlyphName = `GID ${glyphId}`;
+            if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+                const glyph = this.opentypeFont.glyphs.get(glyphId);
+                if (glyph.name) {
+                    currentGlyphName = glyph.name;
+                }
+            }
+        }
 
         // Push current state onto stack (before changing this.layerData)
         this.componentStack.push({
@@ -1929,7 +2089,8 @@ except Exception as e:
             layerData: this.layerData,
             selectedPoints: this.selectedPoints,
             selectedAnchors: this.selectedAnchors,
-            selectedComponents: this.selectedComponents
+            selectedComponents: this.selectedComponents,
+            glyphName: currentGlyphName
         });
 
         console.log('Pushed to stack. Stack depth:', this.componentStack.length);
@@ -1949,6 +2110,7 @@ except Exception as e:
         this.hoveredComponentIndex = null;
 
         console.log(`Entered component editing: ${componentShape.Component.reference}, stack depth: ${this.componentStack.length}`);
+        this.updateComponentBreadcrumb();
         this.updatePropertiesUI();
         this.render();
     }
@@ -1972,9 +2134,126 @@ except Exception as e:
         this.hoveredComponentIndex = null;
 
         console.log(`Exited component editing, stack depth: ${this.componentStack.length}`);
+        this.updateComponentBreadcrumb();
         this.updatePropertiesUI();
         this.render();
         return true;
+    }
+
+    updateComponentBreadcrumb() {
+        // Update the breadcrumb trail showing component nesting
+        if (!this.propertiesSection) return;
+
+        // Find or create breadcrumb container
+        let breadcrumbContainer = document.getElementById('component-breadcrumb');
+        if (!breadcrumbContainer) {
+            breadcrumbContainer = document.createElement('div');
+            breadcrumbContainer.id = 'component-breadcrumb';
+            breadcrumbContainer.style.cssText = `
+                padding: 8px 12px;
+                background: var(--bg-secondary);
+                border-bottom: 1px solid var(--border-color);
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                flex-wrap: wrap;
+            `;
+            // Insert at the top of the properties section
+            if (this.propertiesSection.parentElement) {
+                this.propertiesSection.parentElement.insertBefore(breadcrumbContainer, this.propertiesSection);
+            }
+        }
+
+        // Clear existing breadcrumb
+        breadcrumbContainer.innerHTML = '';
+
+        // If not editing components, hide breadcrumb
+        if (this.componentStack.length === 0) {
+            breadcrumbContainer.style.display = 'none';
+            return;
+        }
+
+        breadcrumbContainer.style.display = 'flex';
+
+        // Build breadcrumb trail
+        const trail = [];
+        
+        // Add each level from the stack
+        for (let i = 0; i < this.componentStack.length; i++) {
+            const level = this.componentStack[i];
+            trail.push(level.glyphName);
+        }
+        
+        // Add current component
+        if (this.editingComponentIndex !== null && this.layerData) {
+            const parentState = this.componentStack[this.componentStack.length - 1];
+            const currentComponent = parentState.layerData.shapes[this.editingComponentIndex];
+            if (currentComponent && currentComponent.Component) {
+                trail.push(currentComponent.Component.reference);
+            }
+        }
+
+        // Render breadcrumb items
+        trail.forEach((glyphName, index) => {
+            if (index > 0) {
+                const separator = document.createElement('span');
+                separator.textContent = '›';
+                separator.style.cssText = 'opacity: 0.5; padding: 0 2px;';
+                breadcrumbContainer.appendChild(separator);
+            }
+
+            const item = document.createElement('span');
+            item.textContent = glyphName;
+            item.style.cssText = `
+                cursor: pointer;
+                padding: 2px 6px;
+                border-radius: 3px;
+                transition: background 0.15s;
+            `;
+            
+            // Current level is highlighted
+            if (index === trail.length - 1) {
+                item.style.fontWeight = 'bold';
+                item.style.background = 'var(--bg-active)';
+            } else {
+                item.style.opacity = '0.7';
+            }
+
+            // Click to navigate to that level
+            item.addEventListener('mouseenter', () => {
+                if (index < trail.length - 1) {
+                    item.style.background = 'var(--bg-hover)';
+                }
+            });
+            item.addEventListener('mouseleave', () => {
+                if (index < trail.length - 1) {
+                    item.style.background = 'transparent';
+                }
+            });
+            item.addEventListener('click', () => {
+                // Exit component editing to reach this level
+                const levelsToExit = trail.length - 1 - index;
+                for (let i = 0; i < levelsToExit; i++) {
+                    this.exitComponentEditing();
+                }
+            });
+
+            breadcrumbContainer.appendChild(item);
+        });
+
+        // Add Escape key hint
+        const hint = document.createElement('span');
+        hint.textContent = 'ESC';
+        hint.style.cssText = `
+            margin-left: auto;
+            opacity: 0.5;
+            font-size: 10px;
+            padding: 2px 6px;
+            border: 1px solid currentColor;
+            border-radius: 3px;
+        `;
+        breadcrumbContainer.appendChild(hint);
     }
 
     getAccumulatedTransform() {
@@ -3098,80 +3377,106 @@ except Exception as e:
 
             // Draw the component's outline shapes if they were fetched
             if (shape.Component.layerData && shape.Component.layerData.shapes) {
-                // Draw each contour in the component
-                shape.Component.layerData.shapes.forEach(componentShape => {
-                    if (componentShape.nodes && componentShape.nodes.length > 0) {
-                        const nodes = componentShape.nodes;
-
-                        this.ctx.beginPath();
-
-                        // Find first on-curve point to start
-                        let startIdx = 0;
-                        for (let i = 0; i < nodes.length; i++) {
-                            const [, , type] = nodes[i];
-                            if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
-                                startIdx = i;
-                                break;
+                // Recursively render all shapes in the component (including nested components)
+                const renderComponentShapes = (shapes, transform = [1, 0, 0, 1, 0, 0]) => {
+                    shapes.forEach(componentShape => {
+                        // Handle nested components
+                        if (componentShape.Component) {
+                            // Save context for nested component transform
+                            this.ctx.save();
+                            
+                            // Apply nested component's transform
+                            if (componentShape.Component.transform && Array.isArray(componentShape.Component.transform)) {
+                                const t = componentShape.Component.transform;
+                                this.ctx.transform(t[0] || 1, t[1] || 0, t[2] || 0, t[3] || 1, t[4] || 0, t[5] || 0);
                             }
+                            
+                            // Recursively render nested component's shapes
+                            if (componentShape.Component.layerData && componentShape.Component.layerData.shapes) {
+                                renderComponentShapes(componentShape.Component.layerData.shapes);
+                            }
+                            
+                            this.ctx.restore();
+                            return;
                         }
+                        
+                        // Handle outline shapes (with nodes)
+                        if (componentShape.nodes && componentShape.nodes.length > 0) {
+                            const nodes = componentShape.nodes;
 
-                        const [startX, startY] = nodes[startIdx];
-                        this.ctx.moveTo(startX, startY);
+                            this.ctx.beginPath();
 
-                        // Draw contour by looking ahead for control points
-                        let i = 0;
-                        while (i < nodes.length) {
-                            const idx = (startIdx + i) % nodes.length;
-                            const nextIdx = (startIdx + i + 1) % nodes.length;
-                            const next2Idx = (startIdx + i + 2) % nodes.length;
-                            const next3Idx = (startIdx + i + 3) % nodes.length;
+                            // Find first on-curve point to start
+                            let startIdx = 0;
+                            for (let i = 0; i < nodes.length; i++) {
+                                const [, , type] = nodes[i];
+                                if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
+                                    startIdx = i;
+                                    break;
+                                }
+                            }
 
-                            const [, , type] = nodes[idx];
-                            const [next1X, next1Y, next1Type] = nodes[nextIdx];
+                            const [startX, startY] = nodes[startIdx];
+                            this.ctx.moveTo(startX, startY);
 
-                            if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
-                                // We're at an on-curve point, look ahead for next segment
-                                if (next1Type === 'o' || next1Type === 'os') {
-                                    // Next is off-curve - check if cubic (two consecutive off-curve)
-                                    const [next2X, next2Y, next2Type] = nodes[next2Idx];
-                                    const [next3X, next3Y] = nodes[next3Idx];
+                            // Draw contour by looking ahead for control points
+                            let i = 0;
+                            while (i < nodes.length) {
+                                const idx = (startIdx + i) % nodes.length;
+                                const nextIdx = (startIdx + i + 1) % nodes.length;
+                                const next2Idx = (startIdx + i + 2) % nodes.length;
+                                const next3Idx = (startIdx + i + 3) % nodes.length;
 
-                                    if (next2Type === 'o' || next2Type === 'os') {
-                                        // Cubic bezier: two off-curve control points + on-curve endpoint
-                                        this.ctx.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
-                                        i += 3; // Skip the two control points and endpoint
+                                const [, , type] = nodes[idx];
+                                const [next1X, next1Y, next1Type] = nodes[nextIdx];
+
+                                if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
+                                    // We're at an on-curve point, look ahead for next segment
+                                    if (next1Type === 'o' || next1Type === 'os') {
+                                        // Next is off-curve - check if cubic (two consecutive off-curve)
+                                        const [next2X, next2Y, next2Type] = nodes[next2Idx];
+                                        const [next3X, next3Y] = nodes[next3Idx];
+
+                                        if (next2Type === 'o' || next2Type === 'os') {
+                                            // Cubic bezier: two off-curve control points + on-curve endpoint
+                                            this.ctx.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
+                                            i += 3; // Skip the two control points and endpoint
+                                        } else {
+                                            // Single off-curve - shouldn't happen with cubic, just draw line
+                                            this.ctx.lineTo(next2X, next2Y);
+                                            i += 2;
+                                        }
+                                    } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
+                                        // Next is on-curve - draw line
+                                        this.ctx.lineTo(next1X, next1Y);
+                                        i++;
                                     } else {
-                                        // Single off-curve - shouldn't happen with cubic, just draw line
-                                        this.ctx.lineTo(next2X, next2Y);
-                                        i += 2;
+                                        // Skip quadratic
+                                        i++;
                                     }
-                                } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
-                                    // Next is on-curve - draw line
-                                    this.ctx.lineTo(next1X, next1Y);
-                                    i++;
                                 } else {
-                                    // Skip quadratic
+                                    // Skip off-curve or quadratic points (should be handled by looking ahead)
                                     i++;
                                 }
-                            } else {
-                                // Skip off-curve or quadratic points (should be handled by looking ahead)
-                                i++;
                             }
+
+                            this.ctx.closePath();
+
+                            // Fill with semi-transparent color
+                            const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+                            this.ctx.fillStyle = isSelected ? colors.COMPONENT_FILL_SELECTED : (isHovered ? colors.COMPONENT_FILL_HOVERED : colors.COMPONENT_FILL_NORMAL);
+                            this.ctx.fill();
+
+                            // Stroke the outline
+                            this.ctx.strokeStyle = isSelected ? colors.COMPONENT_SELECTED : (isHovered ? colors.COMPONENT_HOVERED : colors.COMPONENT_NORMAL);
+                            this.ctx.lineWidth = 1 * invScale;
+                            this.ctx.stroke();
                         }
-
-                        this.ctx.closePath();
-
-                        // Fill with semi-transparent color
-                        const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
-                        this.ctx.fillStyle = isSelected ? colors.COMPONENT_FILL_SELECTED : (isHovered ? colors.COMPONENT_FILL_HOVERED : colors.COMPONENT_FILL_NORMAL);
-                        this.ctx.fill();
-
-                        // Stroke the outline
-                        this.ctx.strokeStyle = isSelected ? colors.COMPONENT_SELECTED : (isHovered ? colors.COMPONENT_HOVERED : colors.COMPONENT_NORMAL);
-                        this.ctx.lineWidth = 1 * invScale;
-                        this.ctx.stroke();
-                    }
-                });
+                    });
+                };
+                
+                // Start recursive rendering
+                renderComponentShapes(shape.Component.layerData.shapes);
             }
 
             // Draw component reference marker at origin
