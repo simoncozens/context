@@ -2136,12 +2136,23 @@ except Exception as e:
         const transform = componentShape.Component.transform || [1, 0, 0, 1, 0, 0];
 
         // Get current glyph name (for breadcrumb trail)
+        // This is the name of the context we're currently in (before entering the new component)
         let currentGlyphName;
         if (this.componentStack.length > 0) {
-            // We're already in a component, get name from last stack entry
+            // We're already in a component, so get its reference name
+            // Use the componentIndex stored in the parent state (not this.editingComponentIndex)
             const parentState = this.componentStack[this.componentStack.length - 1];
-            const parentComponent = parentState.layerData.shapes[this.editingComponentIndex];
-            currentGlyphName = parentComponent.Component.reference;
+            if (parentState && parentState.layerData && parentState.layerData.shapes &&
+                parentState.componentIndex !== null && parentState.componentIndex !== undefined) {
+                const currentComponent = parentState.layerData.shapes[parentState.componentIndex];
+                if (currentComponent && currentComponent.Component) {
+                    currentGlyphName = currentComponent.Component.reference;
+                }
+            }
+            // Fallback if we can't get the component name
+            if (!currentGlyphName) {
+                currentGlyphName = 'Unknown';
+            }
         } else {
             // We're at the top level - get main glyph name
             const glyphId = this.shapedGlyphs[this.selectedGlyphIndex].g;
@@ -2166,7 +2177,7 @@ except Exception as e:
             glyphName: currentGlyphName
         });
 
-        console.log('Pushed to stack. Stack depth:', this.componentStack.length);
+        console.log(`Pushed to stack. Stack depth: ${this.componentStack.length}, storing glyphName: ${currentGlyphName}`);
 
         // Set the component as the current editing context
         this.editingComponentIndex = componentIndex;
@@ -2426,12 +2437,16 @@ json.dumps(result)
                 }
             }
 
-            // Add current component
-            if (this.editingComponentIndex !== null && this.layerData) {
-                const parentState = this.componentStack[this.componentStack.length - 1];
-                const currentComponent = parentState.layerData.shapes[this.editingComponentIndex];
-                if (currentComponent && currentComponent.Component) {
-                    trail.push(currentComponent.Component.reference);
+            // Add current component (the one we're currently editing)
+            // Get this from the last stack entry's stored componentIndex
+            if (this.componentStack.length > 0) {
+                const currentState = this.componentStack[this.componentStack.length - 1];
+                if (currentState && currentState.layerData && currentState.layerData.shapes &&
+                    currentState.componentIndex !== null && currentState.componentIndex !== undefined) {
+                    const currentComponent = currentState.layerData.shapes[currentState.componentIndex];
+                    if (currentComponent && currentComponent.Component) {
+                        trail.push(currentComponent.Component.reference);
+                    }
                 }
             }
         }
