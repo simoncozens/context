@@ -357,8 +357,22 @@ if (typeof window === 'undefined') {
         window.sessionStorage.removeItem("coiReloadedBySelf");
         const coepDegrading = (reloadedBySelf == "coepdegrade");
 
-        // If the flag is set, don't try to register the service worker again
+        // Check if SharedArrayBuffer is available
+        const hasSAB = typeof SharedArrayBuffer !== 'undefined';
+        
+        // If we already reloaded once but still no SAB, something is wrong - don't loop
         if (reloadedBySelf == "true") {
+            if (!hasSAB) {
+                console.error('[COI] Service worker active but SharedArrayBuffer still unavailable. Check browser support.');
+            }
+            return;
+        }
+        
+        // If we have a controller but no SAB, reload immediately (page wasn't served through SW)
+        if (navigator.serviceWorker.controller && !hasSAB) {
+            console.log('[COI] Service worker present but page not served through it - reloading...');
+            window.sessionStorage.setItem("coiReloadedBySelf", "true");
+            window.location.reload();
             return;
         }
 
@@ -398,6 +412,7 @@ if (typeof window === 'undefined') {
                         window.sessionStorage.setItem("coiReloadedBySelf", "true");
                         console.log('[COI] Service worker registered but not controlling - reloading...');
                         window.location.reload();
+                        return;
                     }
                     
                     // Also handle the case where SW just activated
@@ -409,6 +424,13 @@ if (typeof window === 'undefined') {
                                 window.location.reload();
                             }
                         });
+                    }
+                    
+                    // If service worker is controlling but SAB still missing, try one reload
+                    if (navigator.serviceWorker.controller && !hasSAB) {
+                        console.log('[COI] Service worker controlling but no SharedArrayBuffer - reloading...');
+                        window.sessionStorage.setItem("coiReloadedBySelf", "true");
+                        window.location.reload();
                     }
                 },
                 (err) => {
