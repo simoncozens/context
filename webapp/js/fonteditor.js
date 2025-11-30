@@ -15,12 +15,12 @@ async function initFontEditor() {
         if (typeof SharedArrayBuffer === 'undefined') {
             // Check if we already tried reloading
             const alreadyReloaded = window.sessionStorage.getItem("coiReloadedBySelf") === "true";
-            
+
             // Detect iOS (including all browsers on iOS which use WebKit)
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
-                         /iPad|iPhone|iPod/.test(navigator.platform);
-            
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+                /iPad|iPhone|iPod/.test(navigator.platform);
+
             if (isIOS) {
                 console.warn('[COI] iOS detected - SharedArrayBuffer not supported on iOS (all browsers). Some features may be limited.');
                 // Don't reload on iOS, just continue without SAB

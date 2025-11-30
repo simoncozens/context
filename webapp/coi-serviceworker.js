@@ -359,11 +359,11 @@ if (typeof window === 'undefined') {
 
         // Check if SharedArrayBuffer is available
         const hasSAB = typeof SharedArrayBuffer !== 'undefined';
-        
+
         // Detect iOS (all browsers on iOS use WebKit and don't support SharedArrayBuffer)
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
-                     /iPad|iPhone|iPod/.test(navigator.platform);
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+            /iPad|iPhone|iPod/.test(navigator.platform);
 
         // If we already reloaded once but still no SAB, something is wrong - don't loop
         if (reloadedBySelf == "true") {
