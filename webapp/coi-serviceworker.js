@@ -3,8 +3,8 @@
 let coepCredentialless = false;
 
 // PWA Cache configuration
-const CACHE_NAME = 'contxt-pwa-v3';
-const CDN_CACHE_NAME = 'contxt-cdn-cache-v3';
+const CACHE_NAME = 'contxt-pwa-v4';
+const CDN_CACHE_NAME = 'contxt-cdn-cache-v4';
 const OFFLINE_URL = '/index.html';
 
 // Assets to cache on install
@@ -125,13 +125,31 @@ if (typeof window === 'undefined') {
         event.waitUntil(
             // Cache local assets first (critical)
             caches.open(CACHE_NAME).then((cache) => {
-                console.log('[SW] Caching app shell');
-                return cache.addAll(PRECACHE_ASSETS.map(url => new Request(url, { cache: 'reload' })));
+                console.log('[SW] Caching app shell - ' + PRECACHE_ASSETS.length + ' files');
+                // Cache files individually to see which ones fail
+                return Promise.allSettled(
+                    PRECACHE_ASSETS.map(url => 
+                        fetch(new Request(url, { cache: 'reload' }))
+                            .then(response => {
+                                if (response.ok) {
+                                    return cache.put(url, response);
+                                } else {
+                                    console.error('[SW] ✗ Failed to fetch:', url, 'Status:', response.status);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('[SW] ✗ Error fetching:', url, error.message);
+                            })
+                    )
+                ).then(results => {
+                    const failed = results.filter(r => r.status === 'rejected').length;
+                    console.log('[SW] App shell: ' + (PRECACHE_ASSETS.length - failed) + '/' + PRECACHE_ASSETS.length + ' cached');
+                });
             }).then(() => {
                 console.log('[SW] ✅ App shell cached');
                 // Cache CDN resources (non-blocking)
                 return caches.open(CDN_CACHE_NAME).then((cache) => {
-                    console.log('[SW] Caching CDN resources for offline');
+                    console.log('[SW] Caching CDN resources for offline - ' + CDN_PRECACHE.length + ' files');
                     // Cache each CDN resource individually so one failure doesn't break all
                     return Promise.allSettled(
                         CDN_PRECACHE.map(url =>
@@ -152,6 +170,12 @@ if (typeof window === 'undefined') {
                 });
             }).then(() => {
                 console.log('[SW] ✅ All resources cached - app ready for offline use');
+                // Notify all clients that caching is complete
+                self.clients.matchAll().then(clients => {
+                    clients.forEach(client => {
+                        client.postMessage({ type: 'OFFLINE_READY' });
+                    });
+                });
                 return self.skipWaiting();
             }).catch(error => {
                 console.error('[SW] ❌ Cache failed:', error);
