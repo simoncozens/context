@@ -1,9 +1,172 @@
 /*! coi-serviceworker v0.1.7 - Guido Zuidhof and contributors, licensed under MIT */
-// From: https://github.com/gzuidhof/coi-serviceworker
+// Enhanced with PWA caching for offline support
 let coepCredentialless = false;
+
+// PWA Cache configuration
+const CACHE_NAME = 'contxt-pwa-v2';
+const CDN_CACHE_NAME = 'contxt-cdn-cache-v2';
+const OFFLINE_URL = '/index.html';
+
+// Assets to cache on install
+const PRECACHE_ASSETS = [
+    '/',
+    '/index.html',
+    '/manifest.json',
+
+    // CSS
+    '/css/style.css',
+
+    // JavaScript files
+    '/js/ai-assistant.js',
+    '/js/auto-compile-manager.js',
+    '/js/bidi-js.js',
+    '/js/cache-manager.js',
+    '/js/compile-button.js',
+    '/js/file-browser.js',
+    '/js/font-compilation.js',
+    '/js/font-dropdown.js',
+    '/js/fontc-compile-worker.js',
+    '/js/fontc-worker.js',
+    '/js/fonteditor.js',
+    '/js/glyph-canvas.js',
+    '/js/keyboard-navigation.js',
+    '/js/loading-animation.js',
+    '/js/matplotlib-handler.js',
+    '/js/memory-monitor.js',
+    '/js/pyodide-official-console.js',
+    '/js/python-execution-wrapper.js',
+    '/js/python-ui-sync.js',
+    '/js/resizer.js',
+    '/js/save-button.js',
+    '/js/script-editor.js',
+    '/js/settings.js',
+    '/js/sound-preloader.js',
+    '/js/theme-switcher.js',
+    '/js/view-settings.js',
+
+    // Python files
+    '/py/fonteditor.py',
+
+    // WASM files (critical for font compilation)
+    '/wasm-dist/babelfont_fontc_web.js',
+    '/wasm-dist/babelfont_fontc_web_bg.wasm',
+    '/wasm-dist/babelfont_fontc_web_bg.wasm.d.ts',
+    '/wasm-dist/babelfont_fontc_web.d.ts',
+    '/wasm-dist/fontc_web.js',
+    '/wasm-dist/fontc_web_bg.wasm',
+    '/wasm-dist/fontc_web_bg.wasm.d.ts',
+    '/wasm-dist/fontc_web.d.ts',
+
+    // Sound assets
+    '/assets/sounds/attention.wav',
+    '/assets/sounds/done.wav',
+    '/assets/sounds/error.wav',
+    '/assets/sounds/incoming_message.wav',
+    '/assets/sounds/message_sent.wav',
+
+    // Icons
+    '/assets/icons/icon-72x72.png',
+    '/assets/icons/icon-96x96.png',
+    '/assets/icons/icon-128x128.png',
+    '/assets/icons/icon-144x144.png',
+    '/assets/icons/icon-152x152.png',
+    '/assets/icons/icon-192x192.png',
+    '/assets/icons/icon-384x384.png',
+    '/assets/icons/icon-512x512.png',
+    '/assets/icons/icon.svg',
+
+    // Service worker itself
+    '/coi-serviceworker.js'
+];
+
+// CDN resources to precache for offline support
+const CDN_PRECACHE = [
+    // Critical CDN resources for offline functionality
+    'https://cdn.jsdelivr.net/pyodide/v0.28.3/full/pyodide.js',
+    'https://cdn.jsdelivr.net/npm/jquery',
+    'https://cdn.jsdelivr.net/npm/jquery.terminal@2.35.2/js/jquery.terminal.min.js',
+    'https://cdn.jsdelivr.net/npm/jquery.terminal@2.35.2/js/unix_formatting.min.js',
+    'https://cdn.jsdelivr.net/npm/jquery.terminal@2.35.2/css/jquery.terminal.min.css',
+    'https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js',
+    'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.4.13/hb.js',
+    'https://cdn.jsdelivr.net/npm/harfbuzzjs@0.4.13/hbjs.js',
+    'https://cdn.jsdelivr.net/npm/ace-builds@1.32.2/src-min-noconflict/ace.js',
+    'https://cdn.jsdelivr.net/npm/ace-builds@1.32.2/src-min-noconflict/mode-python.js',
+    'https://cdn.jsdelivr.net/npm/ace-builds@1.32.2/src-min-noconflict/theme-monokai.js',
+    'https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js',
+    'https://cdn.jsdelivr.net/npm/diff2html@3.4.47/bundles/css/diff2html.min.css',
+    'https://cdn.jsdelivr.net/npm/diff2html@3.4.47/bundles/js/diff2html-ui.min.js',
+    'https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js',
+
+    // Google Fonts CSS
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;700&display=swap',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;700&display=swap',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Devanagari:wght@400;700&display=swap',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;700&display=swap',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;700&display=swap',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;700&display=swap',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;700&display=swap',
+    'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap',
+    'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200',
+    'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200'
+];
+
+// Helper function to check if URL is a CDN resource
+function isCDNResource(url) {
+    return url.includes('cdn.jsdelivr.net') ||
+        url.includes('fonts.googleapis.com') ||
+        url.includes('fonts.gstatic.com');
+}
+
 if (typeof window === 'undefined') {
-    self.addEventListener("install", () => self.skipWaiting());
-    self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+    // Install event - cache essential assets
+    self.addEventListener("install", (event) => {
+        event.waitUntil(
+            Promise.all([
+                // Cache local assets
+                caches.open(CACHE_NAME).then((cache) => {
+                    console.log('[SW] Caching app shell');
+                    return cache.addAll(PRECACHE_ASSETS.map(url => new Request(url, { cache: 'reload' })));
+                }),
+                // Cache CDN resources for offline support
+                caches.open(CDN_CACHE_NAME).then((cache) => {
+                    console.log('[SW] Caching CDN resources for offline');
+                    return Promise.all(
+                        CDN_PRECACHE.map(url =>
+                            fetch(url, { mode: 'cors' })
+                                .then(response => {
+                                    if (response.ok) {
+                                        return cache.put(url, response);
+                                    }
+                                })
+                                .catch(error => {
+                                    console.warn('[SW] Failed to cache CDN resource:', url, error);
+                                })
+                        )
+                    );
+                })
+            ]).then(() => {
+                console.log('[SW] ✅ All resources cached - app ready for offline use');
+            }).catch(error => {
+                console.error('[SW] Cache failed:', error);
+            }).then(() => self.skipWaiting())
+        );
+    });
+
+    self.addEventListener("activate", (event) => {
+        event.waitUntil(
+            caches.keys().then((cacheNames) => {
+                return Promise.all(
+                    cacheNames.map((cacheName) => {
+                        if (cacheName !== CACHE_NAME && cacheName !== CDN_CACHE_NAME) {
+                            console.log('[SW] Deleting old cache:', cacheName);
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            }).then(() => self.clients.claim())
+        );
+    });
 
     self.addEventListener("message", (ev) => {
         if (!ev.data) {
@@ -33,29 +196,124 @@ if (typeof window === 'undefined') {
                 credentials: "omit",
             })
             : r;
-        event.respondWith(
-            fetch(request)
-                .then((response) => {
-                    if (response.status === 0) {
-                        return response;
-                    }
 
-                    const newHeaders = new Headers(response.headers);
-                    newHeaders.set("Cross-Origin-Embedder-Policy",
-                        coepCredentialless ? "credentialless" : "require-corp"
-                    );
-                    if (!coepCredentialless) {
-                        newHeaders.set("Cross-Origin-Resource-Policy", "cross-origin");
-                    }
-                    newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
+        const requestURL = request.url;
 
-                    return new Response(response.body, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: newHeaders,
+        // Handle CDN resources with stale-while-revalidate strategy
+        if (isCDNResource(requestURL)) {
+            event.respondWith(
+                caches.open(CDN_CACHE_NAME).then((cache) => {
+                    return cache.match(request).then((cachedResponse) => {
+                        const fetchPromise = fetch(request)
+                            .then((response) => {
+                                if (response.status === 0) {
+                                    return response;
+                                }
+
+                                // Cache successful CDN responses
+                                if (response && response.status === 200) {
+                                    cache.put(request, response.clone());
+                                }
+                                return response;
+                            })
+                            .catch(() => {
+                                // Network failed, return cached version if available
+                                return cachedResponse;
+                            });
+
+                        // Return cached response immediately if available, fetch in background
+                        return cachedResponse || fetchPromise;
                     });
                 })
-                .catch((e) => console.error(e))
+            );
+            return;
+        }
+
+        // Handle local resources with COI headers
+        event.respondWith(
+            // Try cache first
+            caches.match(request).then((cachedResponse) => {
+                // Fetch from network with COI headers
+                const fetchPromise = fetch(request)
+                    .then((response) => {
+                        if (response.status === 0) {
+                            return response;
+                        }
+
+                        const newHeaders = new Headers(response.headers);
+                        newHeaders.set("Cross-Origin-Embedder-Policy",
+                            coepCredentialless ? "credentialless" : "require-corp"
+                        );
+                        if (!coepCredentialless) {
+                            newHeaders.set("Cross-Origin-Resource-Policy", "cross-origin");
+                        }
+                        newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
+
+                        const modifiedResponse = new Response(response.body, {
+                            status: response.status,
+                            statusText: response.statusText,
+                            headers: newHeaders,
+                        });
+
+                        // Cache successful same-origin responses
+                        if (response.status === 200 && request.url.startsWith(self.location.origin)) {
+                            caches.open(CACHE_NAME).then((cache) => {
+                                cache.put(request, modifiedResponse.clone());
+                            });
+                        }
+
+                        return modifiedResponse;
+                    })
+                    .catch((error) => {
+                        console.log('[SW] Fetch failed, using cache:', error);
+                        // If fetch fails and we have cached version, return it with COI headers
+                        if (cachedResponse) {
+                            const newHeaders = new Headers(cachedResponse.headers);
+                            newHeaders.set("Cross-Origin-Embedder-Policy", "require-corp");
+                            newHeaders.set("Cross-Origin-Resource-Policy", "cross-origin");
+                            newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
+
+                            return new Response(cachedResponse.body, {
+                                status: cachedResponse.status,
+                                statusText: cachedResponse.statusText,
+                                headers: newHeaders,
+                            });
+                        }
+                        // Return offline page for navigation requests
+                        if (request.mode === 'navigate') {
+                            return caches.match(OFFLINE_URL).then((offlineResponse) => {
+                                if (offlineResponse) {
+                                    const newHeaders = new Headers(offlineResponse.headers);
+                                    newHeaders.set("Cross-Origin-Embedder-Policy", "require-corp");
+                                    newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
+                                    return new Response(offlineResponse.body, {
+                                        status: offlineResponse.status,
+                                        statusText: offlineResponse.statusText,
+                                        headers: newHeaders,
+                                    });
+                                }
+                            });
+                        }
+                        throw error;
+                    });
+
+                // If we have cached response, return it with COI headers
+                if (cachedResponse) {
+                    const newHeaders = new Headers(cachedResponse.headers);
+                    newHeaders.set("Cross-Origin-Embedder-Policy", "require-corp");
+                    newHeaders.set("Cross-Origin-Resource-Policy", "cross-origin");
+                    newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
+
+                    return new Response(cachedResponse.body, {
+                        status: cachedResponse.status,
+                        statusText: cachedResponse.statusText,
+                        headers: newHeaders,
+                    });
+                }
+
+                // No cache, return fetch promise
+                return fetchPromise;
+            })
         );
     });
 } else {

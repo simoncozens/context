@@ -558,8 +558,19 @@
         // Service Worker Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                // Don't register service-worker.js - coi-serviceworker.js handles everything
-                console.log('[PWA] Using COI service worker for GitHub Pages compatibility');
+                // Check service worker status
+                if (navigator.serviceWorker.controller) {
+                    console.log('[PWA] Service worker active - offline mode available');
+
+                    // Listen for service worker updates
+                    navigator.serviceWorker.addEventListener('message', (event) => {
+                        if (event.data && event.data.type === 'OFFLINE_READY') {
+                            console.log('[PWA] ✅ App fully cached and ready for offline use');
+                        }
+                    });
+                } else {
+                    console.log('[PWA] Service worker registering...');
+                }
             });
         }
     </script>
