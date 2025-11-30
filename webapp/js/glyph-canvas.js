@@ -200,11 +200,11 @@ class GlyphCanvas {
                 // Check if editor view is focused
                 const editorView = document.querySelector('#view-editor');
                 const isEditorFocused = editorView && editorView.classList.contains('focused');
-                
+
                 if (!isEditorFocused) {
                     return; // Don't handle Escape if editor view is not focused
                 }
-                
+
                 e.preventDefault();
 
                 // Priority 1: If we have a saved previous state from slider interaction, restore it first
@@ -3451,61 +3451,126 @@ json.dumps(result)
             this.ctx.closePath();
             this.ctx.stroke();
 
-            // Draw control point handle lines (from off-curve to adjacent on-curve points)
-            this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)';
-            this.ctx.lineWidth = 1 * invScale;
+            // Skip drawing direction arrow and handles if zoom is under minimum threshold
+            const minZoomForHandles = APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_HANDLES;
+            if (this.scale >= minZoomForHandles) {
+                // Draw direction arrow from the first node
+                if (nodes.length > 1) {
+                    const [firstX, firstY] = nodes[startIdx];
+                    const nextIdx = (startIdx + 1) % nodes.length;
+                    const [nextX, nextY] = nodes[nextIdx];
 
-            nodes.forEach((node, nodeIndex) => {
-                const [x, y, type] = node;
+                    // Calculate direction vector from first node to next
+                    const dx = nextX - firstX;
+                    const dy = nextY - firstY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
 
-                // Only draw lines from off-curve points
-                if (type === 'o' || type === 'os') {
-                    // Check if this is the first or second control point in a cubic bezier pair
-                    let prevIdx = nodeIndex - 1;
-                    if (prevIdx < 0) prevIdx = nodes.length - 1;
-                    const [, , prevType] = nodes[prevIdx];
+                    if (distance > 0) {
+                        // Normalize direction
+                        const ndx = dx / distance;
+                        const ndy = dy / distance;
 
-                    let nextIdx = nodeIndex + 1;
-                    if (nextIdx >= nodes.length) nextIdx = 0;
-                    const [, , nextType] = nodes[nextIdx];
+                        // Calculate arrow size based on node size (same scaling as nodes, but slightly bigger)
+                        const nodeSizeMax = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MAX_ZOOM;
+                        const nodeSizeMin = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MIN_ZOOM;
+                        const nodeInterpolationMin = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MIN;
+                        const nodeInterpolationMax = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MAX;
 
-                    const isPrevOffCurve = prevType === 'o' || prevType === 'os';
-                    const isNextOffCurve = nextType === 'o' || nextType === 'os';
-
-                    if (isPrevOffCurve) {
-                        // This is the second control point - connect to NEXT on-curve point
-                        let targetIdx = nextIdx;
-                        // Skip the other off-curve point if needed
-                        if (isNextOffCurve) {
-                            targetIdx++;
-                            if (targetIdx >= nodes.length) targetIdx = 0;
+                        let baseSize;
+                        if (this.scale >= nodeInterpolationMax) {
+                            baseSize = nodeSizeMax * invScale;
+                        } else {
+                            const zoomFactor = (this.scale - nodeInterpolationMin) /
+                                (nodeInterpolationMax - nodeInterpolationMin);
+                            baseSize = (nodeSizeMin + (nodeSizeMax - nodeSizeMin) * zoomFactor) * invScale;
                         }
 
-                        const [targetX, targetY, targetType] = nodes[targetIdx];
-                        if (targetType === 'c' || targetType === 'cs' || targetType === 'l' || targetType === 'ls') {
-                            this.ctx.beginPath();
-                            this.ctx.moveTo(x, y);
-                            this.ctx.lineTo(targetX, targetY);
-                            this.ctx.stroke();
-                        }
-                    } else {
-                        // This is the first control point - connect to PREVIOUS on-curve point
-                        let targetIdx = prevIdx;
+                        // Arrow is slightly bigger than nodes
+                        const arrowLength = baseSize * 4.5;
+                        const arrowWidth = baseSize * 2.5;
 
-                        const [targetX, targetY, targetType] = nodes[targetIdx];
-                        if (targetType === 'c' || targetType === 'cs' || targetType === 'l' || targetType === 'ls') {
-                            this.ctx.beginPath();
-                            this.ctx.moveTo(x, y);
-                            this.ctx.lineTo(targetX, targetY);
-                            this.ctx.stroke();
-                        }
+                        // Arrow tip position starts at the first node and extends outward
+                        const tipX = firstX + ndx * arrowLength;
+                        const tipY = firstY + ndy * arrowLength;
+
+                        // Arrow base is at the first node
+                        const baseX = firstX;
+                        const baseY = firstY;
+
+                        // Arrow wings (perpendicular offsets)
+                        const perpX = -ndy * arrowWidth;
+                        const perpY = ndx * arrowWidth;
+
+                        // Draw arrow
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(tipX, tipY);
+                        this.ctx.lineTo(baseX + perpX, baseY + perpY);
+                        this.ctx.lineTo(baseX - perpX, baseY - perpY);
+                        this.ctx.closePath();
+
+                        this.ctx.fillStyle = isDarkTheme ? 'rgba(0, 255, 255, 0.8)' : 'rgba(0, 150, 150, 0.8)';
+                        this.ctx.fill();
+                        this.ctx.strokeStyle = isDarkTheme ? 'rgba(0, 255, 255, 1)' : 'rgba(0, 100, 100, 1)';
+                        this.ctx.lineWidth = 1 * invScale;
+                        this.ctx.stroke();
                     }
                 }
-            });
+
+                // Draw control point handle lines (from off-curve to adjacent on-curve points)
+                this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)';
+                this.ctx.lineWidth = 1 * invScale;
+
+                nodes.forEach((node, nodeIndex) => {
+                    const [x, y, type] = node;
+
+                    // Only draw lines from off-curve points
+                    if (type === 'o' || type === 'os') {
+                        // Check if this is the first or second control point in a cubic bezier pair
+                        let prevIdx = nodeIndex - 1;
+                        if (prevIdx < 0) prevIdx = nodes.length - 1;
+                        const [, , prevType] = nodes[prevIdx];
+
+                        let nextIdx = nodeIndex + 1;
+                        if (nextIdx >= nodes.length) nextIdx = 0;
+                        const [, , nextType] = nodes[nextIdx];
+
+                        const isPrevOffCurve = prevType === 'o' || prevType === 'os';
+                        const isNextOffCurve = nextType === 'o' || nextType === 'os';
+
+                        if (isPrevOffCurve) {
+                            // This is the second control point - connect to NEXT on-curve point
+                            let targetIdx = nextIdx;
+                            // Skip the other off-curve point if needed
+                            if (isNextOffCurve) {
+                                targetIdx++;
+                                if (targetIdx >= nodes.length) targetIdx = 0;
+                            }
+
+                            const [targetX, targetY, targetType] = nodes[targetIdx];
+                            if (targetType === 'c' || targetType === 'cs' || targetType === 'l' || targetType === 'ls') {
+                                this.ctx.beginPath();
+                                this.ctx.moveTo(x, y);
+                                this.ctx.lineTo(targetX, targetY);
+                                this.ctx.stroke();
+                            }
+                        } else {
+                            // This is the first control point - connect to PREVIOUS on-curve point
+                            let targetIdx = prevIdx;
+
+                            const [targetX, targetY, targetType] = nodes[targetIdx];
+                            if (targetType === 'c' || targetType === 'cs' || targetType === 'l' || targetType === 'ls') {
+                                this.ctx.beginPath();
+                                this.ctx.moveTo(x, y);
+                                this.ctx.lineTo(targetX, targetY);
+                                this.ctx.stroke();
+                            }
+                        }
+                    }
+                });
+            }
 
             // Draw nodes (points)
-            // Skip drawing nodes if zoom is under minimum threshold
-            const minZoomForHandles = APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_HANDLES;
+            // Nodes are drawn at the same zoom threshold as handles
             if (this.scale < minZoomForHandles) {
                 return;
             }
@@ -5070,7 +5135,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     leftSidebar.style.backgroundColor = bgColor;
                     rightSidebar.style.backgroundColor = bgColor;
                 };
-                
+
                 const observer = new MutationObserver((mutations) => {
                     mutations.forEach((mutation) => {
                         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
@@ -5082,7 +5147,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 });
                 observer.observe(editorView, { attributes: true, attributeFilter: ['class'] });
-                
+
                 // Set initial state
                 updateSidebarStyles();
             }
