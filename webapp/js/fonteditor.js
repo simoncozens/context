@@ -67,7 +67,6 @@ async function initFontEditor() {
         await window.pyodide.runPythonAsync(`
             import micropip
             await micropip.install('fonttools==4.60.1')
-            await micropip.install('ufomerge')
         `);
 
         // Install each wheel file
@@ -78,8 +77,6 @@ async function initFontEditor() {
             }
             const wheelUrl = `./wheels/${wheelFile}`;
             await window.pyodide.runPythonAsync(`
-                import micropip
-                print(f"Installing from URL: ${wheelUrl}")
                 await micropip.install("${wheelUrl}")
             `);
         }
@@ -104,15 +101,15 @@ async function initFontEditor() {
         await window.pyodide.runPython(fonteditorCode);
         console.log("fonteditor.py module loaded");
 
-        // Install context package from local wheels
-        if (window.updateLoadingStatus) {
-            window.updateLoadingStatus("Installing visualization libraries...");
-        }
-        await window.pyodide.runPythonAsync(`
-            await micropip.install('matplotlib')
-            await micropip.install('numpy')
-            await micropip.install('pandas')
-        `);
+        // // Install context package from local wheels
+        // if (window.updateLoadingStatus) {
+        //     window.updateLoadingStatus("Installing visualization libraries...");
+        // }
+        // await window.pyodide.runPythonAsync(`
+        //     await micropip.install('matplotlib')
+        //     await micropip.install('numpy')
+        //     await micropip.install('pandas')
+        // `);
 
 
         console.log("FontEditor initialized successfully");
