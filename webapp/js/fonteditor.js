@@ -67,6 +67,7 @@ async function initFontEditor() {
         await window.pyodide.runPythonAsync(`
             import micropip
             await micropip.install('fonttools==4.60.1')
+            await micropip.install('ufomerge')
         `);
 
         // Install each wheel file
