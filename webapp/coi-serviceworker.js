@@ -3,8 +3,8 @@
 let coepCredentialless = false;
 
 // PWA Cache configuration
-const CACHE_NAME = 'contxt-pwa-v2';
-const CDN_CACHE_NAME = 'contxt-cdn-cache-v2';
+const CACHE_NAME = 'contxt-pwa-v3';
+const CDN_CACHE_NAME = 'contxt-cdn-cache-v3';
 const OFFLINE_URL = '/index.html';
 
 // Assets to cache on install
@@ -121,35 +121,43 @@ function isCDNResource(url) {
 if (typeof window === 'undefined') {
     // Install event - cache essential assets
     self.addEventListener("install", (event) => {
+        console.log('[SW] Installing...');
         event.waitUntil(
-            Promise.all([
-                // Cache local assets
-                caches.open(CACHE_NAME).then((cache) => {
-                    console.log('[SW] Caching app shell');
-                    return cache.addAll(PRECACHE_ASSETS.map(url => new Request(url, { cache: 'reload' })));
-                }),
-                // Cache CDN resources for offline support
-                caches.open(CDN_CACHE_NAME).then((cache) => {
+            // Cache local assets first (critical)
+            caches.open(CACHE_NAME).then((cache) => {
+                console.log('[SW] Caching app shell');
+                return cache.addAll(PRECACHE_ASSETS.map(url => new Request(url, { cache: 'reload' })));
+            }).then(() => {
+                console.log('[SW] ✅ App shell cached');
+                // Cache CDN resources (non-blocking)
+                return caches.open(CDN_CACHE_NAME).then((cache) => {
                     console.log('[SW] Caching CDN resources for offline');
-                    return Promise.all(
+                    // Cache each CDN resource individually so one failure doesn't break all
+                    return Promise.allSettled(
                         CDN_PRECACHE.map(url =>
                             fetch(url, { mode: 'cors' })
                                 .then(response => {
                                     if (response.ok) {
+                                        console.log('[SW] ✓ Cached:', url.substring(0, 60));
                                         return cache.put(url, response);
+                                    } else {
+                                        console.warn('[SW] ✗ Failed (status ' + response.status + '):', url);
                                     }
                                 })
                                 .catch(error => {
-                                    console.warn('[SW] Failed to cache CDN resource:', url, error);
+                                    console.warn('[SW] ✗ Failed to cache:', url.substring(0, 60), error.message);
                                 })
                         )
                     );
-                })
-            ]).then(() => {
+                });
+            }).then(() => {
                 console.log('[SW] ✅ All resources cached - app ready for offline use');
+                return self.skipWaiting();
             }).catch(error => {
-                console.error('[SW] Cache failed:', error);
-            }).then(() => self.skipWaiting())
+                console.error('[SW] ❌ Cache failed:', error);
+                // Still skip waiting even if caching partially failed
+                return self.skipWaiting();
+            })
         );
     });
 
@@ -240,6 +248,9 @@ if (typeof window === 'undefined') {
                             return response;
                         }
 
+                        // Clone the response BEFORE reading the body
+                        const responseToCache = response.clone();
+
                         const newHeaders = new Headers(response.headers);
                         newHeaders.set("Cross-Origin-Embedder-Policy",
                             coepCredentialless ? "credentialless" : "require-corp"
@@ -258,7 +269,7 @@ if (typeof window === 'undefined') {
                         // Cache successful same-origin responses
                         if (response.status === 200 && request.url.startsWith(self.location.origin)) {
                             caches.open(CACHE_NAME).then((cache) => {
-                                cache.put(request, modifiedResponse.clone());
+                                cache.put(request, responseToCache);
                             });
                         }
 
