@@ -1454,32 +1454,29 @@ class GlyphCanvas {
             return;
         }
 
-        // Find the glyph that corresponds to the character at the cursor position
-        // The cursor is logically BEFORE a character, so we want the glyph for cursorPosition
+        // Find the glyph at the cursor position
         const targetPosition = this.cursorPosition;
+        const isRTL = this.isPositionRTL(targetPosition);
 
-        console.log(`Looking for glyph at cursor position ${targetPosition}`);
+        console.log(`Looking for glyph at cursor position ${targetPosition}, isRTL: ${isRTL}`);
 
-        // Search through all glyphs to find the one that matches this logical position
+        // First, try to find a cluster that starts at this position
         let glyphIndex = -1;
-        for (let i = 0; i < this.shapedGlyphs.length; i++) {
-            const glyphInfo = this.isGlyphFromTypedCharacter(i);
-            if (glyphInfo.isTyped && glyphInfo.logicalPosition === targetPosition) {
-                glyphIndex = i;
-                console.log(`Found glyph ${i} with logical position ${glyphInfo.logicalPosition}`);
-                break;
-            }
+        if (isRTL) {
+            glyphIndex = this.findLastGlyphAtClusterPosition(targetPosition);
+        } else {
+            glyphIndex = this.findFirstGlyphAtClusterPosition(targetPosition);
         }
 
-        // If no typed character found at this position, try finding by cluster
+        // If no cluster starts at this position, find the glyph by logical position within its cluster
         if (glyphIndex < 0) {
-            const isRTL = this.isPositionRTL(targetPosition);
-            if (isRTL) {
-                // For RTL, select the last glyph at this cluster (visually first)
-                glyphIndex = this.findLastGlyphAtClusterPosition(targetPosition);
-            } else {
-                // For LTR, select the first glyph at this cluster
-                glyphIndex = this.findFirstGlyphAtClusterPosition(targetPosition);
+            for (let i = 0; i < this.shapedGlyphs.length; i++) {
+                const glyphInfo = this.isGlyphFromTypedCharacter(i);
+                if (glyphInfo.isTyped && glyphInfo.logicalPosition === targetPosition) {
+                    glyphIndex = i;
+                    console.log(`Found glyph ${i} at logical position ${targetPosition} within its cluster`);
+                    break;
+                }
             }
         }
 
