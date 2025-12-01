@@ -1388,13 +1388,6 @@ class GlyphCanvas {
 
             this.shapeText();
 
-            // After animation completes, refresh component stack if editing a component
-            // This updates the outline editor with the new layer data
-            if (this.componentStack.length > 0 && this.selectedLayerId) {
-                console.log('Animation complete - refreshing component stack for new layer');
-                await this.refreshComponentStack();
-            }
-
             // Restore focus to canvas after animation completes (for text editing mode)
             if (!this.isGlyphEditMode) {
                 setTimeout(() => this.canvas.focus(), 0);
@@ -1940,16 +1933,14 @@ json.dumps(result)
         console.log('Layer data:', layer);
         console.log('Available masters:', this.fontData.masters);
 
-        // Don't fetch layer data yet if editing a component - wait for animation to finish
-        // Otherwise fetch now for immediate outline editor update
-        if (this.componentStack.length === 0) {
-            await this.fetchLayerData();
+        // Fetch layer data now, whether editing component or not
+        // This ensures new outlines load before animation starts
+        await this.fetchLayerData();
 
-            // Perform mouse hit detection after layer data is loaded
-            this.updateHoveredComponent();
-            this.updateHoveredAnchor();
-            this.updateHoveredPoint();
-        }
+        // Perform mouse hit detection after layer data is loaded
+        this.updateHoveredComponent();
+        this.updateHoveredAnchor();
+        this.updateHoveredPoint();
 
         // Find the master for this layer
         const master = this.fontData.masters.find(m => m.id === layer._master);
@@ -2003,7 +1994,7 @@ json.dumps(result)
         });
     }
 
-    cycleLayers(moveUp) {
+    async cycleLayers(moveUp) {
         // Cycle through layers with Cmd+Up (previous) or Cmd+Down (next)
         if (!this.fontData || !this.fontData.layers || this.fontData.layers.length === 0) {
             return;
@@ -2045,7 +2036,7 @@ json.dumps(result)
         const currentIndex = sortedLayers.findIndex(layer => layer.id === this.selectedLayerId);
         if (currentIndex === -1) {
             // No layer selected, select first layer
-            this.selectLayer(sortedLayers[0]);
+            await this.selectLayer(sortedLayers[0]);
             return;
         }
 
@@ -2064,7 +2055,7 @@ json.dumps(result)
         }
 
         // Select the next layer
-        this.selectLayer(sortedLayers[nextIndex]);
+        await this.selectLayer(sortedLayers[nextIndex]);
     }
 
     async fetchLayerData() {
@@ -2632,7 +2623,7 @@ json.dumps(result)
 
             // Update UI once at the end
             this.updateComponentBreadcrumb();
-            this.updatePropertiesUI();
+            await this.updatePropertiesUI();
             this.render();
         } catch (error) {
             console.error('Error refreshing component stack:', error);
