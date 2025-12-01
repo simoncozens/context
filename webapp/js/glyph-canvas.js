@@ -1421,13 +1421,13 @@ class GlyphCanvas {
         if (glyphIndex >= 0 && glyphIndex < this.shapedGlyphs.length) {
             this.selectedGlyphIndex = glyphIndex;
             this.isGlyphEditMode = true;
-            
+
             // Set logical cursor position to the start of this glyph's cluster
             const glyph = this.shapedGlyphs[glyphIndex];
             const clusterPos = glyph.cl || 0;
             this.cursorPosition = clusterPos;
             this.updateCursorVisualPosition();
-            
+
             console.log(`Entered glyph edit mode - selected glyph at index ${this.selectedGlyphIndex}, cluster position ${clusterPos}`);
         } else {
             this.selectedGlyphIndex = -1;
@@ -1488,25 +1488,44 @@ class GlyphCanvas {
         if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
             const currentGlyph = this.shapedGlyphs[this.selectedGlyphIndex];
             const currentClusterPos = currentGlyph.cl || 0;
-            
-            // First, try to find another glyph at the SAME cluster position (after current index)
-            // This handles multiple glyphs in the same cluster (base + marks)
-            for (let i = this.selectedGlyphIndex + 1; i < this.shapedGlyphs.length; i++) {
-                const glyph = this.shapedGlyphs[i];
-                if ((glyph.cl || 0) === currentClusterPos) {
-                    console.log(`Navigating to next glyph in same cluster ${currentClusterPos}: index ${i}`);
-                    this.selectGlyphByIndex(i);
-                    return;
+            const isCurrentRTL = this.isPositionRTL(currentClusterPos);
+
+            // First, try to find another glyph at the SAME cluster position
+            // For RTL: move backward in visual buffer (earlier glyphs are visually later)
+            // For LTR: move forward in visual buffer
+            if (isCurrentRTL) {
+                // RTL: check earlier indices (visually they come after)
+                for (let i = this.selectedGlyphIndex - 1; i >= 0; i--) {
+                    const glyph = this.shapedGlyphs[i];
+                    if ((glyph.cl || 0) === currentClusterPos) {
+                        console.log(`Navigating to next glyph in RTL cluster ${currentClusterPos}: index ${i}`);
+                        this.selectGlyphByIndex(i);
+                        return;
+                    }
+                }
+            } else {
+                // LTR: check later indices
+                for (let i = this.selectedGlyphIndex + 1; i < this.shapedGlyphs.length; i++) {
+                    const glyph = this.shapedGlyphs[i];
+                    if ((glyph.cl || 0) === currentClusterPos) {
+                        console.log(`Navigating to next glyph in LTR cluster ${currentClusterPos}: index ${i}`);
+                        this.selectGlyphByIndex(i);
+                        return;
+                    }
                 }
             }
-            
+
             // No more glyphs at current cluster, move to next cluster position logically
             let nextPosition = currentClusterPos + 1;
-            
+
             // Find next cluster position that has a glyph
             while (nextPosition <= this.textBuffer.length) {
-                // Look for all glyphs at this cluster position, take the first one
-                const glyphIndex = this.findFirstGlyphAtClusterPosition(nextPosition);
+                const isNextRTL = this.isPositionRTL(nextPosition);
+                // For RTL clusters, start with the last glyph (visually first)
+                // For LTR clusters, start with the first glyph
+                const glyphIndex = isNextRTL
+                    ? this.findLastGlyphAtClusterPosition(nextPosition)
+                    : this.findFirstGlyphAtClusterPosition(nextPosition);
                 if (glyphIndex >= 0) {
                     console.log(`Navigating from cluster ${currentClusterPos} to ${nextPosition} (glyph ${glyphIndex})`);
                     this.selectGlyphByIndex(glyphIndex);
@@ -1514,7 +1533,7 @@ class GlyphCanvas {
                 }
                 nextPosition++;
             }
-            
+
             console.log('Already at last glyph in logical order');
         }
     }
@@ -1529,25 +1548,44 @@ class GlyphCanvas {
         if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
             const currentGlyph = this.shapedGlyphs[this.selectedGlyphIndex];
             const currentClusterPos = currentGlyph.cl || 0;
-            
-            // First, try to find another glyph at the SAME cluster position (before current index)
-            // This handles multiple glyphs in the same cluster (base + marks)
-            for (let i = this.selectedGlyphIndex - 1; i >= 0; i--) {
-                const glyph = this.shapedGlyphs[i];
-                if ((glyph.cl || 0) === currentClusterPos) {
-                    console.log(`Navigating to previous glyph in same cluster ${currentClusterPos}: index ${i}`);
-                    this.selectGlyphByIndex(i);
-                    return;
+            const isCurrentRTL = this.isPositionRTL(currentClusterPos);
+
+            // First, try to find another glyph at the SAME cluster position
+            // For RTL: move forward in visual buffer (later glyphs are visually earlier)
+            // For LTR: move backward in visual buffer
+            if (isCurrentRTL) {
+                // RTL: check later indices (visually they come before)
+                for (let i = this.selectedGlyphIndex + 1; i < this.shapedGlyphs.length; i++) {
+                    const glyph = this.shapedGlyphs[i];
+                    if ((glyph.cl || 0) === currentClusterPos) {
+                        console.log(`Navigating to previous glyph in RTL cluster ${currentClusterPos}: index ${i}`);
+                        this.selectGlyphByIndex(i);
+                        return;
+                    }
+                }
+            } else {
+                // LTR: check earlier indices
+                for (let i = this.selectedGlyphIndex - 1; i >= 0; i--) {
+                    const glyph = this.shapedGlyphs[i];
+                    if ((glyph.cl || 0) === currentClusterPos) {
+                        console.log(`Navigating to previous glyph in LTR cluster ${currentClusterPos}: index ${i}`);
+                        this.selectGlyphByIndex(i);
+                        return;
+                    }
                 }
             }
-            
+
             // No more glyphs at current cluster, move to previous cluster position logically
             let prevPosition = currentClusterPos - 1;
-            
+
             // Find previous cluster position that has a glyph
             while (prevPosition >= 0) {
-                // Look for all glyphs at this cluster position, take the last one
-                const glyphIndex = this.findLastGlyphAtClusterPosition(prevPosition);
+                const isPrevRTL = this.isPositionRTL(prevPosition);
+                // For RTL clusters, start with the first glyph (visually last)
+                // For LTR clusters, start with the last glyph
+                const glyphIndex = isPrevRTL
+                    ? this.findFirstGlyphAtClusterPosition(prevPosition)
+                    : this.findLastGlyphAtClusterPosition(prevPosition);
                 if (glyphIndex >= 0) {
                     console.log(`Navigating from cluster ${currentClusterPos} to ${prevPosition} (glyph ${glyphIndex})`);
                     this.selectGlyphByIndex(glyphIndex);
@@ -1555,7 +1593,7 @@ class GlyphCanvas {
                 }
                 prevPosition--;
             }
-            
+
             console.log('Already at first glyph in logical order');
         }
     }
