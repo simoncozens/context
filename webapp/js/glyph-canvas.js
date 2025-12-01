@@ -1394,7 +1394,7 @@ class GlyphCanvas {
                 console.log('Animation complete - refreshing component stack for new layer');
                 await this.refreshComponentStack();
             }
-            
+
             // Restore focus to canvas after animation completes (for text editing mode)
             if (!this.isGlyphEditMode) {
                 setTimeout(() => this.canvas.focus(), 0);
@@ -1548,14 +1548,8 @@ json.dumps(result)
 
         // Add layers section title
         const layersTitle = document.createElement('div');
+        layersTitle.className = 'editor-section-title';
         layersTitle.textContent = 'Foreground Layers';
-        layersTitle.style.fontSize = '10px';
-        layersTitle.style.fontWeight = '600';
-        layersTitle.style.color = 'var(--text-secondary)';
-        layersTitle.style.textTransform = 'uppercase';
-        layersTitle.style.letterSpacing = '0.5px';
-        layersTitle.style.marginTop = '12px';
-        layersTitle.style.marginBottom = '6px';
         this.propertiesSection.appendChild(layersTitle);
 
         // Sort layers by their axis values (userspace locations)
@@ -1597,21 +1591,15 @@ json.dumps(result)
 
         // Create layers list
         const layersList = document.createElement('div');
-        layersList.style.display = 'flex';
-        layersList.style.flexDirection = 'column';
-        layersList.style.gap = '3px';
+        layersList.className = 'editor-layers-list';
 
         for (const layer of sortedLayers) {
             const layerItem = document.createElement('div');
+            layerItem.className = 'editor-layer-item';
+            if (this.selectedLayerId === layer.id) {
+                layerItem.classList.add('selected');
+            }
             layerItem.setAttribute('data-layer-id', layer.id); // Add data attribute for selection updates
-            layerItem.style.padding = '6px';
-            layerItem.style.borderRadius = '3px';
-            layerItem.style.cursor = 'pointer';
-            layerItem.style.fontSize = '11px';
-            layerItem.style.color = 'var(--text-primary)';
-            layerItem.style.backgroundColor = this.selectedLayerId === layer.id ? 'var(--bg-active)' : 'transparent';
-            layerItem.style.border = '1px solid var(--border-primary)';
-            layerItem.style.transition = 'background-color 0.15s ease';
 
             // Find the master for this layer
             const master = this.fontData.masters.find(m => m.id === layer._master);
@@ -1626,18 +1614,6 @@ json.dumps(result)
             }
 
             layerItem.textContent = axisValues || layer.name || 'Default';
-
-            // Hover effect
-            layerItem.addEventListener('mouseenter', () => {
-                if (this.selectedLayerId !== layer.id) {
-                    layerItem.style.backgroundColor = 'var(--bg-secondary)';
-                }
-            });
-            layerItem.addEventListener('mouseleave', () => {
-                if (this.selectedLayerId !== layer.id) {
-                    layerItem.style.backgroundColor = 'transparent';
-                }
-            });
 
             // Click handler
             layerItem.addEventListener('click', () => {
@@ -1776,14 +1752,14 @@ json.dumps(result)
         // Update the visual selection highlight for layer items without rebuilding
         if (!this.propertiesSection) return;
 
-        // Find all layer items and update their background color
+        // Find all layer items and update their selected class
         const layerItems = this.propertiesSection.querySelectorAll('[data-layer-id]');
         layerItems.forEach(item => {
             const layerId = item.getAttribute('data-layer-id');
             if (layerId === this.selectedLayerId) {
-                item.style.backgroundColor = 'var(--bg-active)';
+                item.classList.add('selected');
             } else {
-                item.style.backgroundColor = 'transparent';
+                item.classList.remove('selected');
             }
         });
     }
@@ -2671,9 +2647,7 @@ json.dumps(result)
         } else {
             // No glyph selected
             const emptyMessage = document.createElement('div');
-            emptyMessage.style.fontSize = '11px';
-            emptyMessage.style.color = 'var(--text-secondary)';
-            emptyMessage.style.fontStyle = 'italic';
+            emptyMessage.className = 'editor-empty-message';
             emptyMessage.textContent = 'No glyph selected';
             this.propertiesSection.appendChild(emptyMessage);
         }
@@ -2693,38 +2667,25 @@ json.dumps(result)
 
         // Add section title
         const title = document.createElement('div');
+        title.className = 'editor-section-title';
         title.textContent = 'Variable Axes';
-        title.style.fontSize = '10px';
-        title.style.fontWeight = '600';
-        title.style.color = 'var(--text-secondary)';
-        title.style.textTransform = 'uppercase';
-        title.style.letterSpacing = '0.5px';
-        title.style.marginTop = '6px';
         this.axesSection.appendChild(title);
 
         // Create slider for each axis
         axes.forEach(axis => {
             const axisContainer = document.createElement('div');
-            axisContainer.style.display = 'flex';
-            axisContainer.style.flexDirection = 'column';
-            axisContainer.style.gap = '3px';
+            axisContainer.className = 'editor-axis-container';
 
             // Label row (axis name and value)
             const labelRow = document.createElement('div');
-            labelRow.style.display = 'flex';
-            labelRow.style.justifyContent = 'space-between';
-            labelRow.style.alignItems = 'center';
-            labelRow.style.fontSize = '11px';
+            labelRow.className = 'editor-axis-label-row';
 
             const axisLabel = document.createElement('span');
+            axisLabel.className = 'editor-axis-name';
             axisLabel.textContent = axis.name.en || axis.tag;
-            axisLabel.style.color = 'var(--text-primary)';
-            axisLabel.style.fontWeight = '500';
 
             const valueLabel = document.createElement('span');
-            valueLabel.style.color = 'var(--text-secondary)';
-            valueLabel.style.fontFamily = 'var(--font-mono)';
-            valueLabel.style.fontSize = '10px';
+            valueLabel.className = 'editor-axis-value';
             valueLabel.textContent = axis.defaultValue.toFixed(0);
             valueLabel.setAttribute('data-axis-tag', axis.tag); // Add identifier for programmatic updates
 
@@ -2734,10 +2695,10 @@ json.dumps(result)
             // Slider
             const slider = document.createElement('input');
             slider.type = 'range';
+            slider.className = 'editor-axis-slider';
             slider.min = axis.minValue;
             slider.max = axis.maxValue;
             slider.step = 1;
-            slider.style.width = '100%';
             slider.setAttribute('data-axis-tag', axis.tag); // Add identifier for programmatic updates
 
             // Restore previous value if it exists, otherwise use default

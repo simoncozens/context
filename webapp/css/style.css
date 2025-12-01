@@ -3330,3 +3330,102 @@ body {
         transform: scale(1);
     }
 }
+
+/* Glyph Editor Sidebar Styles */
+
+/* Section headlines for both sidebars */
+.editor-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 12px;
+    margin-bottom: 6px;
+}
+
+.editor-section-title:first-child {
+    margin-top: 6px;
+}
+
+/* Layer list container */
+.editor-layers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0 -12px;
+    /* Extend to edges of sidebar */
+}
+
+/* Individual layer item */
+.editor-layer-item {
+    padding: 8px 12px;
+    border-radius: 0;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-primary);
+    background-color: transparent;
+    border-top: none;
+    border-bottom: 1px solid var(--border-primary);
+    border-left: none;
+    border-right: none;
+    transition: background-color 0.15s ease;
+}
+
+.editor-layer-item:first-child {
+    border-top: 1px solid var(--border-primary);
+}
+
+/* Dark theme colors */
+:root:not([data-theme="light"]) .editor-layer-item:hover:not(.selected) {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+:root:not([data-theme="light"]) .editor-layer-item.selected {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Light theme colors */
+:root[data-theme="light"] .editor-layer-item:hover:not(.selected) {
+    background-color: rgba(255, 255, 255, 1);
+}
+
+:root[data-theme="light"] .editor-layer-item.selected {
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+/* Axis controls container */
+.editor-axis-container {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.editor-axis-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+.editor-axis-name {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.editor-axis-value {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+}
+
+.editor-axis-slider {
+    width: 100%;
+}
+
+/* Empty state message */
+.editor-empty-message {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
