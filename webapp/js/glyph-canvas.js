@@ -1764,6 +1764,70 @@ json.dumps(result)
         });
     }
 
+    cycleLayers(moveUp) {
+        // Cycle through layers with Cmd+Up (previous) or Cmd+Down (next)
+        if (!this.fontData || !this.fontData.layers || this.fontData.layers.length === 0) {
+            return;
+        }
+
+        // Get sorted layers (same as in displayLayersList)
+        const sortedLayers = [...this.fontData.layers].sort((a, b) => {
+            const masterA = this.fontData.masters.find(m => m.id === a._master);
+            const masterB = this.fontData.masters.find(m => m.id === b._master);
+
+            if (!masterA?.location || !masterB?.location) return 0;
+
+            const axisTagsA = Object.keys(masterA.location).sort();
+            const axisTagsB = Object.keys(masterB.location).sort();
+
+            for (let i = 0; i < Math.max(axisTagsA.length, axisTagsB.length); i++) {
+                const tagA = axisTagsA[i];
+                const tagB = axisTagsB[i];
+
+                if (!tagA) return -1;
+                if (!tagB) return 1;
+
+                if (tagA !== tagB) {
+                    return tagA.localeCompare(tagB);
+                }
+
+                const valueA = masterA.location[tagA] || 0;
+                const valueB = masterB.location[tagB] || 0;
+
+                if (valueA !== valueB) {
+                    return valueA - valueB;
+                }
+            }
+
+            return 0;
+        });
+
+        // Find current layer index
+        const currentIndex = sortedLayers.findIndex(layer => layer.id === this.selectedLayerId);
+        if (currentIndex === -1) {
+            // No layer selected, select first layer
+            this.selectLayer(sortedLayers[0]);
+            return;
+        }
+
+        // Calculate next index (with wrapping)
+        let nextIndex;
+        if (moveUp) {
+            nextIndex = currentIndex - 1;
+            if (nextIndex < 0) {
+                nextIndex = sortedLayers.length - 1; // Wrap to last
+            }
+        } else {
+            nextIndex = currentIndex + 1;
+            if (nextIndex >= sortedLayers.length) {
+                nextIndex = 0; // Wrap to first
+            }
+        }
+
+        // Select the next layer
+        this.selectLayer(sortedLayers[nextIndex]);
+    }
+
     async fetchLayerData() {
         // If we're editing a component, refresh the component's layer data for the new layer
         if (this.componentStack.length > 0) {
@@ -3932,6 +3996,15 @@ json.dumps(result)
 
         // Handle cursor navigation and text editing
         // Note: Escape key is handled globally in constructor for better focus handling
+
+        // Handle Cmd+Up/Down to cycle through layers when outline editor is active
+        if ((e.metaKey || e.ctrlKey) && this.isGlyphEditMode && this.selectedLayerId && this.fontData && this.fontData.layers) {
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.cycleLayers(e.key === 'ArrowUp');
+                return;
+            }
+        }
 
         // Handle arrow keys for point/anchor/component movement in glyph edit mode
         if (this.isGlyphEditMode && this.selectedLayerId && (this.selectedPoints.length > 0 || this.selectedAnchors.length > 0 || this.selectedComponents.length > 0)) {
