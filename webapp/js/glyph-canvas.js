@@ -1394,6 +1394,11 @@ class GlyphCanvas {
                 console.log('Animation complete - refreshing component stack for new layer');
                 await this.refreshComponentStack();
             }
+            
+            // Restore focus to canvas after animation completes (for text editing mode)
+            if (!this.isGlyphEditMode) {
+                setTimeout(() => this.canvas.focus(), 0);
+            }
         }
     }
 
@@ -2499,7 +2504,7 @@ json.dumps(result)
                 if (index === trail.length - 1) {
                     item.style.fontWeight = '500';
                     item.style.color = 'var(--text-primary)';
-                    
+
                     // Add pop animation to last item for user attention
                     item.style.animation = 'none';
                     // Force reflow to restart animation
@@ -2547,13 +2552,13 @@ json.dumps(result)
                 color: var(--text-primary);
                 font-weight: 500;
             `;
-            
+
             // Add pop animation for user attention
             mainNameSpan.style.animation = 'none';
             // Force reflow to restart animation
             void mainNameSpan.offsetWidth;
             mainNameSpan.style.animation = 'breadcrumb-pop 0.3s ease-out';
-            
+
             glyphNameElement.appendChild(mainNameSpan);
         }
     }
@@ -2760,6 +2765,9 @@ json.dumps(result)
                     this.isPreviewMode = false;
                     this.render();
                     // Restore focus to canvas
+                    setTimeout(() => this.canvas.focus(), 0);
+                } else {
+                    // In text editing mode, restore focus to canvas
                     setTimeout(() => this.canvas.focus(), 0);
                 }
             });
