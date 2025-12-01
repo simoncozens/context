@@ -1409,7 +1409,7 @@ class GlyphCanvas {
         return this.opentypeFont.tables.fvar.axes || [];
     }
 
-    selectGlyphByIndex(glyphIndex) {
+    async selectGlyphByIndex(glyphIndex) {
         // Select a glyph by its index in the shaped glyphs array
 
         // If we're in nested component mode, exit all levels first
@@ -1437,7 +1437,11 @@ class GlyphCanvas {
 
         // Update breadcrumb (will hide it since componentStack is now empty)
         this.updateComponentBreadcrumb();
-        this.updatePropertiesUI();
+
+        // Fetch glyph data and update UI before rendering
+        await this.updatePropertiesUI();
+
+        // Now render with the loaded data
         this.render();
 
         // Perform mouse hit detection for objects at current mouse position
@@ -1448,7 +1452,7 @@ class GlyphCanvas {
         }
     }
 
-    enterGlyphEditModeAtCursor() {
+    async enterGlyphEditModeAtCursor() {
         // Enter glyph edit mode for the glyph at the current cursor position
         if (this.isGlyphEditMode || !this.shapedGlyphs || this.shapedGlyphs.length === 0) {
             return;
@@ -1482,7 +1486,7 @@ class GlyphCanvas {
 
         if (glyphIndex >= 0) {
             console.log(`Entering glyph edit mode at cursor position ${targetPosition}, glyph index ${glyphIndex}`);
-            this.selectGlyphByIndex(glyphIndex);
+            await this.selectGlyphByIndex(glyphIndex);
         } else {
             console.log(`No glyph found at cursor position ${targetPosition}`);
         }
@@ -1542,7 +1546,7 @@ class GlyphCanvas {
         this.render();
     }
 
-    navigateToNextGlyphLogical() {
+    async navigateToNextGlyphLogical() {
         // Navigate to the next glyph in logical order (forward in text)
         if (!this.isGlyphEditMode || this.componentStack.length > 0) {
             return; // Only works in top-level glyph edit mode
@@ -1563,7 +1567,7 @@ class GlyphCanvas {
                     const glyph = this.shapedGlyphs[i];
                     if ((glyph.cl || 0) === currentClusterPos) {
                         console.log(`Navigating to next glyph in RTL cluster ${currentClusterPos}: index ${i}`);
-                        this.selectGlyphByIndex(i);
+                        await this.selectGlyphByIndex(i);
                         return;
                     }
                 }
@@ -1573,7 +1577,7 @@ class GlyphCanvas {
                     const glyph = this.shapedGlyphs[i];
                     if ((glyph.cl || 0) === currentClusterPos) {
                         console.log(`Navigating to next glyph in LTR cluster ${currentClusterPos}: index ${i}`);
-                        this.selectGlyphByIndex(i);
+                        await this.selectGlyphByIndex(i);
                         return;
                     }
                 }
@@ -1592,7 +1596,7 @@ class GlyphCanvas {
                     : this.findFirstGlyphAtClusterPosition(nextPosition);
                 if (glyphIndex >= 0) {
                     console.log(`Navigating from cluster ${currentClusterPos} to ${nextPosition} (glyph ${glyphIndex})`);
-                    this.selectGlyphByIndex(glyphIndex);
+                    await this.selectGlyphByIndex(glyphIndex);
                     return;
                 }
                 nextPosition++;
@@ -1602,7 +1606,7 @@ class GlyphCanvas {
         }
     }
 
-    navigateToPreviousGlyphLogical() {
+    async navigateToPreviousGlyphLogical() {
         // Navigate to the previous glyph in logical order (backward in text)
         if (!this.isGlyphEditMode || this.componentStack.length > 0) {
             return; // Only works in top-level glyph edit mode
@@ -1623,7 +1627,7 @@ class GlyphCanvas {
                     const glyph = this.shapedGlyphs[i];
                     if ((glyph.cl || 0) === currentClusterPos) {
                         console.log(`Navigating to previous glyph in RTL cluster ${currentClusterPos}: index ${i}`);
-                        this.selectGlyphByIndex(i);
+                        await this.selectGlyphByIndex(i);
                         return;
                     }
                 }
@@ -1633,7 +1637,7 @@ class GlyphCanvas {
                     const glyph = this.shapedGlyphs[i];
                     if ((glyph.cl || 0) === currentClusterPos) {
                         console.log(`Navigating to previous glyph in LTR cluster ${currentClusterPos}: index ${i}`);
-                        this.selectGlyphByIndex(i);
+                        await this.selectGlyphByIndex(i);
                         return;
                     }
                 }
@@ -1652,7 +1656,7 @@ class GlyphCanvas {
                     : this.findLastGlyphAtClusterPosition(prevPosition);
                 if (glyphIndex >= 0) {
                     console.log(`Navigating from cluster ${currentClusterPos} to ${prevPosition} (glyph ${glyphIndex})`);
-                    this.selectGlyphByIndex(glyphIndex);
+                    await this.selectGlyphByIndex(glyphIndex);
                     return;
                 }
                 prevPosition--;
@@ -2926,7 +2930,7 @@ json.dumps(result)
         });
     }
 
-    updatePropertiesUI() {
+    async updatePropertiesUI() {
         if (!this.propertiesSection) return;
 
         // Clear existing content
@@ -2941,8 +2945,8 @@ json.dumps(result)
         }
 
         if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
-            // Display layers section
-            this.displayLayersList();
+            // Display layers section (await to ensure data is loaded)
+            await this.displayLayersList();
         } else {
             // No glyph selected
             const emptyMessage = document.createElement('div');
