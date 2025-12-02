@@ -1751,10 +1751,14 @@ try:
                     'location': userspace_location
                 })
             
+            # Get axes order (list of axis tags in definition order)
+            axes_order = [axis.tag for axis in current_font.axes]
+            
             result = {
                 'glyphName': glyph.name,
                 'layers': layers_data,
-                'masters': masters_data
+                'masters': masters_data,
+                'axesOrder': axes_order
             }
 except Exception as e:
     print(f"Error fetching glyph data: {e}")
@@ -1784,41 +1788,16 @@ json.dumps(result)
         layersTitle.textContent = 'Foreground Layers';
         this.propertiesSection.appendChild(layersTitle);
 
-        // Sort layers by their axis values (userspace locations)
+        // Sort layers by master order (order in which masters are defined in font.masters)
         const sortedLayers = [...this.fontData.layers].sort((a, b) => {
-            const masterA = this.fontData.masters.find(m => m.id === a._master);
-            const masterB = this.fontData.masters.find(m => m.id === b._master);
+            const masterIndexA = this.fontData.masters.findIndex(m => m.id === a._master);
+            const masterIndexB = this.fontData.masters.findIndex(m => m.id === b._master);
 
-            if (!masterA?.location || !masterB?.location) return 0;
+            // If master not found, put at end
+            const posA = masterIndexA === -1 ? this.fontData.masters.length : masterIndexA;
+            const posB = masterIndexB === -1 ? this.fontData.masters.length : masterIndexB;
 
-            // Get sorted axis tags
-            const axisTagsA = Object.keys(masterA.location).sort();
-            const axisTagsB = Object.keys(masterB.location).sort();
-
-            // Compare each axis value in order
-            for (let i = 0; i < Math.max(axisTagsA.length, axisTagsB.length); i++) {
-                const tagA = axisTagsA[i];
-                const tagB = axisTagsB[i];
-
-                // If one has fewer axes, it comes first
-                if (!tagA) return -1;
-                if (!tagB) return 1;
-
-                // Compare axis tags alphabetically
-                if (tagA !== tagB) {
-                    return tagA.localeCompare(tagB);
-                }
-
-                // Same tag, compare values
-                const valueA = masterA.location[tagA] || 0;
-                const valueB = masterB.location[tagB] || 0;
-
-                if (valueA !== valueB) {
-                    return valueA - valueB;
-                }
-            }
-
-            return 0;
+            return posA - posB;
         });
 
         // Create layers list
@@ -1837,10 +1816,14 @@ json.dumps(result)
             const master = this.fontData.masters.find(m => m.id === layer._master);
 
             // Format axis values for display (e.g., "wght:400, wdth:100")
+            // Display axes in the order they are defined in font.axes
             let axisValues = '';
             if (master && master.location) {
-                const locationParts = Object.entries(master.location)
-                    .map(([tag, value]) => `${tag}:${Math.round(value)}`)
+                // Sort axis tags according to font.axes order
+                const axesOrder = this.fontData.axesOrder || Object.keys(master.location).sort();
+                const locationParts = axesOrder
+                    .filter(tag => tag in master.location)
+                    .map(tag => `${tag}:${Math.round(master.location[tag])}`)
                     .join(', ');
                 axisValues = locationParts;
             }
@@ -2001,35 +1984,16 @@ json.dumps(result)
         }
 
         // Get sorted layers (same as in displayLayersList)
+        // Sort layers by master order (order in which masters are defined in font.masters)
         const sortedLayers = [...this.fontData.layers].sort((a, b) => {
-            const masterA = this.fontData.masters.find(m => m.id === a._master);
-            const masterB = this.fontData.masters.find(m => m.id === b._master);
+            const masterIndexA = this.fontData.masters.findIndex(m => m.id === a._master);
+            const masterIndexB = this.fontData.masters.findIndex(m => m.id === b._master);
 
-            if (!masterA?.location || !masterB?.location) return 0;
+            // If master not found, put at end
+            const posA = masterIndexA === -1 ? this.fontData.masters.length : masterIndexA;
+            const posB = masterIndexB === -1 ? this.fontData.masters.length : masterIndexB;
 
-            const axisTagsA = Object.keys(masterA.location).sort();
-            const axisTagsB = Object.keys(masterB.location).sort();
-
-            for (let i = 0; i < Math.max(axisTagsA.length, axisTagsB.length); i++) {
-                const tagA = axisTagsA[i];
-                const tagB = axisTagsB[i];
-
-                if (!tagA) return -1;
-                if (!tagB) return 1;
-
-                if (tagA !== tagB) {
-                    return tagA.localeCompare(tagB);
-                }
-
-                const valueA = masterA.location[tagA] || 0;
-                const valueB = masterB.location[tagB] || 0;
-
-                if (valueA !== valueB) {
-                    return valueA - valueB;
-                }
-            }
-
-            return 0;
+            return posA - posB;
         });
 
         // Find current layer index
