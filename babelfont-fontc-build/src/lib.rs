@@ -1,4 +1,7 @@
-use babelfont::convertors::fontir::{BabelfontIrSource, CompilationOptions};
+use babelfont::{
+    convertors::fontir::{BabelfontIrSource, CompilationOptions},
+    filters::FontFilter as _,
+};
 use wasm_bindgen::prelude::*;
 
 // Set up panic hook for better error messages
@@ -27,13 +30,30 @@ fn get_option(options: &JsValue, key: &str, default: bool) -> bool {
 ///  - `skip_metrics`: bool - Skip metrics compilation
 ///  - `skip_outlines`: bool - Skip `glyf`/`gvar` table creation
 ///  - `dont_use_production_names`: bool - Don't use production names for glyphs
+///  - `subset_glyphs`: String[] - List of glyph names to include
 ///
 /// # Returns
 /// * `Vec<u8>` - Compiled TTF font bytes
 #[wasm_bindgen]
 pub fn compile_babelfont(babelfont_json: &str, options: &JsValue) -> Result<Vec<u8>, JsValue> {
-    let font: babelfont::Font = serde_json::from_str(babelfont_json)
+    let mut font: babelfont::Font = serde_json::from_str(babelfont_json)
         .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
+
+    if let Some(subset_glyphs) = js_sys::Reflect::get(options, &JsValue::from_str("subset_glyphs"))
+        .ok()
+        .map(|val| {
+            val.dyn_into::<js_sys::Array>()
+                .unwrap()
+                .iter()
+                .filter_map(|v| v.as_string())
+                .collect::<Vec<String>>()
+        })
+    {
+        let subsetter = babelfont::filters::RetainGlyphs::new(subset_glyphs);
+        subsetter
+            .apply(&mut font)
+            .map_err(|e| JsValue::from_str(&format!("Subsetting failed: {:?}", e)))?;
+    }
 
     let options = CompilationOptions {
         skip_kerning: get_option(options, "skip_kerning", false),
