@@ -183,28 +183,28 @@ class AIAssistant {
             this.updateContextLabel(); // Update context label appearance based on focus
         });
 
-        // Click on view content to focus text field (except interactive elements)
-        const assistantView = document.getElementById('view-assistant');
-        if (assistantView) {
-            const viewContent = assistantView.querySelector('.view-content');
-            if (viewContent) {
-                viewContent.addEventListener('click', (event) => {
-                    // Don't focus if clicking on interactive elements
-                    if (event.target.tagName === 'BUTTON' ||
-                        event.target.tagName === 'INPUT' ||
-                        event.target.tagName === 'TEXTAREA' ||
-                        event.target.tagName === 'A' ||
-                        event.target.closest('button') ||
-                        event.target.closest('a')) {
-                        return;
-                    }
-                    // Focus the text field
-                    if (this.promptInput) {
-                        this.promptInput.focus();
-                    }
-                });
-            }
-        }
+        // // Click on view content to focus text field (except interactive elements)
+        // const assistantView = document.getElementById('view-assistant');
+        // if (assistantView) {
+        //     const viewContent = assistantView.querySelector('.view-content');
+        //     if (viewContent) {
+        //         viewContent.addEventListener('click', (event) => {
+        //             // Don't focus if clicking on interactive elements
+        //             if (event.target.tagName === 'BUTTON' ||
+        //                 event.target.tagName === 'INPUT' ||
+        //                 event.target.tagName === 'TEXTAREA' ||
+        //                 event.target.tagName === 'A' ||
+        //                 event.target.closest('button') ||
+        //                 event.target.closest('a')) {
+        //                 return;
+        //             }
+        //             // Focus the text field
+        //             if (this.promptInput) {
+        //                 this.promptInput.focus();
+        //             }
+        //         });
+        //     }
+        // }
 
         // Add global keyboard shortcuts when assistant is focused
         document.addEventListener('keydown', (event) => {
@@ -814,6 +814,7 @@ class AIAssistant {
                             runBtn.disabled = false;
                         }, 2000);
                     } catch (error) {
+                        console.error('Error running code in console:', error);
                         runBtn.innerHTML = '✗ Error';
                         setTimeout(() => {
                             runBtn.innerHTML = 'Run in Console';
@@ -835,15 +836,35 @@ class AIAssistant {
     }
 
     async runCodeInConsole(code) {
-        if (!window.term) {
-            throw new Error('Console not available');
-        }
-
         if (!window.pyodide) {
             throw new Error('Python environment not ready');
         }
 
+        if (!window.term) {
+            // Console not yet initialized - execute without terminal output
+            console.warn('Console terminal not available, executing Python code directly');
+            try {
+                await window.pyodide.runPythonAsync(code);
+                console.log('✅ Code executed successfully (console terminal not available for output)');
+
+                // Play done sound
+                if (window.playSound) {
+                    window.playSound('done');
+                }
+                return; // Success
+            } catch (error) {
+                console.error('Python execution error:', error);
+                throw error;
+            }
+        }
+
         try {
+            // Switch to console view first
+            const consoleView = document.getElementById('view-console');
+            if (consoleView) {
+                consoleView.click();
+            }
+
             window.term.echo('---');
             window.term.echo('🚀 Running assistant-generated code...');
             await window.pyodide.runPythonAsync(code);
@@ -861,22 +882,24 @@ class AIAssistant {
 
     openCodeInEditor(code) {
         // Get the script editor instance
-        if (window.scriptEditor && window.scriptEditor.editor) {
+        if (window.scriptEditor) {
             // Set the code in the editor
-            window.scriptEditor.editor.setValue(code, -1); // -1 moves cursor to start
+            window.scriptEditor.setValue(code, -1); // -1 moves cursor to start
 
             // Focus the script editor view
             const scriptView = document.getElementById('view-scripts');
             if (scriptView) {
                 scriptView.click(); // This will trigger the focus
             }
+        } else {
+            console.error('Script editor not available (window.scriptEditor is not defined)');
         }
     }
 
     showDiffReview(newCode, markdownText = '') {
         // Get current code from script editor
-        const oldCode = (window.scriptEditor && window.scriptEditor.editor)
-            ? window.scriptEditor.editor.getValue()
+        const oldCode = window.scriptEditor
+            ? window.scriptEditor.getValue()
             : '';
 
         // Store new code for later use
