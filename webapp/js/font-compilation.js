@@ -42,7 +42,7 @@ const COMPILATION_TARGETS = {
     typing: {
         skip_kerning: true,
         skip_features: false,
-        skip_metrics: true,
+        skip_metrics: false,
         skip_outlines: false,  // Keep outlines - skip_outlines hits unimplemented code in babelfont-rs
         dont_use_production_names: true,
     },
