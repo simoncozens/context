@@ -22,6 +22,10 @@ __pycache__/
 *.swo
 *~
 
+# Node.js
+node_modules/
+package-lock.json
+
 # Logs
 *.log
 npm-debug.log*
