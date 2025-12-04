@@ -58,7 +58,9 @@ class TabLifecycleManager {
 
                 return true;
             } else {
-                console.warn('[Tab Lifecycle] ⚠️ Persistent storage denied - data may be cleared by browser');
+                console.warn('[Tab Lifecycle] ⚠️ Persistent storage denied - localStorage may be cleared during low disk space');
+                console.info('[Tab Lifecycle] ℹ️ Your tab is still protected by Web Lock - it will not be killed');
+                console.info('[Tab Lifecycle] ℹ️ In-memory font data remains safe. Save regularly to disk for backup.');
                 return false;
             }
         } catch (error) {
