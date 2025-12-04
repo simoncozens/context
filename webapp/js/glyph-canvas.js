@@ -3623,6 +3623,70 @@ json.dumps(result)
         });
     }
 
+    buildPathFromNodes(nodes) {
+        // Build a canvas path from a nodes array
+        // Returns the startIdx for use in drawing direction arrows
+        if (!nodes || nodes.length === 0) {
+            return -1;
+        }
+
+        // Find first on-curve point to start
+        let startIdx = 0;
+        for (let i = 0; i < nodes.length; i++) {
+            const [, , type] = nodes[i];
+            if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
+                startIdx = i;
+                break;
+            }
+        }
+
+        const [startX, startY] = nodes[startIdx];
+        this.ctx.moveTo(startX, startY);
+
+        // Draw contour by looking ahead for control points
+        let i = 0;
+        while (i < nodes.length) {
+            const idx = (startIdx + i) % nodes.length;
+            const nextIdx = (startIdx + i + 1) % nodes.length;
+            const next2Idx = (startIdx + i + 2) % nodes.length;
+            const next3Idx = (startIdx + i + 3) % nodes.length;
+
+            const [, , type] = nodes[idx];
+            const [next1X, next1Y, next1Type] = nodes[nextIdx];
+
+            if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
+                // We're at an on-curve point, look ahead for next segment
+                if (next1Type === 'o' || next1Type === 'os') {
+                    // Next is off-curve - check if cubic (two consecutive off-curve)
+                    const [next2X, next2Y, next2Type] = nodes[next2Idx];
+                    const [next3X, next3Y] = nodes[next3Idx];
+
+                    if (next2Type === 'o' || next2Type === 'os') {
+                        // Cubic bezier: two off-curve control points + on-curve endpoint
+                        this.ctx.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
+                        i += 3; // Skip the two control points and endpoint
+                    } else {
+                        // Single off-curve - shouldn't happen with cubic, just draw line
+                        this.ctx.lineTo(next2X, next2Y);
+                        i += 2;
+                    }
+                } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
+                    // Next is on-curve - draw line
+                    this.ctx.lineTo(next1X, next1Y);
+                    i++;
+                } else {
+                    // Skip quadratic
+                    i++;
+                }
+            } else {
+                // Skip off-curve or quadratic points (should be handled by looking ahead)
+                i++;
+            }
+        }
+
+        return startIdx;
+    }
+
     drawGlyphTooltip() {
         // Draw glyph name tooltip on hover (in font coordinate space)
         // Don't show tooltip for the selected glyph in glyph edit mode
@@ -3862,66 +3926,15 @@ json.dumps(result)
 
             if (!nodes || nodes.length === 0) {
                 return;
-            }            // Draw the outline path
+            }
+
+            // Draw the outline path
             this.ctx.beginPath();
             this.ctx.strokeStyle = isDarkTheme ? '#ffffff' : '#000000';
             this.ctx.lineWidth = APP_SETTINGS.OUTLINE_EDITOR.OUTLINE_STROKE_WIDTH * invScale;
 
-            // Build the path using proper cubic bezier handling
-            let startIdx = 0;
-
-            // Find first on-curve point to start
-            for (let i = 0; i < nodes.length; i++) {
-                const [, , type] = nodes[i];
-                if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
-                    startIdx = i;
-                    break;
-                }
-            }
-
-            const [startX, startY] = nodes[startIdx];
-            this.ctx.moveTo(startX, startY);
-
-            // Draw contour by looking ahead for control points
-            let i = 0;
-            while (i < nodes.length) {
-                const idx = (startIdx + i) % nodes.length;
-                const nextIdx = (startIdx + i + 1) % nodes.length;
-                const next2Idx = (startIdx + i + 2) % nodes.length;
-                const next3Idx = (startIdx + i + 3) % nodes.length;
-
-                const [, , type] = nodes[idx];
-                const [next1X, next1Y, next1Type] = nodes[nextIdx];
-
-                if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
-                    // We're at an on-curve point, look ahead for next segment
-                    if (next1Type === 'o' || next1Type === 'os') {
-                        // Next is off-curve - check if cubic (two consecutive off-curve)
-                        const [next2X, next2Y, next2Type] = nodes[next2Idx];
-                        const [next3X, next3Y] = nodes[next3Idx];
-
-                        if (next2Type === 'o' || next2Type === 'os') {
-                            // Cubic bezier: two off-curve control points + on-curve endpoint
-                            this.ctx.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
-                            i += 3; // Skip the two control points and endpoint
-                        } else {
-                            // Single off-curve - shouldn't happen with cubic, just draw line
-                            this.ctx.lineTo(next2X, next2Y);
-                            i += 2;
-                        }
-                    } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
-                        // Next is on-curve - draw line
-                        this.ctx.lineTo(next1X, next1Y);
-                        i++;
-                    } else {
-                        // Skip quadratic
-                        i++;
-                    }
-                } else {
-                    // Skip off-curve or quadratic points (should be handled by looking ahead)
-                    i++;
-                }
-            }
+            // Build the path using the helper method
+            const startIdx = this.buildPathFromNodes(nodes);
 
             this.ctx.closePath();
             this.ctx.stroke();
@@ -4162,63 +4175,10 @@ json.dumps(result)
 
                         // Handle outline shapes (with nodes)
                         if (componentShape.nodes && componentShape.nodes.length > 0) {
-                            const nodes = componentShape.nodes;
-
                             this.ctx.beginPath();
 
-                            // Find first on-curve point to start
-                            let startIdx = 0;
-                            for (let i = 0; i < nodes.length; i++) {
-                                const [, , type] = nodes[i];
-                                if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
-                                    startIdx = i;
-                                    break;
-                                }
-                            }
-
-                            const [startX, startY] = nodes[startIdx];
-                            this.ctx.moveTo(startX, startY);
-
-                            // Draw contour by looking ahead for control points
-                            let i = 0;
-                            while (i < nodes.length) {
-                                const idx = (startIdx + i) % nodes.length;
-                                const nextIdx = (startIdx + i + 1) % nodes.length;
-                                const next2Idx = (startIdx + i + 2) % nodes.length;
-                                const next3Idx = (startIdx + i + 3) % nodes.length;
-
-                                const [, , type] = nodes[idx];
-                                const [next1X, next1Y, next1Type] = nodes[nextIdx];
-
-                                if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
-                                    // We're at an on-curve point, look ahead for next segment
-                                    if (next1Type === 'o' || next1Type === 'os') {
-                                        // Next is off-curve - check if cubic (two consecutive off-curve)
-                                        const [next2X, next2Y, next2Type] = nodes[next2Idx];
-                                        const [next3X, next3Y] = nodes[next3Idx];
-
-                                        if (next2Type === 'o' || next2Type === 'os') {
-                                            // Cubic bezier: two off-curve control points + on-curve endpoint
-                                            this.ctx.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
-                                            i += 3; // Skip the two control points and endpoint
-                                        } else {
-                                            // Single off-curve - shouldn't happen with cubic, just draw line
-                                            this.ctx.lineTo(next2X, next2Y);
-                                            i += 2;
-                                        }
-                                    } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
-                                        // Next is on-curve - draw line
-                                        this.ctx.lineTo(next1X, next1Y);
-                                        i++;
-                                    } else {
-                                        // Skip quadratic
-                                        i++;
-                                    }
-                                } else {
-                                    // Skip off-curve or quadratic points (should be handled by looking ahead)
-                                    i++;
-                                }
-                            }
+                            // Build the path using the helper method
+                            this.buildPathFromNodes(componentShape.nodes);
 
                             this.ctx.closePath();
 
