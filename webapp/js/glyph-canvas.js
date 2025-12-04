@@ -87,6 +87,7 @@ class GlyphCanvas {
         this.isDraggingComponent = false;
         this.layerDataDirty = false; // Track if layer data needs saving
         this.isPreviewMode = false; // Preview mode hides outline editor
+        this.isSliderActive = false; // Track if user is currently interacting with slider
 
         // Component recursion state
         this.componentStack = []; // Stack of {componentIndex, transform, layerData, glyphName} for nested editing
@@ -2954,12 +2955,14 @@ json.dumps(result)
             slider.addEventListener('mousedown', () => {
                 if (this.isGlyphEditMode) {
                     this.isPreviewMode = true;
+                    this.isSliderActive = true;
                     this.render();
                 }
             });
 
             // Exit preview mode and restore focus on mouseup
             slider.addEventListener('mouseup', () => {
+                this.isSliderActive = false;
                 if (this.isGlyphEditMode) {
                     this.isPreviewMode = false;
                     this.render();
@@ -2993,6 +2996,18 @@ json.dumps(result)
         });
 
         console.log(`Created ${axes.length} variable axis sliders`);
+
+        // Global mouseup handler to exit preview mode if slider was active
+        // This catches cases where mouse is released outside the slider element
+        document.addEventListener('mouseup', () => {
+            if (this.isSliderActive) {
+                this.isSliderActive = false;
+                if (this.isGlyphEditMode && this.isPreviewMode) {
+                    this.isPreviewMode = false;
+                    this.render();
+                }
+            }
+        });
     }
 
     async getDiscretionaryFeatures() {
