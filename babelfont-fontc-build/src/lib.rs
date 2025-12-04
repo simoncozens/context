@@ -1,3 +1,7 @@
+use babelfont::{
+    convertors::fontir::{BabelfontIrSource, CompilationOptions},
+    filters::FontFilter as _,
+};
 use wasm_bindgen::prelude::*;
 
 // Set up panic hook for better error messages
@@ -6,45 +10,62 @@ pub fn init() {
     console_error_panic_hook::set_once();
 }
 
+fn get_option(options: &JsValue, key: &str, default: bool) -> bool {
+    js_sys::Reflect::get(options, &JsValue::from_str(key))
+        .unwrap_or(JsValue::from_bool(default))
+        .as_bool()
+        .unwrap_or(default)
+}
+
 /// Compile a font from babelfont JSON directly to TTF
-/// 
+///
 /// This is the main entry point that takes a .babelfont JSON string
 /// and produces compiled TTF bytes.
-/// 
+///
 /// # Arguments
 /// * `babelfont_json` - JSON string in .babelfont format
-/// 
+/// * `options` - Compilation options:
+///  - `skip_kerning`: bool - Skip creation of kern tables
+///  - `skip_features`: bool - Skip OpenType feature compilation
+///  - `skip_metrics`: bool - Skip metrics compilation
+///  - `skip_outlines`: bool - Skip `glyf`/`gvar` table creation
+///  - `dont_use_production_names`: bool - Don't use production names for glyphs
+///  - `subset_glyphs`: String[] - List of glyph names to include
+///
 /// # Returns
 /// * `Vec<u8>` - Compiled TTF font bytes
 #[wasm_bindgen]
-pub fn compile_babelfont(babelfont_json: &str) -> Result<Vec<u8>, JsValue> {
-    // Step 1: Deserialize JSON → babelfont::Font
-    let font: babelfont::Font = serde_json::from_str(babelfont_json)
+pub fn compile_babelfont(babelfont_json: &str, options: &JsValue) -> Result<Vec<u8>, JsValue> {
+    let mut font: babelfont::Font = serde_json::from_str(babelfont_json)
         .map_err(|e| JsValue::from_str(&format!("JSON parse error: {}", e)))?;
-    
-    // Step 2: Create BabelfontIrSource from the Font
-    let source = babelfont::convertors::fontir::BabelfontIrSource::new_from_memory(font)
-        .map_err(|e| JsValue::from_str(&format!("Failed to create IR source: {}", e)))?;
-    
-    // Step 3: Use fontc to compile
-    // Use empty path - fontc will keep everything in memory when flags are disabled
-    let build_dir = std::path::Path::new("");
-    
-    // Disable filesystem-dependent flags to keep everything in memory
-    // Also disable PRODUCTION_NAMES to use source glyph names instead of production names
-    let mut flags = fontir::orchestration::Flags::default();
-    flags.remove(fontir::orchestration::Flags::EMIT_IR);
-    flags.remove(fontir::orchestration::Flags::EMIT_DEBUG);
-    flags.remove(fontir::orchestration::Flags::PRODUCTION_NAMES);
-    
-    let compiled_font = fontc::generate_font(
-        Box::new(source),
-        build_dir,
-        None,
-        flags,
-        false,
-    ).map_err(|e| JsValue::from_str(&format!("Compilation failed: {:?}", e)))?;
-    
+
+    if let Some(subset_glyphs) = js_sys::Reflect::get(options, &JsValue::from_str("subset_glyphs"))
+        .ok()
+        .map(|val| {
+            val.dyn_into::<js_sys::Array>()
+                .unwrap()
+                .iter()
+                .filter_map(|v| v.as_string())
+                .collect::<Vec<String>>()
+        })
+    {
+        let subsetter = babelfont::filters::RetainGlyphs::new(subset_glyphs);
+        subsetter
+            .apply(&mut font)
+            .map_err(|e| JsValue::from_str(&format!("Subsetting failed: {:?}", e)))?;
+    }
+
+    let options = CompilationOptions {
+        skip_kerning: get_option(options, "skip_kerning", false),
+        skip_features: get_option(options, "skip_features", false),
+        skip_metrics: get_option(options, "skip_metrics", false),
+        skip_outlines: get_option(options, "skip_outlines", false),
+        dont_use_production_names: get_option(options, "dont_use_production_names", false),
+    };
+
+    let compiled_font = BabelfontIrSource::compile(font, options)
+        .map_err(|e| JsValue::from_str(&format!("Compilation failed: {:?}", e)))?;
+
     Ok(compiled_font)
 }
 
