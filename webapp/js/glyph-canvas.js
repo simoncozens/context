@@ -3516,61 +3516,25 @@ json.dumps(result)
                 } else {
                     this.ctx.fillStyle = colors.GLYPH_NORMAL;
                 }
-            } try {
-                // Get glyph outline from HarfBuzz (supports variations)
-                const glyphData = this.hbFont.glyphToPath(glyphId);
+            }
 
-                if (glyphData) {
-                    this.ctx.save();
-                    this.ctx.translate(x, y);
+            // Get glyph outline from HarfBuzz (supports variations)
+            const glyphData = this.hbFont.glyphToPath(glyphId);
 
-                    // Draw the path from HarfBuzz data
-                    // No need to flip Y here - the main transform matrix already flips Y
-                    this.ctx.beginPath();
+            if (glyphData) {
+                this.ctx.save();
+                this.ctx.translate(x, y);
 
-                    // Parse the SVG path data
-                    const path = new Path2D(glyphData);
+                // Draw the path from HarfBuzz data
+                // No need to flip Y here - the main transform matrix already flips Y
+                this.ctx.beginPath();
 
-                    this.ctx.fill(path);
+                // Parse the SVG path data
+                const path = new Path2D(glyphData);
 
-                    this.ctx.restore();
-                }
-            } catch (error) {
-                // Fallback to OpenType.js if HarfBuzz glyph drawing fails
-                if (this.opentypeFont) {
-                    const otGlyph = this.opentypeFont.glyphs.get(glyphId);
+                this.ctx.fill(path);
 
-                    if (otGlyph) {
-                        this.ctx.save();
-                        this.ctx.translate(x, y);
-
-                        const path = otGlyph.getPath(0, 0, 1000);
-                        this.ctx.beginPath();
-
-                        for (const cmd of path.commands) {
-                            switch (cmd.type) {
-                                case 'M':
-                                    this.ctx.moveTo(cmd.x, -cmd.y);
-                                    break;
-                                case 'L':
-                                    this.ctx.lineTo(cmd.x, -cmd.y);
-                                    break;
-                                case 'Q':
-                                    this.ctx.quadraticCurveTo(cmd.x1, -cmd.y1, cmd.x, -cmd.y);
-                                    break;
-                                case 'C':
-                                    this.ctx.bezierCurveTo(cmd.x1, -cmd.y1, cmd.x2, -cmd.y2, cmd.x, -cmd.y);
-                                    break;
-                                case 'Z':
-                                    this.ctx.closePath();
-                                    break;
-                            }
-                        }
-
-                        this.ctx.fill();
-                        this.ctx.restore();
-                    }
-                }
+                this.ctx.restore();
             }
 
             xPosition += xAdvance;
