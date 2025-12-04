@@ -47,6 +47,9 @@ declare global {
             outputFile: string
         ) => Promise<Uint8Array>;
 
+        // From font-manager.js
+        fontManager: FontManager;
+
         // From font-dropdown.js
         fontDropdownManager: FontDropdownManager;
 
