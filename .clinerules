@@ -15,6 +15,7 @@ This is a WebAssembly-based font editor using Rust (fontc/babelfont) compiled to
 - Use PascalCase for classes
 - Add JSDoc comments for complex functions
 - Use prettier for code formatting
+- When adding properties to the global `window` object, ensure they are properly typed in `js/index.d.ts`
 
 ### Rust
 - Follow standard Rust conventions
