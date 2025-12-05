@@ -1205,18 +1205,6 @@ class GlyphCanvas {
         this.render();
     }
 
-    getTransformMatrix() {
-        // Return a transformation matrix for converting font coordinates to canvas coordinates
-        return {
-            a: this.scale,
-            b: 0,
-            c: 0,
-            d: -this.scale, // Flip Y axis (font coordinates have Y going up)
-            e: this.panX,
-            f: this.panY
-        };
-    }
-
     async loadHarfBuzz() {
         try {
             // Wait for createHarfBuzz to be available
