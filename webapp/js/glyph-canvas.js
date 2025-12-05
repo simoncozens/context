@@ -1295,30 +1295,19 @@ class GlyphCanvas {
             );
 
             if (glyphInfo.isTyped) {
-                // For typed characters, check if it's the base glyph or a vowel mark
-                const isBaseGlyph = glyphInfo.logicalPosition === clusterStart;
-
-                if (isBaseGlyph) {
-                    // Base glyph (first character in cluster): position at cluster start
-                    this.cursorPosition = clusterStart;
-                    console.log(
-                        'Base glyph - set cursor position at cluster start:',
-                        this.cursorPosition
-                    );
-                } else {
-                    // Other characters in cluster: position at their logical position
-                    this.cursorPosition = glyphInfo.logicalPosition;
-                    console.log(
-                        'Non-base character - set cursor position at logical position:',
-                        this.cursorPosition
-                    );
-                }
+                // For typed characters, position cursor at the character's logical position
+                // (which is the space before the character, where we entered from)
+                this.textRunEditor.cursorPosition = glyphInfo.logicalPosition;
+                console.log(
+                    'Typed character - set cursor position at logical position:',
+                    this.textRunEditor.cursorPosition
+                );
             } else {
                 // For shaped glyphs, position cursor at the cluster start
-                this.cursorPosition = clusterStart;
+                this.textRunEditor.cursorPosition = clusterStart;
                 console.log(
                     'Shaped glyph - set cursor position at cluster start:',
-                    this.cursorPosition
+                    this.textRunEditor.cursorPosition
                 );
             }
             this.textRunEditor.updateCursorVisualPosition();
