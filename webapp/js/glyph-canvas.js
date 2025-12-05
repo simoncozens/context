@@ -18,7 +18,8 @@ class GlyphCanvas {
         this.viewportManager = null; // Loaded in init() when we have a client rect
 
         // Text buffer and shaping
-        this.textBuffer = localStorage.getItem('glyphCanvasTextBuffer') || "Hamburgevons";
+        this.textBuffer =
+            localStorage.getItem('glyphCanvasTextBuffer') || 'Hamburgevons';
         this.shapedGlyphs = [];
         this.currentFont = null;
         this.fontBlob = null;
@@ -42,10 +43,13 @@ class GlyphCanvas {
 
         // Selection state
         this.selectionStart = null; // Start of selection (null = no selection)
-        this.selectionEnd = null;   // End of selection
+        this.selectionEnd = null; // End of selection
 
         // Animation state
-        this.animationFrames = parseInt(localStorage.getItem('animationFrames') || '10', 10);
+        this.animationFrames = parseInt(
+            localStorage.getItem('animationFrames') || '10',
+            10
+        );
         this.isAnimating = false;
         this.animationStartValues = {};
         this.animationTargetValues = {};
@@ -154,7 +158,9 @@ class GlyphCanvas {
             this.bidi = bidi_js(); // It's a factory function
             console.log('bidi-js support initialized', this.bidi);
         } else {
-            console.warn('bidi-js not loaded - bidirectional text may not render correctly');
+            console.warn(
+                'bidi-js not loaded - bidirectional text may not render correctly'
+            );
         }
 
         // Load HarfBuzz
@@ -189,10 +195,14 @@ class GlyphCanvas {
         this.canvas.addEventListener('mouseleave', (e) => this.onMouseUp(e));
 
         // Wheel event for zooming
-        this.canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+        this.canvas.addEventListener('wheel', (e) => this.onWheel(e), {
+            passive: false
+        });
 
         // Mouse move for hover detection
-        this.canvas.addEventListener('mousemove', (e) => this.onMouseMoveHover(e));
+        this.canvas.addEventListener('mousemove', (e) =>
+            this.onMouseMoveHover(e)
+        );
 
         // Keyboard events for cursor and text input
         this.canvas.addEventListener('keydown', (e) => this.onKeyDown(e));
@@ -204,7 +214,8 @@ class GlyphCanvas {
             if (e.key === 'Escape' && this.isGlyphEditMode) {
                 // Check if editor view is focused
                 const editorView = document.querySelector('#view-editor');
-                const isEditorFocused = editorView && editorView.classList.contains('focused');
+                const isEditorFocused =
+                    editorView && editorView.classList.contains('focused');
 
                 if (!isEditorFocused) {
                     return; // Don't handle Escape if editor view is not focused
@@ -214,7 +225,10 @@ class GlyphCanvas {
 
                 // Priority 1: If we have a saved previous state from slider interaction, restore it first
                 // (This takes precedence over exiting component editing)
-                if (this.previousSelectedLayerId !== null && this.previousVariationSettings !== null) {
+                if (
+                    this.previousSelectedLayerId !== null &&
+                    this.previousVariationSettings !== null
+                ) {
                     // Restore previous layer selection and axis values
                     this.selectedLayerId = this.previousSelectedLayerId;
 
@@ -223,7 +237,9 @@ class GlyphCanvas {
                         this.isAnimating = false;
                     }
                     this.animationStartValues = { ...this.variationSettings };
-                    this.animationTargetValues = { ...this.previousVariationSettings };
+                    this.animationTargetValues = {
+                        ...this.previousVariationSettings
+                    };
                     this.animationCurrentFrame = 0;
                     this.isAnimating = true;
                     this.animateVariation();
@@ -298,12 +314,26 @@ class GlyphCanvas {
 
         // Check for double-click
         if (e.detail === 2) {
-            console.log('Double-click detected. isGlyphEditMode:', this.isGlyphEditMode, 'selectedLayerId:', this.selectedLayerId, 'hoveredComponentIndex:', this.hoveredComponentIndex);
+            console.log(
+                'Double-click detected. isGlyphEditMode:',
+                this.isGlyphEditMode,
+                'selectedLayerId:',
+                this.selectedLayerId,
+                'hoveredComponentIndex:',
+                this.hoveredComponentIndex
+            );
             // In outline editor mode with layer selected
-            if (this.isGlyphEditMode && this.selectedLayerId && this.layerData) {
+            if (
+                this.isGlyphEditMode &&
+                this.selectedLayerId &&
+                this.layerData
+            ) {
                 // Double-click on component - enter component editing (without selecting it)
                 if (this.hoveredComponentIndex !== null) {
-                    console.log('Entering component editing for index:', this.hoveredComponentIndex);
+                    console.log(
+                        'Entering component editing for index:',
+                        this.hoveredComponentIndex
+                    );
                     // Clear component selection before entering
                     this.selectedComponents = [];
                     this.enterComponentEditing(this.hoveredComponentIndex);
@@ -322,7 +352,10 @@ class GlyphCanvas {
                     return;
                 }
                 // Double-click on other glyph - switch to that glyph
-                if (this.hoveredGlyphIndex >= 0 && this.hoveredGlyphIndex !== this.selectedGlyphIndex) {
+                if (
+                    this.hoveredGlyphIndex >= 0 &&
+                    this.hoveredGlyphIndex !== this.selectedGlyphIndex
+                ) {
                     this.selectGlyphByIndex(this.hoveredGlyphIndex);
                     return;
                 }
@@ -336,20 +369,31 @@ class GlyphCanvas {
         }
 
         // In outline editor mode with layer selected (but not in preview mode)
-        if (this.isGlyphEditMode && this.selectedLayerId && this.layerData && !this.isPreviewMode) {
+        if (
+            this.isGlyphEditMode &&
+            this.selectedLayerId &&
+            this.layerData &&
+            !this.isPreviewMode
+        ) {
             // Check if clicking on a component first (components take priority)
             if (this.hoveredComponentIndex !== null) {
                 if (e.shiftKey) {
                     // Shift-click: add to or remove from selection (keep points and anchors for mixed selection)
-                    const existingIndex = this.selectedComponents.indexOf(this.hoveredComponentIndex);
+                    const existingIndex = this.selectedComponents.indexOf(
+                        this.hoveredComponentIndex
+                    );
                     if (existingIndex >= 0) {
                         this.selectedComponents.splice(existingIndex, 1);
                     } else {
-                        this.selectedComponents.push(this.hoveredComponentIndex);
+                        this.selectedComponents.push(
+                            this.hoveredComponentIndex
+                        );
                     }
                     this.render();
                 } else {
-                    const isInSelection = this.selectedComponents.includes(this.hoveredComponentIndex);
+                    const isInSelection = this.selectedComponents.includes(
+                        this.hoveredComponentIndex
+                    );
 
                     if (!isInSelection) {
                         this.selectedComponents = [this.hoveredComponentIndex];
@@ -372,7 +416,9 @@ class GlyphCanvas {
             if (this.hoveredAnchorIndex !== null) {
                 if (e.shiftKey) {
                     // Shift-click: add to or remove from selection (keep points selected for mixed selection)
-                    const existingIndex = this.selectedAnchors.indexOf(this.hoveredAnchorIndex);
+                    const existingIndex = this.selectedAnchors.indexOf(
+                        this.hoveredAnchorIndex
+                    );
                     if (existingIndex >= 0) {
                         // Remove from selection
                         this.selectedAnchors.splice(existingIndex, 1);
@@ -383,7 +429,9 @@ class GlyphCanvas {
                     this.render();
                 } else {
                     // Check if clicked anchor is already in selection
-                    const isInSelection = this.selectedAnchors.includes(this.hoveredAnchorIndex);
+                    const isInSelection = this.selectedAnchors.includes(
+                        this.hoveredAnchorIndex
+                    );
 
                     if (!isInSelection) {
                         // Regular click on unselected anchor: select only this anchor, clear points
@@ -407,9 +455,11 @@ class GlyphCanvas {
             if (this.hoveredPointIndex) {
                 if (e.shiftKey) {
                     // Shift-click: add to or remove from selection (keep anchors selected for mixed selection)
-                    const existingIndex = this.selectedPoints.findIndex(p =>
-                        p.contourIndex === this.hoveredPointIndex.contourIndex &&
-                        p.nodeIndex === this.hoveredPointIndex.nodeIndex
+                    const existingIndex = this.selectedPoints.findIndex(
+                        (p) =>
+                            p.contourIndex ===
+                                this.hoveredPointIndex.contourIndex &&
+                            p.nodeIndex === this.hoveredPointIndex.nodeIndex
                     );
                     if (existingIndex >= 0) {
                         // Remove from selection
@@ -421,9 +471,11 @@ class GlyphCanvas {
                     this.render();
                 } else {
                     // Check if clicked point is already in selection
-                    const isInSelection = this.selectedPoints.some(p =>
-                        p.contourIndex === this.hoveredPointIndex.contourIndex &&
-                        p.nodeIndex === this.hoveredPointIndex.nodeIndex
+                    const isInSelection = this.selectedPoints.some(
+                        (p) =>
+                            p.contourIndex ===
+                                this.hoveredPointIndex.contourIndex &&
+                            p.nodeIndex === this.hoveredPointIndex.nodeIndex
                     );
 
                     if (!isInSelection) {
@@ -453,7 +505,13 @@ class GlyphCanvas {
 
         // Check if clicking on text to position cursor (only in text edit mode, not on double-click or glyph)
         // Skip if hovering over a glyph since that might be a double-click to enter edit mode
-        if (!this.isGlyphEditMode && !e.shiftKey && !e.ctrlKey && !e.metaKey && this.hoveredGlyphIndex < 0) {
+        if (
+            !this.isGlyphEditMode &&
+            !e.shiftKey &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            this.hoveredGlyphIndex < 0
+        ) {
             const clickedPos = this.getClickedCursorPosition(e);
             if (clickedPos !== null) {
                 this.clearSelection();
@@ -514,8 +572,10 @@ class GlyphCanvas {
             );
 
         // Calculate delta from last position
-        const deltaX = Math.round(glyphX) - Math.round(this.lastGlyphX || glyphX);
-        const deltaY = Math.round(glyphY) - Math.round(this.lastGlyphY || glyphY);
+        const deltaX =
+            Math.round(glyphX) - Math.round(this.lastGlyphX || glyphX);
+        const deltaY =
+            Math.round(glyphY) - Math.round(this.lastGlyphY || glyphY);
 
         this.lastGlyphX = glyphX;
         this.lastGlyphY = glyphY;
@@ -534,9 +594,14 @@ class GlyphCanvas {
     _updateDraggedPoints(deltaX, deltaY) {
         for (const point of this.selectedPoints) {
             const { contourIndex, nodeIndex } = point;
-            if (this.layerData.shapes[contourIndex] && this.layerData.shapes[contourIndex].nodes[nodeIndex]) {
-                this.layerData.shapes[contourIndex].nodes[nodeIndex][0] += deltaX;
-                this.layerData.shapes[contourIndex].nodes[nodeIndex][1] += deltaY;
+            if (
+                this.layerData.shapes[contourIndex] &&
+                this.layerData.shapes[contourIndex].nodes[nodeIndex]
+            ) {
+                this.layerData.shapes[contourIndex].nodes[nodeIndex][0] +=
+                    deltaX;
+                this.layerData.shapes[contourIndex].nodes[nodeIndex][1] +=
+                    deltaY;
             }
         }
     }
@@ -594,18 +659,24 @@ class GlyphCanvas {
     }
 
     onMouseMoveHover(e) {
-        if (this.isDragging || this.isDraggingPoint || this.isDraggingAnchor) return; // Don't detect hover while dragging
+        if (this.isDragging || this.isDraggingPoint || this.isDraggingAnchor)
+            return; // Don't detect hover while dragging
 
         const rect = this.canvas.getBoundingClientRect();
         // Store both canvas and client coordinates
         this.mouseX = e.clientX - rect.left;
         this.mouseY = e.clientY - rect.top;
         // Scale for HiDPI
-        this.mouseCanvasX = this.mouseX * this.canvas.width / rect.width;
-        this.mouseCanvasY = this.mouseY * this.canvas.height / rect.height;
+        this.mouseCanvasX = (this.mouseX * this.canvas.width) / rect.width;
+        this.mouseCanvasY = (this.mouseY * this.canvas.height) / rect.height;
 
         // In outline editor mode, check for hovered components, anchors and points first (unless in preview mode), then other glyphs
-        if (this.isGlyphEditMode && this.selectedLayerId && this.layerData && !this.isPreviewMode) {
+        if (
+            this.isGlyphEditMode &&
+            this.selectedLayerId &&
+            this.layerData &&
+            !this.isPreviewMode
+        ) {
             this.updateHoveredComponent();
             this.updateHoveredAnchor();
             this.updateHoveredPoint();
@@ -629,9 +700,17 @@ class GlyphCanvas {
         // In outline editing mode, use pointer for components/points/anchors, grab for panning (NO text cursor)
         // In preview mode, always show grab cursor
         if (this.isGlyphEditMode) {
-            if (this.isPreviewMode || !this.selectedLayerId || !this.layerData) {
+            if (
+                this.isPreviewMode ||
+                !this.selectedLayerId ||
+                !this.layerData
+            ) {
                 this.canvas.style.cursor = 'grab';
-            } else if (this.hoveredComponentIndex !== null || this.hoveredPointIndex || this.hoveredAnchorIndex !== null) {
+            } else if (
+                this.hoveredComponentIndex !== null ||
+                this.hoveredPointIndex ||
+                this.hoveredAnchorIndex !== null
+            ) {
                 this.canvas.style.cursor = 'pointer';
             } else {
                 this.canvas.style.cursor = 'grab';
@@ -696,7 +775,9 @@ class GlyphCanvas {
                     this.ctx.translate(x, y);
 
                     // Test if mouse point is in path (in canvas coordinates)
-                    if (this.ctx.isPointInPath(path, this.mouseX, this.mouseY)) {
+                    if (
+                        this.ctx.isPointInPath(path, this.mouseX, this.mouseY)
+                    ) {
                         foundIndex = i;
                         this.ctx.restore();
                         break;
@@ -730,7 +811,7 @@ class GlyphCanvas {
         // Calculate glyph offset for selected glyph
         let xPosition = 0;
         for (let i = 0; i < this.selectedGlyphIndex; i++) {
-            xPosition += (this.shapedGlyphs[i].ax || 0);
+            xPosition += this.shapedGlyphs[i].ax || 0;
         }
         const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
         const xOffset = glyph.dx || 0;
@@ -740,14 +821,27 @@ class GlyphCanvas {
         let foundComponentIndex = null;
 
         // Transform mouse to component local space
-        const { glyphX, glyphY } = this.transformMouseToComponentSpace(mouseX, mouseY);
-        console.log(`updateHoveredComponent: mouseX=${mouseX}, mouseY=${mouseY}, glyphX=${glyphX}, glyphY=${glyphY}, componentStack.length=${this.componentStack.length}`);
+        const { glyphX, glyphY } = this.transformMouseToComponentSpace(
+            mouseX,
+            mouseY
+        );
+        console.log(
+            `updateHoveredComponent: mouseX=${mouseX}, mouseY=${mouseY}, glyphX=${glyphX}, glyphY=${glyphY}, componentStack.length=${this.componentStack.length}`
+        );
 
         this.layerData.shapes.forEach((shape, index) => {
             if (shape.Component) {
                 // This is a component - check if hovering near its origin OR inside its outline
-                let a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0;
-                if (shape.Component.transform && Array.isArray(shape.Component.transform)) {
+                let a = 1,
+                    b = 0,
+                    c = 0,
+                    d = 1,
+                    tx = 0,
+                    ty = 0;
+                if (
+                    shape.Component.transform &&
+                    Array.isArray(shape.Component.transform)
+                ) {
                     a = shape.Component.transform[0] || 1;
                     b = shape.Component.transform[1] || 0;
                     c = shape.Component.transform[2] || 0;
@@ -764,33 +858,72 @@ class GlyphCanvas {
                 }
 
                 // Check if inside component outline (including nested components)
-                if (shape.Component.layerData && shape.Component.layerData.shapes) {
-                    console.log(`Checking component ${index}, componentStack.length=${this.componentStack.length}, outer transform=[${a},${b},${c},${d},${tx},${ty}]`);
+                if (
+                    shape.Component.layerData &&
+                    shape.Component.layerData.shapes
+                ) {
+                    console.log(
+                        `Checking component ${index}, componentStack.length=${this.componentStack.length}, outer transform=[${a},${b},${c},${d},${tx},${ty}]`
+                    );
                     if (this.componentStack.length > 0) {
-                        console.log(`ComponentStack[0].transform:`, this.componentStack[0].transform);
-                        console.log(`Accumulated transform:`, this.getAccumulatedTransform());
+                        console.log(
+                            `ComponentStack[0].transform:`,
+                            this.componentStack[0].transform
+                        );
+                        console.log(
+                            `Accumulated transform:`,
+                            this.getAccumulatedTransform()
+                        );
                     }
 
-
-                    const checkShapesRecursive = (shapes, parentTransform = [1, 0, 0, 1, 0, 0], depth = 0) => {
+                    const checkShapesRecursive = (
+                        shapes,
+                        parentTransform = [1, 0, 0, 1, 0, 0],
+                        depth = 0
+                    ) => {
                         for (const componentShape of shapes) {
                             // Handle nested components recursively
                             if (componentShape.Component) {
-                                const nestedTransform = componentShape.Component.transform || [1, 0, 0, 1, 0, 0];
-                                console.log(`  ${'  '.repeat(depth)}Nested component at depth ${depth}, transform=[${nestedTransform}]`);
+                                const nestedTransform = componentShape.Component
+                                    .transform || [1, 0, 0, 1, 0, 0];
+                                console.log(
+                                    `  ${'  '.repeat(depth)}Nested component at depth ${depth}, transform=[${nestedTransform}]`
+                                );
                                 // Multiply parent transform with nested transform
                                 const combinedTransform = [
-                                    parentTransform[0] * nestedTransform[0] + parentTransform[2] * nestedTransform[1],
-                                    parentTransform[1] * nestedTransform[0] + parentTransform[3] * nestedTransform[1],
-                                    parentTransform[0] * nestedTransform[2] + parentTransform[2] * nestedTransform[3],
-                                    parentTransform[1] * nestedTransform[2] + parentTransform[3] * nestedTransform[3],
-                                    parentTransform[0] * nestedTransform[4] + parentTransform[2] * nestedTransform[5] + parentTransform[4],
-                                    parentTransform[1] * nestedTransform[4] + parentTransform[3] * nestedTransform[5] + parentTransform[5]
+                                    parentTransform[0] * nestedTransform[0] +
+                                        parentTransform[2] * nestedTransform[1],
+                                    parentTransform[1] * nestedTransform[0] +
+                                        parentTransform[3] * nestedTransform[1],
+                                    parentTransform[0] * nestedTransform[2] +
+                                        parentTransform[2] * nestedTransform[3],
+                                    parentTransform[1] * nestedTransform[2] +
+                                        parentTransform[3] * nestedTransform[3],
+                                    parentTransform[0] * nestedTransform[4] +
+                                        parentTransform[2] *
+                                            nestedTransform[5] +
+                                        parentTransform[4],
+                                    parentTransform[1] * nestedTransform[4] +
+                                        parentTransform[3] *
+                                            nestedTransform[5] +
+                                        parentTransform[5]
                                 ];
-                                console.log(`  ${'  '.repeat(depth)}Combined transform=[${combinedTransform}]`);
+                                console.log(
+                                    `  ${'  '.repeat(depth)}Combined transform=[${combinedTransform}]`
+                                );
 
-                                if (componentShape.Component.layerData && componentShape.Component.layerData.shapes) {
-                                    if (checkShapesRecursive(componentShape.Component.layerData.shapes, combinedTransform, depth + 1)) {
+                                if (
+                                    componentShape.Component.layerData &&
+                                    componentShape.Component.layerData.shapes
+                                ) {
+                                    if (
+                                        checkShapesRecursive(
+                                            componentShape.Component.layerData
+                                                .shapes,
+                                            combinedTransform,
+                                            depth + 1
+                                        )
+                                    ) {
                                         return true;
                                     }
                                 }
@@ -798,13 +931,23 @@ class GlyphCanvas {
                             }
 
                             // Handle outline shapes
-                            if (componentShape.nodes && componentShape.nodes.length > 0) {
-                                console.log(`  ${'  '.repeat(depth)}Outline shape at depth ${depth}, parentTransform=[${parentTransform}]`);
-                                console.log(`  ${'  '.repeat(depth)}First node: [${componentShape.nodes[0]}]`);
+                            if (
+                                componentShape.nodes &&
+                                componentShape.nodes.length > 0
+                            ) {
+                                console.log(
+                                    `  ${'  '.repeat(depth)}Outline shape at depth ${depth}, parentTransform=[${parentTransform}]`
+                                );
+                                console.log(
+                                    `  ${'  '.repeat(depth)}First node: [${componentShape.nodes[0]}]`
+                                );
                                 const path = new Path2D();
 
                                 // Build the path using the shared helper method
-                                this.buildPathFromNodes(componentShape.nodes, path);
+                                this.buildPathFromNodes(
+                                    componentShape.nodes,
+                                    path
+                                );
                                 path.closePath();
 
                                 // Apply transform to canvas for hit testing
@@ -838,30 +981,54 @@ class GlyphCanvas {
                                 } else {
                                     // Identity transform - glyphX/glyphY are already in the right space
                                     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-                                    console.log(`  ${'  '.repeat(depth)}Canvas setup: identity (glyphX/Y already transformed)`);
+                                    console.log(
+                                        `  ${'  '.repeat(depth)}Canvas setup: identity (glyphX/Y already transformed)`
+                                    );
                                 }
 
                                 // Apply the component's own transform
                                 this.ctx.transform(a, b, c, d, tx, ty);
-                                console.log(`  ${'  '.repeat(depth)}Applied component transform: [${a},${b},${c},${d},${tx},${ty}]`);
-                                console.log(`  ${'  '.repeat(depth)}After component transform, canvas would place outline at: x=${78 + tx}, y=${631 + ty} (for first node [78,631])`);
+                                console.log(
+                                    `  ${'  '.repeat(depth)}Applied component transform: [${a},${b},${c},${d},${tx},${ty}]`
+                                );
+                                console.log(
+                                    `  ${'  '.repeat(depth)}After component transform, canvas would place outline at: x=${78 + tx}, y=${631 + ty} (for first node [78,631])`
+                                );
 
                                 // Apply accumulated transforms from nested components within this component
                                 this.ctx.transform(
-                                    parentTransform[0], parentTransform[1],
-                                    parentTransform[2], parentTransform[3],
-                                    parentTransform[4], parentTransform[5]
+                                    parentTransform[0],
+                                    parentTransform[1],
+                                    parentTransform[2],
+                                    parentTransform[3],
+                                    parentTransform[4],
+                                    parentTransform[5]
                                 );
-                                console.log(`  ${'  '.repeat(depth)}Applied nested transform: [${parentTransform}]`);
+                                console.log(
+                                    `  ${'  '.repeat(depth)}Applied nested transform: [${parentTransform}]`
+                                );
 
                                 // Test if mouse point is in path
                                 // At main level: use mouseX, mouseY (canvas coordinates)
                                 // Inside component: use glyphX, glyphY (component local coordinates)
-                                const testX = this.componentStack.length === 0 ? mouseX : glyphX;
-                                const testY = this.componentStack.length === 0 ? mouseY : glyphY;
-                                const isInPath = this.ctx.isPointInPath(path, testX, testY);
-                                console.log(`  ${'  '.repeat(depth)}Hit test at (${testX}, ${testY}): ${isInPath}`);
-                                this.ctx.restore(); if (isInPath) {
+                                const testX =
+                                    this.componentStack.length === 0
+                                        ? mouseX
+                                        : glyphX;
+                                const testY =
+                                    this.componentStack.length === 0
+                                        ? mouseY
+                                        : glyphY;
+                                const isInPath = this.ctx.isPointInPath(
+                                    path,
+                                    testX,
+                                    testY
+                                );
+                                console.log(
+                                    `  ${'  '.repeat(depth)}Hit test at (${testX}, ${testY}): ${isInPath}`
+                                );
+                                this.ctx.restore();
+                                if (isInPath) {
                                     return true;
                                 }
                             }
@@ -869,7 +1036,9 @@ class GlyphCanvas {
                         return false;
                     };
 
-                    if (checkShapesRecursive(shape.Component.layerData.shapes)) {
+                    if (
+                        checkShapesRecursive(shape.Component.layerData.shapes)
+                    ) {
                         foundComponentIndex = index;
                         return;
                     }
@@ -900,7 +1069,9 @@ class GlyphCanvas {
         let foundAnchorIndex = null;
 
         this.layerData.anchors.forEach((anchor, index) => {
-            const dist = Math.sqrt((anchor.x - glyphX) ** 2 + (anchor.y - glyphY) ** 2);
+            const dist = Math.sqrt(
+                (anchor.x - glyphX) ** 2 + (anchor.y - glyphY) ** 2
+            );
             if (dist <= hitRadius) {
                 foundAnchorIndex = index;
             }
@@ -919,7 +1090,10 @@ class GlyphCanvas {
         }
 
         // Transform mouse coordinates to component local space
-        const { glyphX, glyphY } = this.transformMouseToComponentSpace(this.mouseX, this.mouseY);
+        const { glyphX, glyphY } = this.transformMouseToComponentSpace(
+            this.mouseX,
+            this.mouseY
+        );
 
         // Check each point in each contour
         const hitRadius = 10 / this.viewportManager.scale; // 10 pixels in screen space
@@ -933,7 +1107,11 @@ class GlyphCanvas {
                 shape.nodes = [];
                 for (let i = 0; i < parts.length; i += 3) {
                     if (i + 2 < parts.length) {
-                        shape.nodes.push([parseFloat(parts[i]), parseFloat(parts[i + 1]), parts[i + 2]]);
+                        shape.nodes.push([
+                            parseFloat(parts[i]),
+                            parseFloat(parts[i + 1]),
+                            parts[i + 2]
+                        ]);
                     }
                 }
             }
@@ -950,7 +1128,10 @@ class GlyphCanvas {
             });
         });
 
-        if (JSON.stringify(foundPoint) !== JSON.stringify(this.hoveredPointIndex)) {
+        if (
+            JSON.stringify(foundPoint) !==
+            JSON.stringify(this.hoveredPointIndex)
+        ) {
             this.hoveredPointIndex = foundPoint;
             this.render();
         }
@@ -958,7 +1139,11 @@ class GlyphCanvas {
 
     moveSelectedPoints(deltaX, deltaY) {
         // Move all selected points by the given delta
-        if (!this.layerData || !this.layerData.shapes || this.selectedPoints.length === 0) {
+        if (
+            !this.layerData ||
+            !this.layerData.shapes ||
+            this.selectedPoints.length === 0
+        ) {
             return;
         }
 
@@ -978,7 +1163,11 @@ class GlyphCanvas {
 
     moveSelectedAnchors(deltaX, deltaY) {
         // Move all selected anchors by the given delta
-        if (!this.layerData || !this.layerData.anchors || this.selectedAnchors.length === 0) {
+        if (
+            !this.layerData ||
+            !this.layerData.anchors ||
+            this.selectedAnchors.length === 0
+        ) {
             return;
         }
 
@@ -997,7 +1186,11 @@ class GlyphCanvas {
 
     moveSelectedComponents(deltaX, deltaY) {
         // Move all selected components by the given delta
-        if (!this.layerData || !this.layerData.shapes || this.selectedComponents.length === 0) {
+        if (
+            !this.layerData ||
+            !this.layerData.shapes ||
+            this.selectedComponents.length === 0
+        ) {
             return;
         }
 
@@ -1112,7 +1305,9 @@ class GlyphCanvas {
             }
         } catch (error) {
             console.error('Error loading HarfBuzz:', error);
-            console.log('Text shaping will not be available. Glyphs will be displayed as placeholder boxes.');
+            console.log(
+                'Text shaping will not be available. Glyphs will be displayed as placeholder boxes.'
+            );
         }
     }
 
@@ -1132,7 +1327,10 @@ class GlyphCanvas {
             // Parse with opentype.js for glyph path extraction
             if (window.opentype) {
                 this.opentypeFont = opentype.parse(fontArrayBuffer);
-                console.log('Font parsed with opentype.js:', this.opentypeFont.names.fontFamily.en);
+                console.log(
+                    'Font parsed with opentype.js:',
+                    this.opentypeFont.names.fontFamily.en
+                );
             }
 
             // Clean up old HarfBuzz font
@@ -1177,7 +1375,7 @@ class GlyphCanvas {
     }
 
     setTextBuffer(text) {
-        this.textBuffer = text || "";
+        this.textBuffer = text || '';
 
         // Save to localStorage
         try {
@@ -1193,9 +1391,11 @@ class GlyphCanvas {
     }
 
     setVariation(axisTag, value) {
-        const previousValue = this.variationSettings[axisTag] !== undefined
-            ? this.variationSettings[axisTag]
-            : this.getVariationAxes().find(a => a.tag === axisTag)?.defaultValue || 0;
+        const previousValue =
+            this.variationSettings[axisTag] !== undefined
+                ? this.variationSettings[axisTag]
+                : this.getVariationAxes().find((a) => a.tag === axisTag)
+                      ?.defaultValue || 0;
 
         // Cancel any ongoing animation
         if (this.isAnimating) {
@@ -1204,7 +1404,10 @@ class GlyphCanvas {
 
         // Set up animation
         this.animationStartValues = { ...this.variationSettings };
-        this.animationTargetValues = { ...this.variationSettings, [axisTag]: value };
+        this.animationTargetValues = {
+            ...this.variationSettings,
+            [axisTag]: value
+        };
         this.animationCurrentFrame = 0;
         this.isAnimating = true;
 
@@ -1216,16 +1419,22 @@ class GlyphCanvas {
         if (!this.isAnimating) return;
 
         this.animationCurrentFrame++;
-        const progress = Math.min(this.animationCurrentFrame / this.animationFrames, 1.0);
+        const progress = Math.min(
+            this.animationCurrentFrame / this.animationFrames,
+            1.0
+        );
 
         // Ease-out cubic for smoother animation
         const easedProgress = 1 - Math.pow(1 - progress, 3);
 
         // Interpolate all axes
         for (const axisTag in this.animationTargetValues) {
-            const startValue = this.animationStartValues[axisTag] || this.animationTargetValues[axisTag];
+            const startValue =
+                this.animationStartValues[axisTag] ||
+                this.animationTargetValues[axisTag];
             const targetValue = this.animationTargetValues[axisTag];
-            this.variationSettings[axisTag] = startValue + (targetValue - startValue) * easedProgress;
+            this.variationSettings[axisTag] =
+                startValue + (targetValue - startValue) * easedProgress;
         }
 
         // Update sliders during animation
@@ -1281,7 +1490,9 @@ class GlyphCanvas {
             this.cursorPosition = clusterPos;
             this.updateCursorVisualPosition();
 
-            console.log(`Entered glyph edit mode - selected glyph at index ${this.selectedGlyphIndex}, cluster position ${clusterPos}`);
+            console.log(
+                `Entered glyph edit mode - selected glyph at index ${this.selectedGlyphIndex}, cluster position ${clusterPos}`
+            );
         } else {
             this.selectedGlyphIndex = -1;
             this.isGlyphEditMode = false;
@@ -1307,7 +1518,11 @@ class GlyphCanvas {
 
     async enterGlyphEditModeAtCursor() {
         // Enter glyph edit mode for the glyph at the current cursor position
-        if (this.isGlyphEditMode || !this.shapedGlyphs || this.shapedGlyphs.length === 0) {
+        if (
+            this.isGlyphEditMode ||
+            !this.shapedGlyphs ||
+            this.shapedGlyphs.length === 0
+        ) {
             return;
         }
 
@@ -1315,7 +1530,9 @@ class GlyphCanvas {
         const targetPosition = this.cursorPosition;
         const isRTL = this.isPositionRTL(targetPosition);
 
-        console.log(`Looking for glyph at cursor position ${targetPosition}, isRTL: ${isRTL}`);
+        console.log(
+            `Looking for glyph at cursor position ${targetPosition}, isRTL: ${isRTL}`
+        );
 
         // First, try to find a cluster that starts at this position
         let glyphIndex = -1;
@@ -1329,16 +1546,23 @@ class GlyphCanvas {
         if (glyphIndex < 0) {
             for (let i = 0; i < this.shapedGlyphs.length; i++) {
                 const glyphInfo = this.isGlyphFromTypedCharacter(i);
-                if (glyphInfo.isTyped && glyphInfo.logicalPosition === targetPosition) {
+                if (
+                    glyphInfo.isTyped &&
+                    glyphInfo.logicalPosition === targetPosition
+                ) {
                     glyphIndex = i;
-                    console.log(`Found glyph ${i} at logical position ${targetPosition} within its cluster`);
+                    console.log(
+                        `Found glyph ${i} at logical position ${targetPosition} within its cluster`
+                    );
                     break;
                 }
             }
         }
 
         if (glyphIndex >= 0) {
-            console.log(`Entering glyph edit mode at cursor position ${targetPosition}, glyph index ${glyphIndex}`);
+            console.log(
+                `Entering glyph edit mode at cursor position ${targetPosition}, glyph index ${glyphIndex}`
+            );
             await this.selectGlyphByIndex(glyphIndex);
         } else {
             console.log(`No glyph found at cursor position ${targetPosition}`);
@@ -1352,33 +1576,59 @@ class GlyphCanvas {
         const savedGlyphIndex = this.selectedGlyphIndex;
 
         const glyph = this.shapedGlyphs[savedGlyphIndex];
-        console.log('[v2024-12-01-FIX] exitGlyphEditMode CALLED - selectedGlyphIndex:', this.selectedGlyphIndex, 'shapedGlyphs.length:', this.shapedGlyphs.length, 'glyph:', glyph);
+        console.log(
+            '[v2024-12-01-FIX] exitGlyphEditMode CALLED - selectedGlyphIndex:',
+            this.selectedGlyphIndex,
+            'shapedGlyphs.length:',
+            this.shapedGlyphs.length,
+            'glyph:',
+            glyph
+        );
 
         // Update cursor position to before the edited glyph
-        if (savedGlyphIndex >= 0 && savedGlyphIndex < this.shapedGlyphs.length) {
+        if (
+            savedGlyphIndex >= 0 &&
+            savedGlyphIndex < this.shapedGlyphs.length
+        ) {
             const glyphInfo = this.isGlyphFromTypedCharacter(savedGlyphIndex);
             const clusterStart = glyph.cl || 0;
             const isRTL = this.isPositionRTL(clusterStart);
 
-            console.log('Exit glyph edit mode [v2024-12-01-FIX] - glyphInfo:', glyphInfo, 'clusterStart:', clusterStart, 'isRTL:', isRTL);
+            console.log(
+                'Exit glyph edit mode [v2024-12-01-FIX] - glyphInfo:',
+                glyphInfo,
+                'clusterStart:',
+                clusterStart,
+                'isRTL:',
+                isRTL
+            );
 
             if (glyphInfo.isTyped) {
                 // For typed characters, check if it's the base glyph or a vowel mark
-                const isBaseGlyph = (glyphInfo.logicalPosition === clusterStart);
+                const isBaseGlyph = glyphInfo.logicalPosition === clusterStart;
 
                 if (isBaseGlyph) {
                     // Base glyph (first character in cluster): position at cluster start
                     this.cursorPosition = clusterStart;
-                    console.log('Base glyph - set cursor position at cluster start:', this.cursorPosition);
+                    console.log(
+                        'Base glyph - set cursor position at cluster start:',
+                        this.cursorPosition
+                    );
                 } else {
                     // Other characters in cluster: position at their logical position
                     this.cursorPosition = glyphInfo.logicalPosition;
-                    console.log('Non-base character - set cursor position at logical position:', this.cursorPosition);
+                    console.log(
+                        'Non-base character - set cursor position at logical position:',
+                        this.cursorPosition
+                    );
                 }
             } else {
                 // For shaped glyphs, position cursor at the cluster start
                 this.cursorPosition = clusterStart;
-                console.log('Shaped glyph - set cursor position at cluster start:', this.cursorPosition);
+                console.log(
+                    'Shaped glyph - set cursor position at cluster start:',
+                    this.cursorPosition
+                );
             }
             this.updateCursorVisualPosition();
         }
@@ -1406,7 +1656,10 @@ class GlyphCanvas {
         }
 
         // Get current glyph's cluster position
-        if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
+        if (
+            this.selectedGlyphIndex >= 0 &&
+            this.selectedGlyphIndex < this.shapedGlyphs.length
+        ) {
             const currentGlyph = this.shapedGlyphs[this.selectedGlyphIndex];
             const currentClusterPos = currentGlyph.cl || 0;
             const isCurrentRTL = this.isPositionRTL(currentClusterPos);
@@ -1419,17 +1672,25 @@ class GlyphCanvas {
                 for (let i = this.selectedGlyphIndex - 1; i >= 0; i--) {
                     const glyph = this.shapedGlyphs[i];
                     if ((glyph.cl || 0) === currentClusterPos) {
-                        console.log(`Navigating to next glyph in RTL cluster ${currentClusterPos}: index ${i}`);
+                        console.log(
+                            `Navigating to next glyph in RTL cluster ${currentClusterPos}: index ${i}`
+                        );
                         await this.selectGlyphByIndex(i);
                         return;
                     }
                 }
             } else {
                 // LTR: check later indices
-                for (let i = this.selectedGlyphIndex + 1; i < this.shapedGlyphs.length; i++) {
+                for (
+                    let i = this.selectedGlyphIndex + 1;
+                    i < this.shapedGlyphs.length;
+                    i++
+                ) {
                     const glyph = this.shapedGlyphs[i];
                     if ((glyph.cl || 0) === currentClusterPos) {
-                        console.log(`Navigating to next glyph in LTR cluster ${currentClusterPos}: index ${i}`);
+                        console.log(
+                            `Navigating to next glyph in LTR cluster ${currentClusterPos}: index ${i}`
+                        );
                         await this.selectGlyphByIndex(i);
                         return;
                     }
@@ -1448,7 +1709,9 @@ class GlyphCanvas {
                     ? this.findLastGlyphAtClusterPosition(nextPosition)
                     : this.findFirstGlyphAtClusterPosition(nextPosition);
                 if (glyphIndex >= 0) {
-                    console.log(`Navigating from cluster ${currentClusterPos} to ${nextPosition} (glyph ${glyphIndex})`);
+                    console.log(
+                        `Navigating from cluster ${currentClusterPos} to ${nextPosition} (glyph ${glyphIndex})`
+                    );
                     await this.selectGlyphByIndex(glyphIndex);
                     return;
                 }
@@ -1466,7 +1729,10 @@ class GlyphCanvas {
         }
 
         // Get current glyph's cluster position
-        if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
+        if (
+            this.selectedGlyphIndex >= 0 &&
+            this.selectedGlyphIndex < this.shapedGlyphs.length
+        ) {
             const currentGlyph = this.shapedGlyphs[this.selectedGlyphIndex];
             const currentClusterPos = currentGlyph.cl || 0;
             const isCurrentRTL = this.isPositionRTL(currentClusterPos);
@@ -1476,10 +1742,16 @@ class GlyphCanvas {
             // For LTR: move backward in visual buffer
             if (isCurrentRTL) {
                 // RTL: check later indices (visually they come before)
-                for (let i = this.selectedGlyphIndex + 1; i < this.shapedGlyphs.length; i++) {
+                for (
+                    let i = this.selectedGlyphIndex + 1;
+                    i < this.shapedGlyphs.length;
+                    i++
+                ) {
                     const glyph = this.shapedGlyphs[i];
                     if ((glyph.cl || 0) === currentClusterPos) {
-                        console.log(`Navigating to previous glyph in RTL cluster ${currentClusterPos}: index ${i}`);
+                        console.log(
+                            `Navigating to previous glyph in RTL cluster ${currentClusterPos}: index ${i}`
+                        );
                         await this.selectGlyphByIndex(i);
                         return;
                     }
@@ -1489,7 +1761,9 @@ class GlyphCanvas {
                 for (let i = this.selectedGlyphIndex - 1; i >= 0; i--) {
                     const glyph = this.shapedGlyphs[i];
                     if ((glyph.cl || 0) === currentClusterPos) {
-                        console.log(`Navigating to previous glyph in LTR cluster ${currentClusterPos}: index ${i}`);
+                        console.log(
+                            `Navigating to previous glyph in LTR cluster ${currentClusterPos}: index ${i}`
+                        );
                         await this.selectGlyphByIndex(i);
                         return;
                     }
@@ -1508,7 +1782,9 @@ class GlyphCanvas {
                     ? this.findFirstGlyphAtClusterPosition(prevPosition)
                     : this.findLastGlyphAtClusterPosition(prevPosition);
                 if (glyphIndex >= 0) {
-                    console.log(`Navigating from cluster ${currentClusterPos} to ${prevPosition} (glyph ${glyphIndex})`);
+                    console.log(
+                        `Navigating from cluster ${currentClusterPos} to ${prevPosition} (glyph ${glyphIndex})`
+                    );
                     await this.selectGlyphByIndex(glyphIndex);
                     return;
                 }
@@ -1564,7 +1840,10 @@ class GlyphCanvas {
             // Get glyph name from font manager (source font) instead of compiled font
             if (window.fontManager && window.fontManager.babelfontData) {
                 glyphName = window.fontManager.getGlyphName(glyphId);
-            } else if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+            } else if (
+                this.opentypeFont &&
+                this.opentypeFont.glyphs.get(glyphId)
+            ) {
                 // Fallback to compiled font name (will be production name like glyph00001)
                 const glyph = this.opentypeFont.glyphs.get(glyphId);
                 if (glyph.name) {
@@ -1641,7 +1920,11 @@ json.dumps(result)
         // Fetch and display layers list
         this.fontData = await this.fetchGlyphData();
 
-        if (!this.fontData || !this.fontData.layers || this.fontData.layers.length === 0) {
+        if (
+            !this.fontData ||
+            !this.fontData.layers ||
+            this.fontData.layers.length === 0
+        ) {
             return;
         }
 
@@ -1653,12 +1936,22 @@ json.dumps(result)
 
         // Sort layers by master order (order in which masters are defined in font.masters)
         const sortedLayers = [...this.fontData.layers].sort((a, b) => {
-            const masterIndexA = this.fontData.masters.findIndex(m => m.id === a._master);
-            const masterIndexB = this.fontData.masters.findIndex(m => m.id === b._master);
+            const masterIndexA = this.fontData.masters.findIndex(
+                (m) => m.id === a._master
+            );
+            const masterIndexB = this.fontData.masters.findIndex(
+                (m) => m.id === b._master
+            );
 
             // If master not found, put at end
-            const posA = masterIndexA === -1 ? this.fontData.masters.length : masterIndexA;
-            const posB = masterIndexB === -1 ? this.fontData.masters.length : masterIndexB;
+            const posA =
+                masterIndexA === -1
+                    ? this.fontData.masters.length
+                    : masterIndexA;
+            const posB =
+                masterIndexB === -1
+                    ? this.fontData.masters.length
+                    : masterIndexB;
 
             return posA - posB;
         });
@@ -1676,17 +1969,21 @@ json.dumps(result)
             layerItem.setAttribute('data-layer-id', layer.id); // Add data attribute for selection updates
 
             // Find the master for this layer
-            const master = this.fontData.masters.find(m => m.id === layer._master);
+            const master = this.fontData.masters.find(
+                (m) => m.id === layer._master
+            );
 
             // Format axis values for display (e.g., "wght:400, wdth:100")
             // Display axes in the order they are defined in font.axes
             let axisValues = '';
             if (master && master.location) {
                 // Sort axis tags according to font.axes order
-                const axesOrder = this.fontData.axesOrder || Object.keys(master.location).sort();
+                const axesOrder =
+                    this.fontData.axesOrder ||
+                    Object.keys(master.location).sort();
                 const locationParts = axesOrder
-                    .filter(tag => tag in master.location)
-                    .map(tag => `${tag}:${Math.round(master.location[tag])}`)
+                    .filter((tag) => tag in master.location)
+                    .map((tag) => `${tag}:${Math.round(master.location[tag])}`)
                     .join(', ');
                 axisValues = locationParts;
             }
@@ -1718,7 +2015,9 @@ json.dumps(result)
 
         // Check each layer to find a match
         for (const layer of this.fontData.layers) {
-            const master = this.fontData.masters.find(m => m.id === layer._master);
+            const master = this.fontData.masters.find(
+                (m) => m.id === layer._master
+            );
             if (!master || !master.location) {
                 continue;
             }
@@ -1752,7 +2051,9 @@ json.dumps(result)
                     this.updateHoveredPoint();
                 }
                 this.updateLayerSelection();
-                console.log(`Auto-selected layer: ${layer.name || 'Default'} (${layer.id})`);
+                console.log(
+                    `Auto-selected layer: ${layer.name || 'Default'} (${layer.id})`
+                );
                 return;
             }
         }
@@ -1789,11 +2090,13 @@ json.dumps(result)
         this.updateHoveredPoint();
 
         // Find the master for this layer
-        const master = this.fontData.masters.find(m => m.id === layer._master);
+        const master = this.fontData.masters.find(
+            (m) => m.id === layer._master
+        );
         if (!master || !master.location) {
             console.warn('No master location found for layer', {
                 layer_master: layer._master,
-                available_master_ids: this.fontData.masters.map(m => m.id),
+                available_master_ids: this.fontData.masters.map((m) => m.id),
                 master_found: master
             });
             return;
@@ -1829,8 +2132,9 @@ json.dumps(result)
         if (!this.propertiesSection) return;
 
         // Find all layer items and update their selected class
-        const layerItems = this.propertiesSection.querySelectorAll('[data-layer-id]');
-        layerItems.forEach(item => {
+        const layerItems =
+            this.propertiesSection.querySelectorAll('[data-layer-id]');
+        layerItems.forEach((item) => {
             const layerId = item.getAttribute('data-layer-id');
             if (layerId === this.selectedLayerId) {
                 item.classList.add('selected');
@@ -1842,25 +2146,41 @@ json.dumps(result)
 
     async cycleLayers(moveUp) {
         // Cycle through layers with Cmd+Up (previous) or Cmd+Down (next)
-        if (!this.fontData || !this.fontData.layers || this.fontData.layers.length === 0) {
+        if (
+            !this.fontData ||
+            !this.fontData.layers ||
+            this.fontData.layers.length === 0
+        ) {
             return;
         }
 
         // Get sorted layers (same as in displayLayersList)
         // Sort layers by master order (order in which masters are defined in font.masters)
         const sortedLayers = [...this.fontData.layers].sort((a, b) => {
-            const masterIndexA = this.fontData.masters.findIndex(m => m.id === a._master);
-            const masterIndexB = this.fontData.masters.findIndex(m => m.id === b._master);
+            const masterIndexA = this.fontData.masters.findIndex(
+                (m) => m.id === a._master
+            );
+            const masterIndexB = this.fontData.masters.findIndex(
+                (m) => m.id === b._master
+            );
 
             // If master not found, put at end
-            const posA = masterIndexA === -1 ? this.fontData.masters.length : masterIndexA;
-            const posB = masterIndexB === -1 ? this.fontData.masters.length : masterIndexB;
+            const posA =
+                masterIndexA === -1
+                    ? this.fontData.masters.length
+                    : masterIndexA;
+            const posB =
+                masterIndexB === -1
+                    ? this.fontData.masters.length
+                    : masterIndexB;
 
             return posA - posB;
         });
 
         // Find current layer index
-        const currentIndex = sortedLayers.findIndex(layer => layer.id === this.selectedLayerId);
+        const currentIndex = sortedLayers.findIndex(
+            (layer) => layer.id === this.selectedLayerId
+        );
         if (currentIndex === -1) {
             // No layer selected, select first layer
             await this.selectLayer(sortedLayers[0]);
@@ -1906,14 +2226,21 @@ json.dumps(result)
             // Get glyph name from font manager (source font) instead of compiled font
             if (window.fontManager && window.fontManager.babelfontData) {
                 glyphName = window.fontManager.getGlyphName(glyphId);
-                console.log(`🔍 Fetching layer data for glyph: "${glyphName}" (GID ${glyphId}), layer: ${this.selectedLayerId}`);
-            } else if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+                console.log(
+                    `🔍 Fetching layer data for glyph: "${glyphName}" (GID ${glyphId}), layer: ${this.selectedLayerId}`
+                );
+            } else if (
+                this.opentypeFont &&
+                this.opentypeFont.glyphs.get(glyphId)
+            ) {
                 // Fallback to compiled font name (will be production name like glyph00001)
                 const glyph = this.opentypeFont.glyphs.get(glyphId);
                 if (glyph.name) {
                     glyphName = glyph.name;
                 }
-                console.log(`🔍 Fetching layer data for glyph: "${glyphName}" (GID ${glyphId}, production name), layer: ${this.selectedLayerId}`);
+                console.log(
+                    `🔍 Fetching layer data for glyph: "${glyphName}" (GID ${glyphId}, production name), layer: ${this.selectedLayerId}`
+                );
             }
 
             const dataJson = await window.pyodide.runPythonAsync(`
@@ -2005,7 +2332,7 @@ json.dumps(result)
             const parseComponentNodes = (shapes) => {
                 if (!shapes) return;
 
-                shapes.forEach(shape => {
+                shapes.forEach((shape) => {
                     // Parse nodes in Path shapes
                     if (shape.Path && shape.Path.nodes) {
                         const nodesStr = shape.Path.nodes.trim();
@@ -2024,7 +2351,11 @@ json.dumps(result)
                     }
 
                     // Recursively parse nested component data
-                    if (shape.Component && shape.Component.layerData && shape.Component.layerData.shapes) {
+                    if (
+                        shape.Component &&
+                        shape.Component.layerData &&
+                        shape.Component.layerData.shapes
+                    ) {
                         parseComponentNodes(shape.Component.layerData.shapes);
                     }
                 });
@@ -2110,7 +2441,10 @@ json.dumps(result)
 
             return JSON.parse(dataJson);
         } catch (error) {
-            console.error('Error fetching component layer data from Python:', error);
+            console.error(
+                'Error fetching component layer data from Python:',
+                error
+            );
             return null;
         }
     }
@@ -2128,8 +2462,10 @@ json.dumps(result)
             if (this.componentStack.length > 0) {
                 // We're editing a component - save to the component's glyph
                 // Get the component reference from the parent layer
-                const parentState = this.componentStack[this.componentStack.length - 1];
-                const componentShape = parentState.layerData.shapes[this.editingComponentIndex];
+                const parentState =
+                    this.componentStack[this.componentStack.length - 1];
+                const componentShape =
+                    parentState.layerData.shapes[this.editingComponentIndex];
                 glyphName = componentShape.Component.reference;
             } else {
                 // We're editing the main glyph
@@ -2139,7 +2475,10 @@ json.dumps(result)
                 // Get glyph name from font manager (source font) instead of compiled font
                 if (window.fontManager && window.fontManager.babelfontData) {
                     glyphName = window.fontManager.getGlyphName(glyphId);
-                } else if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+                } else if (
+                    this.opentypeFont &&
+                    this.opentypeFont.glyphs.get(glyphId)
+                ) {
                     // Fallback to compiled font name (will be production name like glyph00001)
                     const glyph = this.opentypeFont.glyphs.get(glyphId);
                     if (glyph.name) {
@@ -2151,10 +2490,12 @@ json.dumps(result)
             // Convert nodes array back to string format for Python
             const layerDataCopy = JSON.parse(JSON.stringify(this.layerData));
             if (layerDataCopy.shapes) {
-                layerDataCopy.shapes.forEach(shape => {
+                layerDataCopy.shapes.forEach((shape) => {
                     if (shape.nodes && Array.isArray(shape.nodes)) {
                         // Convert array back to string: [[x, y, type], ...] -> "x y type x y type ..."
-                        const nodesString = shape.nodes.map(node => `${node[0]} ${node[1]} ${node[2]}`).join(' ');
+                        const nodesString = shape.nodes
+                            .map((node) => `${node[0]} ${node[1]} ${node[2]}`)
+                            .join(' ');
                         // Store in Path.nodes format
                         if (!shape.Path) {
                             shape.Path = {};
@@ -2226,9 +2567,14 @@ except Exception as e:
         }
 
         // Fetch the component's layer data
-        const componentLayerData = await this.fetchComponentLayerData(componentShape.Component.reference);
+        const componentLayerData = await this.fetchComponentLayerData(
+            componentShape.Component.reference
+        );
         if (!componentLayerData) {
-            console.error('Failed to fetch component layer data for:', componentShape.Component.reference);
+            console.error(
+                'Failed to fetch component layer data for:',
+                componentShape.Component.reference
+            );
             return;
         }
 
@@ -2238,7 +2584,7 @@ except Exception as e:
         const parseComponentNodes = (shapes) => {
             if (!shapes) return;
 
-            shapes.forEach(shape => {
+            shapes.forEach((shape) => {
                 // Parse nodes in Path shapes
                 if (shape.Path && shape.Path.nodes) {
                     const nodesStr = shape.Path.nodes.trim();
@@ -2254,11 +2600,19 @@ except Exception as e:
                     }
 
                     shape.nodes = nodesArray;
-                    console.log('Parsed shape nodes:', nodesArray.length, 'nodes');
+                    console.log(
+                        'Parsed shape nodes:',
+                        nodesArray.length,
+                        'nodes'
+                    );
                 }
 
                 // Recursively parse nested component data
-                if (shape.Component && shape.Component.layerData && shape.Component.layerData.shapes) {
+                if (
+                    shape.Component &&
+                    shape.Component.layerData &&
+                    shape.Component.layerData.shapes
+                ) {
                     parseComponentNodes(shape.Component.layerData.shapes);
                 }
             });
@@ -2268,10 +2622,17 @@ except Exception as e:
             parseComponentNodes(componentLayerData.shapes);
         }
 
-        console.log('About to set layerData to component data. Current shapes:', this.layerData?.shapes?.length, '-> New shapes:', componentLayerData.shapes?.length);
+        console.log(
+            'About to set layerData to component data. Current shapes:',
+            this.layerData?.shapes?.length,
+            '-> New shapes:',
+            componentLayerData.shapes?.length
+        );
 
         // Get component transform
-        const transform = componentShape.Component.transform || [1, 0, 0, 1, 0, 0];
+        const transform = componentShape.Component.transform || [
+            1, 0, 0, 1, 0, 0
+        ];
 
         // Get current glyph name (for breadcrumb trail)
         // This is the name of the context we're currently in (before entering the new component)
@@ -2279,10 +2640,17 @@ except Exception as e:
         if (this.componentStack.length > 0) {
             // We're already in a component, so get its reference name
             // Use the componentIndex stored in the parent state (not this.editingComponentIndex)
-            const parentState = this.componentStack[this.componentStack.length - 1];
-            if (parentState && parentState.layerData && parentState.layerData.shapes &&
-                parentState.componentIndex !== null && parentState.componentIndex !== undefined) {
-                const currentComponent = parentState.layerData.shapes[parentState.componentIndex];
+            const parentState =
+                this.componentStack[this.componentStack.length - 1];
+            if (
+                parentState &&
+                parentState.layerData &&
+                parentState.layerData.shapes &&
+                parentState.componentIndex !== null &&
+                parentState.componentIndex !== undefined
+            ) {
+                const currentComponent =
+                    parentState.layerData.shapes[parentState.componentIndex];
                 if (currentComponent && currentComponent.Component) {
                     currentGlyphName = currentComponent.Component.reference;
                 }
@@ -2315,13 +2683,18 @@ except Exception as e:
             glyphName: currentGlyphName
         });
 
-        console.log(`Pushed to stack. Stack depth: ${this.componentStack.length}, storing glyphName: ${currentGlyphName}`);
+        console.log(
+            `Pushed to stack. Stack depth: ${this.componentStack.length}, storing glyphName: ${currentGlyphName}`
+        );
 
         // Set the component as the current editing context
         this.editingComponentIndex = componentIndex;
         this.layerData = componentLayerData;
 
-        console.log('Set layerData to component. this.layerData.shapes.length:', this.layerData?.shapes?.length);
+        console.log(
+            'Set layerData to component. this.layerData.shapes.length:',
+            this.layerData?.shapes?.length
+        );
 
         // Clear selections
         this.selectedPoints = [];
@@ -2331,7 +2704,9 @@ except Exception as e:
         this.hoveredAnchorIndex = null;
         this.hoveredComponentIndex = null;
 
-        console.log(`Entered component editing: ${componentShape.Component.reference}, stack depth: ${this.componentStack.length}`);
+        console.log(
+            `Entered component editing: ${componentShape.Component.reference}, stack depth: ${this.componentStack.length}`
+        );
 
         if (!skipUIUpdate) {
             this.updateComponentBreadcrumb();
@@ -2353,7 +2728,10 @@ except Exception as e:
             return;
         }
 
-        console.log('Refreshing component stack for new layer, stack depth:', this.componentStack.length);
+        console.log(
+            'Refreshing component stack for new layer, stack depth:',
+            this.componentStack.length
+        );
 
         // Save the path of component indices from the stack
         const componentPath = [];
@@ -2445,19 +2823,29 @@ json.dumps(result)
 `);
 
             this.layerData = JSON.parse(dataJson);
-            console.log('Fetched root layer data with', this.layerData?.shapes?.length || 0, 'shapes');
+            console.log(
+                'Fetched root layer data with',
+                this.layerData?.shapes?.length || 0,
+                'shapes'
+            );
 
             // Re-enter each component level without UI updates
             for (const componentIndex of componentPath) {
                 if (!this.layerData || !this.layerData.shapes[componentIndex]) {
-                    console.error('Failed to refresh component stack - component not found at index', componentIndex);
+                    console.error(
+                        'Failed to refresh component stack - component not found at index',
+                        componentIndex
+                    );
                     break;
                 }
 
                 await this.enterComponentEditing(componentIndex, true); // Skip UI updates
             }
 
-            console.log('Component stack refreshed, new depth:', this.componentStack.length);
+            console.log(
+                'Component stack refreshed, new depth:',
+                this.componentStack.length
+            );
 
             // Update UI once at the end
             this.updateComponentBreadcrumb();
@@ -2487,7 +2875,9 @@ json.dumps(result)
         this.hoveredAnchorIndex = null;
         this.hoveredComponentIndex = null;
 
-        console.log(`Exited component editing, stack depth: ${this.componentStack.length}`);
+        console.log(
+            `Exited component editing, stack depth: ${this.componentStack.length}`
+        );
 
         if (!skipUIUpdate) {
             this.updateComponentBreadcrumb();
@@ -2542,7 +2932,11 @@ json.dumps(result)
         glyphNameElement.innerHTML = '';
 
         // If not in edit mode, hide the glyph name
-        if (!this.isGlyphEditMode || this.selectedGlyphIndex < 0 || this.selectedGlyphIndex >= this.shapedGlyphs.length) {
+        if (
+            !this.isGlyphEditMode ||
+            this.selectedGlyphIndex < 0 ||
+            this.selectedGlyphIndex >= this.shapedGlyphs.length
+        ) {
             glyphNameElement.style.display = 'none';
             return;
         }
@@ -2578,10 +2972,19 @@ json.dumps(result)
             // Add current component (the one we're currently editing)
             // Get this from the last stack entry's stored componentIndex
             if (this.componentStack.length > 0) {
-                const currentState = this.componentStack[this.componentStack.length - 1];
-                if (currentState && currentState.layerData && currentState.layerData.shapes &&
-                    currentState.componentIndex !== null && currentState.componentIndex !== undefined) {
-                    const currentComponent = currentState.layerData.shapes[currentState.componentIndex];
+                const currentState =
+                    this.componentStack[this.componentStack.length - 1];
+                if (
+                    currentState &&
+                    currentState.layerData &&
+                    currentState.layerData.shapes &&
+                    currentState.componentIndex !== null &&
+                    currentState.componentIndex !== undefined
+                ) {
+                    const currentComponent =
+                        currentState.layerData.shapes[
+                            currentState.componentIndex
+                        ];
                     if (currentComponent && currentComponent.Component) {
                         trail.push(currentComponent.Component.reference);
                     }
@@ -2673,13 +3076,23 @@ json.dumps(result)
 
     getAccumulatedTransform() {
         // Get the accumulated transform matrix from all component levels
-        let a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0;
+        let a = 1,
+            b = 0,
+            c = 0,
+            d = 1,
+            tx = 0,
+            ty = 0;
 
         // Apply transforms from all components in the stack
         // The stack now contains all the components we've entered (level 0, 1, 2, etc.)
         for (const level of this.componentStack) {
-            if (level.componentIndex !== null && level.layerData && level.layerData.shapes[level.componentIndex]) {
-                const comp = level.layerData.shapes[level.componentIndex].Component;
+            if (
+                level.componentIndex !== null &&
+                level.layerData &&
+                level.layerData.shapes[level.componentIndex]
+            ) {
+                const comp =
+                    level.layerData.shapes[level.componentIndex].Component;
                 if (comp && comp.transform) {
                     const t = comp.transform;
                     // Multiply transforms: new = current * level
@@ -2689,7 +3102,12 @@ json.dumps(result)
                     const newD = b * t[2] + d * t[3];
                     const newTx = a * t[4] + c * t[5] + tx;
                     const newTy = b * t[4] + d * t[5] + ty;
-                    a = newA; b = newB; c = newC; d = newD; tx = newTx; ty = newTy;
+                    a = newA;
+                    b = newB;
+                    c = newC;
+                    d = newD;
+                    tx = newTx;
+                    ty = newTy;
                 }
             }
         }
@@ -2708,12 +3126,12 @@ json.dumps(result)
         // Adjust for selected glyph position
         let xPosition = 0;
         for (let i = 0; i < this.selectedGlyphIndex; i++) {
-            xPosition += (this.shapedGlyphs[i].ax || 0);
+            xPosition += this.shapedGlyphs[i].ax || 0;
         }
         const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
         const xOffset = glyph.dx || 0;
         const yOffset = glyph.dy || 0;
-        glyphX -= (xPosition + xOffset);
+        glyphX -= xPosition + xOffset;
         glyphY -= yOffset;
 
         // Apply inverse component transform if editing a component
@@ -2731,7 +3149,9 @@ json.dumps(result)
                 glyphX = (d * localX - c * localY) / det;
                 glyphY = (a * localY - b * localX) / det;
             }
-            console.log(`transformMouseToComponentSpace: before inverse=(${glyphXBeforeInverse}, ${glyphYBeforeInverse}), after inverse=(${glyphX}, ${glyphY}), accumulated transform=[${compTransform}]`);
+            console.log(
+                `transformMouseToComponentSpace: before inverse=(${glyphXBeforeInverse}, ${glyphYBeforeInverse}), after inverse=(${glyphX}, ${glyphY}), accumulated transform=[${compTransform}]`
+            );
         }
 
         return { glyphX, glyphY };
@@ -2742,8 +3162,10 @@ json.dumps(result)
         if (!this.axesSection) return;
 
         // Update all sliders
-        const sliders = this.axesSection.querySelectorAll('input[data-axis-tag]');
-        sliders.forEach(slider => {
+        const sliders = this.axesSection.querySelectorAll(
+            'input[data-axis-tag]'
+        );
+        sliders.forEach((slider) => {
             const axisTag = slider.getAttribute('data-axis-tag');
             if (this.variationSettings[axisTag] !== undefined) {
                 slider.value = this.variationSettings[axisTag];
@@ -2751,8 +3173,10 @@ json.dumps(result)
         });
 
         // Update all value labels
-        const valueLabels = this.axesSection.querySelectorAll('span[data-axis-tag]');
-        valueLabels.forEach(label => {
+        const valueLabels = this.axesSection.querySelectorAll(
+            'span[data-axis-tag]'
+        );
+        valueLabels.forEach((label) => {
             const axisTag = label.getAttribute('data-axis-tag');
             if (this.variationSettings[axisTag] !== undefined) {
                 label.textContent = this.variationSettings[axisTag].toFixed(0);
@@ -2774,7 +3198,10 @@ json.dumps(result)
             return;
         }
 
-        if (this.selectedGlyphIndex >= 0 && this.selectedGlyphIndex < this.shapedGlyphs.length) {
+        if (
+            this.selectedGlyphIndex >= 0 &&
+            this.selectedGlyphIndex < this.shapedGlyphs.length
+        ) {
             // Display layers section (await to ensure data is loaded)
             await this.displayLayersList();
         } else {
@@ -2805,7 +3232,7 @@ json.dumps(result)
         this.axesSection.appendChild(title);
 
         // Create slider for each axis
-        axes.forEach(axis => {
+        axes.forEach((axis) => {
             const axisContainer = document.createElement('div');
             axisContainer.className = 'editor-axis-container';
 
@@ -2835,9 +3262,10 @@ json.dumps(result)
             slider.setAttribute('data-axis-tag', axis.tag); // Add identifier for programmatic updates
 
             // Restore previous value if it exists, otherwise use default
-            const initialValue = this.variationSettings[axis.tag] !== undefined
-                ? this.variationSettings[axis.tag]
-                : axis.defaultValue;
+            const initialValue =
+                this.variationSettings[axis.tag] !== undefined
+                    ? this.variationSettings[axis.tag]
+                    : axis.defaultValue;
 
             slider.value = initialValue;
             valueLabel.textContent = initialValue.toFixed(0);
@@ -2874,9 +3302,14 @@ json.dumps(result)
                 valueLabel.textContent = value.toFixed(0);
 
                 // Save current state before manual adjustment (only once per manual session)
-                if (this.selectedLayerId !== null && this.previousSelectedLayerId === null) {
+                if (
+                    this.selectedLayerId !== null &&
+                    this.previousSelectedLayerId === null
+                ) {
                     this.previousSelectedLayerId = this.selectedLayerId;
-                    this.previousVariationSettings = { ...this.variationSettings };
+                    this.previousVariationSettings = {
+                        ...this.variationSettings
+                    };
                     this.selectedLayerId = null; // Deselect layer
                     this.updateLayerSelection(); // Update UI
                 }
@@ -2916,7 +3349,9 @@ json.dumps(result)
         // Get feature info from Python
         let featureInfo = null;
         try {
-            const pyResult = await window.pyodide.runPythonAsync(`GetOpentypeFeatureInfo()`);
+            const pyResult = await window.pyodide.runPythonAsync(
+                `GetOpentypeFeatureInfo()`
+            );
             featureInfo = pyResult.toJs();
         } catch (error) {
             console.error('Error getting feature info from Python:', error);
@@ -2925,15 +3360,20 @@ json.dumps(result)
 
         const defaultOnFeatures = new Set(featureInfo.get('default_on'));
         const defaultOffFeatures = new Set(featureInfo.get('default_off'));
-        const allDiscretionary = new Set([...defaultOnFeatures, ...defaultOffFeatures]);
+        const allDiscretionary = new Set([
+            ...defaultOnFeatures,
+            ...defaultOffFeatures
+        ]);
         const descriptions = featureInfo.get('descriptions');
 
         // Get features present in the font (deduplicate using Set)
-        const fontFeatures = [...new Set(gsub.features.map(f => f.tag))];
-        const discretionaryInFont = fontFeatures.filter(tag => allDiscretionary.has(tag));
+        const fontFeatures = [...new Set(gsub.features.map((f) => f.tag))];
+        const discretionaryInFont = fontFeatures.filter((tag) =>
+            allDiscretionary.has(tag)
+        );
 
         // Build feature list with metadata
-        return discretionaryInFont.map(tag => ({
+        return discretionaryInFont.map((tag) => ({
             tag: tag,
             defaultOn: defaultOnFeatures.has(tag),
             description: descriptions.get(tag) || tag
@@ -2987,7 +3427,7 @@ json.dumps(result)
         this.featureResetButton = resetButton;
 
         // Initialize default states and current states
-        features.forEach(feature => {
+        features.forEach((feature) => {
             this.defaultFeatureSettings[feature.tag] = feature.defaultOn;
             if (this.featureSettings[feature.tag] === undefined) {
                 this.featureSettings[feature.tag] = feature.defaultOn;
@@ -2995,7 +3435,7 @@ json.dumps(result)
         });
 
         // Create button for each feature (no separate scrollable container)
-        features.forEach(feature => {
+        features.forEach((feature) => {
             const featureRow = document.createElement('div');
             featureRow.className = 'editor-feature-row';
             featureRow.style.display = 'flex';
@@ -3014,8 +3454,12 @@ json.dumps(result)
             tagButton.classList.toggle('enabled', isEnabled);
 
             tagButton.addEventListener('click', () => {
-                this.featureSettings[feature.tag] = !this.featureSettings[feature.tag];
-                tagButton.classList.toggle('enabled', this.featureSettings[feature.tag]);
+                this.featureSettings[feature.tag] =
+                    !this.featureSettings[feature.tag];
+                tagButton.classList.toggle(
+                    'enabled',
+                    this.featureSettings[feature.tag]
+                );
                 this.updateFeatureResetButton();
                 this.shapeText(); // Re-shape text with new features
             });
@@ -3043,8 +3487,10 @@ json.dumps(result)
         if (!this.featureResetButton) return;
 
         // Check if any feature is not in default state
-        const isNonDefault = Object.keys(this.featureSettings).some(tag => {
-            return this.featureSettings[tag] !== this.defaultFeatureSettings[tag];
+        const isNonDefault = Object.keys(this.featureSettings).some((tag) => {
+            return (
+                this.featureSettings[tag] !== this.defaultFeatureSettings[tag]
+            );
         });
 
         if (isNonDefault) {
@@ -3060,14 +3506,16 @@ json.dumps(result)
 
     resetFeaturesToDefaults() {
         // Reset all features to their default states
-        Object.keys(this.defaultFeatureSettings).forEach(tag => {
+        Object.keys(this.defaultFeatureSettings).forEach((tag) => {
             this.featureSettings[tag] = this.defaultFeatureSettings[tag];
         });
 
         // Update buttons
         if (this.featuresSection) {
-            const buttons = this.featuresSection.querySelectorAll('button[data-feature-tag]');
-            buttons.forEach(button => {
+            const buttons = this.featuresSection.querySelectorAll(
+                'button[data-feature-tag]'
+            );
+            buttons.forEach((button) => {
                 const tag = button.getAttribute('data-feature-tag');
                 const isEnabled = this.defaultFeatureSettings[tag];
                 button.classList.toggle('enabled', isEnabled);
@@ -3100,9 +3548,13 @@ json.dumps(result)
         this.textChangeDebounceTimer = setTimeout(() => {
             if (window.fontManager && window.fontManager.isReady()) {
                 console.log('🔄 Text changed, recompiling editing font...');
-                window.fontManager.compileEditingFont(this.textBuffer, this.featureSettings)
-                    .catch(error => {
-                        console.error('Failed to recompile editing font:', error);
+                window.fontManager
+                    .compileEditingFont(this.textBuffer, this.featureSettings)
+                    .catch((error) => {
+                        console.error(
+                            'Failed to recompile editing font:',
+                            error
+                        );
                     });
             }
         }, this.textChangeDebounceDelay);
@@ -3195,7 +3647,10 @@ json.dumps(result)
         let runStart = 0;
 
         for (let i = 1; i <= this.textBuffer.length; i++) {
-            if (i === this.textBuffer.length || embedLevels.levels[i] !== currentLevel) {
+            if (
+                i === this.textBuffer.length ||
+                embedLevels.levels[i] !== currentLevel
+            ) {
                 const runText = this.textBuffer.substring(runStart, i);
                 const direction = currentLevel % 2 === 0 ? 'ltr' : 'rtl';
                 runs.push({
@@ -3212,7 +3667,10 @@ json.dumps(result)
             }
         }
 
-        console.log('Logical runs:', runs.map(r => `${r.direction}:${r.level}:"${r.text}"`));
+        console.log(
+            'Logical runs:',
+            runs.map((r) => `${r.direction}:${r.level}:"${r.text}"`)
+        );
 
         // Shape each run with HarfBuzz in its logical direction
         const features = this.getHarfBuzzFeatures();
@@ -3243,7 +3701,10 @@ json.dumps(result)
         }
 
         // Now reorder the runs using bidi-js
-        const reorderedIndices = this.bidi.getReorderedIndices(this.textBuffer, embedLevels);
+        const reorderedIndices = this.bidi.getReorderedIndices(
+            this.textBuffer,
+            embedLevels
+        );
 
         // For each run, create a map from logical position to glyphs
         const logicalPosToGlyphs = new Map();
@@ -3275,7 +3736,10 @@ json.dumps(result)
                     // by finding the next cluster position
                     let nextClusterPos = this.textBuffer.length;
                     for (const [otherPos, _] of logicalPosToGlyphs) {
-                        if (otherPos > clusterPos && otherPos < nextClusterPos) {
+                        if (
+                            otherPos > clusterPos &&
+                            otherPos < nextClusterPos
+                        ) {
                             nextClusterPos = otherPos;
                         }
                     }
@@ -3288,7 +3752,10 @@ json.dumps(result)
             }
 
             // Add glyphs for this cluster if we haven't already
-            if (!addedClusters.has(clusterStart) && logicalPosToGlyphs.has(clusterStart)) {
+            if (
+                !addedClusters.has(clusterStart) &&
+                logicalPosToGlyphs.has(clusterStart)
+            ) {
                 const glyphs = logicalPosToGlyphs.get(clusterStart);
                 allGlyphs.push(...glyphs);
                 addedClusters.add(clusterStart);
@@ -3322,14 +3789,19 @@ json.dumps(result)
 
         // Check if the editor view has the 'focused' class
         const editorView = document.querySelector('#view-editor');
-        const isViewFocused = editorView && editorView.classList.contains('focused');
+        const isViewFocused =
+            editorView && editorView.classList.contains('focused');
 
         if (isViewFocused) {
             // Active/focused background (same as .view.focused)
-            this.ctx.fillStyle = computedStyle.getPropertyValue('--bg-active').trim();
+            this.ctx.fillStyle = computedStyle
+                .getPropertyValue('--bg-active')
+                .trim();
         } else {
             // Inactive background (same as .view)
-            this.ctx.fillStyle = computedStyle.getPropertyValue('--bg-secondary').trim();
+            this.ctx.fillStyle = computedStyle
+                .getPropertyValue('--bg-secondary')
+                .trim();
         }
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.restore();
@@ -3337,7 +3809,14 @@ json.dumps(result)
         // Apply transformation
         const transform = this.viewportManager.getTransformMatrix();
         this.ctx.save();
-        this.ctx.transform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
+        this.ctx.transform(
+            transform.a,
+            transform.b,
+            transform.c,
+            transform.d,
+            transform.e,
+            transform.f
+        );
 
         // Draw coordinate system (optional, for debugging)
         this.drawCoordinateSystem();
@@ -3394,7 +3873,7 @@ json.dumps(result)
         // Calculate total advance width
         let totalAdvance = 0;
         for (const glyph of this.shapedGlyphs) {
-            totalAdvance += (glyph.ax || 0);
+            totalAdvance += glyph.ax || 0;
         }
 
         this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
@@ -3422,8 +3901,11 @@ json.dumps(result)
         this.glyphBounds = [];
 
         // Use black on white or white on black based on theme
-        const isDarkTheme = document.documentElement.getAttribute('data-theme') !== 'light';
-        const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+        const isDarkTheme =
+            document.documentElement.getAttribute('data-theme') !== 'light';
+        const colors = isDarkTheme
+            ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+            : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
 
         this.shapedGlyphs.forEach((glyph, glyphIndex) => {
             const glyphId = glyph.g;
@@ -3449,7 +3931,12 @@ json.dumps(result)
 
             // In outline editor, render the selected glyph with very faint background color
             // so the outline editor shapes are visible on top
-            if (isSelected && this.selectedLayerId && this.layerData && !this.isPreviewMode) {
+            if (
+                isSelected &&
+                this.selectedLayerId &&
+                this.layerData &&
+                !this.isPreviewMode
+            ) {
                 // Render with faint background color instead of skipping
                 this.ctx.fillStyle = colors.GLYPH_BACKGROUND_IN_EDITOR;
             } else if (this.isGlyphEditMode && !this.isPreviewMode) {
@@ -3515,7 +4002,12 @@ json.dumps(result)
         let startIdx = 0;
         for (let i = 0; i < nodes.length; i++) {
             const [, , type] = nodes[i];
-            if (type === 'c' || type === 'cs' || type === 'l' || type === 'ls') {
+            if (
+                type === 'c' ||
+                type === 'cs' ||
+                type === 'l' ||
+                type === 'ls'
+            ) {
                 startIdx = i;
                 break;
             }
@@ -3535,7 +4027,12 @@ json.dumps(result)
             const [, , type] = nodes[idx];
             const [next1X, next1Y, next1Type] = nodes[nextIdx];
 
-            if (type === 'l' || type === 'ls' || type === 'c' || type === 'cs') {
+            if (
+                type === 'l' ||
+                type === 'ls' ||
+                type === 'c' ||
+                type === 'cs'
+            ) {
                 // We're at an on-curve point, look ahead for next segment
                 if (next1Type === 'o' || next1Type === 'os') {
                     // Next is off-curve - check if cubic (two consecutive off-curve)
@@ -3544,14 +4041,26 @@ json.dumps(result)
 
                     if (next2Type === 'o' || next2Type === 'os') {
                         // Cubic bezier: two off-curve control points + on-curve endpoint
-                        target.bezierCurveTo(next1X, next1Y, next2X, next2Y, next3X, next3Y);
+                        target.bezierCurveTo(
+                            next1X,
+                            next1Y,
+                            next2X,
+                            next2Y,
+                            next3X,
+                            next3Y
+                        );
                         i += 3; // Skip the two control points and endpoint
                     } else {
                         // Single off-curve - shouldn't happen with cubic, just draw line
                         target.lineTo(next2X, next2Y);
                         i += 2;
                     }
-                } else if (next1Type === 'l' || next1Type === 'ls' || next1Type === 'c' || next1Type === 'cs') {
+                } else if (
+                    next1Type === 'l' ||
+                    next1Type === 'ls' ||
+                    next1Type === 'c' ||
+                    next1Type === 'cs'
+                ) {
                     // Next is on-curve - draw line
                     target.lineTo(next1X, next1Y);
                     i++;
@@ -3571,9 +4080,15 @@ json.dumps(result)
     drawGlyphTooltip() {
         // Draw glyph name tooltip on hover (in font coordinate space)
         // Don't show tooltip for the selected glyph in glyph edit mode
-        if (this.hoveredGlyphIndex >= 0 && this.hoveredGlyphIndex < this.shapedGlyphs.length) {
+        if (
+            this.hoveredGlyphIndex >= 0 &&
+            this.hoveredGlyphIndex < this.shapedGlyphs.length
+        ) {
             // Skip tooltip for selected glyph in glyph edit mode
-            if (this.isGlyphEditMode && this.hoveredGlyphIndex === this.selectedGlyphIndex) {
+            if (
+                this.isGlyphEditMode &&
+                this.hoveredGlyphIndex === this.selectedGlyphIndex
+            ) {
                 return;
             }
 
@@ -3605,7 +4120,7 @@ json.dumps(result)
             // Position tooltip centered under the glyph
             // In font coordinates: Y increases upward, so negative Y is below baseline
             // Note: glyphBounds.x already includes dx offset from HarfBuzz
-            const tooltipX = glyphBounds.x + (glyphWidth / 2);
+            const tooltipX = glyphBounds.x + glyphWidth / 2;
             const tooltipY = glyphYOffset + glyphYMin - 100; // 100 units below bottom of bounding box, including HB Y offset
 
             const invScale = 1 / this.viewportManager.scale;
@@ -3630,17 +4145,27 @@ json.dumps(result)
             const bgY = 0; // Top of box at origin
 
             // Draw background
-            this.ctx.fillStyle = isDarkTheme ? 'rgba(40, 40, 40, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+            this.ctx.fillStyle = isDarkTheme
+                ? 'rgba(40, 40, 40, 0.95)'
+                : 'rgba(255, 255, 255, 0.95)';
             this.ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
 
             // Draw border
-            this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)';
+            this.ctx.strokeStyle = isDarkTheme
+                ? 'rgba(255, 255, 255, 0.3)'
+                : 'rgba(0, 0, 0, 0.3)';
             this.ctx.lineWidth = 2 * invScale;
             this.ctx.strokeRect(bgX, bgY, bgWidth, bgHeight);
 
             // Draw text
-            this.ctx.fillStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.9)';
-            this.ctx.fillText(glyphName, bgX + padding, bgY + fontSize * 0.85 + padding / 2 + 4);
+            this.ctx.fillStyle = isDarkTheme
+                ? 'rgba(255, 255, 255, 0.9)'
+                : 'rgba(0, 0, 0, 0.9)';
+            this.ctx.fillText(
+                glyphName,
+                bgX + padding,
+                bgY + fontSize * 0.85 + padding / 2 + 4
+            );
 
             this.ctx.restore();
         }
@@ -3648,24 +4173,35 @@ json.dumps(result)
 
     drawOutlineEditor() {
         // Validate APP_SETTINGS is available
-        if (typeof APP_SETTINGS === 'undefined' || !APP_SETTINGS.OUTLINE_EDITOR) {
+        if (
+            typeof APP_SETTINGS === 'undefined' ||
+            !APP_SETTINGS.OUTLINE_EDITOR
+        ) {
             console.error('APP_SETTINGS not available in drawOutlineEditor!');
             return;
         }
 
         // Draw outline editor when a layer is selected (skip in preview mode)
-        if (!this.selectedLayerId || !this.layerData || !this.layerData.shapes || this.isPreviewMode) {
+        if (
+            !this.selectedLayerId ||
+            !this.layerData ||
+            !this.layerData.shapes ||
+            this.isPreviewMode
+        ) {
             return;
         }
 
         // Get the position of the selected glyph
-        if (this.selectedGlyphIndex < 0 || this.selectedGlyphIndex >= this.shapedGlyphs.length) {
+        if (
+            this.selectedGlyphIndex < 0 ||
+            this.selectedGlyphIndex >= this.shapedGlyphs.length
+        ) {
             return;
         }
 
         let xPosition = 0;
         for (let i = 0; i < this.selectedGlyphIndex; i++) {
-            xPosition += (this.shapedGlyphs[i].ax || 0);
+            xPosition += this.shapedGlyphs[i].ax || 0;
         }
 
         const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
@@ -3681,8 +4217,17 @@ json.dumps(result)
         // This positions the editor at the component's location in the parent
         if (this.componentStack.length > 0) {
             const transform = this.getAccumulatedTransform();
-            console.log(`drawOutlineEditor: componentStack.length=${this.componentStack.length}, accumulated transform=[${transform}]`);
-            this.ctx.transform(transform[0], transform[1], transform[2], transform[3], transform[4], transform[5]);
+            console.log(
+                `drawOutlineEditor: componentStack.length=${this.componentStack.length}, accumulated transform=[${transform}]`
+            );
+            this.ctx.transform(
+                transform[0],
+                transform[1],
+                transform[2],
+                transform[3],
+                transform[4],
+                transform[5]
+            );
         }
 
         const invScale = 1 / this.viewportManager.scale;
@@ -3711,7 +4256,11 @@ json.dumps(result)
 
             // Draw the compiled HarfBuzz outline of the parent glyph
             const glyphIndex = this.selectedGlyphIndex;
-            if (glyphIndex >= 0 && glyphIndex < this.shapedGlyphs.length && this.hbFont) {
+            if (
+                glyphIndex >= 0 &&
+                glyphIndex < this.shapedGlyphs.length &&
+                this.hbFont
+            ) {
                 const shapedGlyph = this.shapedGlyphs[glyphIndex];
                 const glyphId = shapedGlyph.g;
 
@@ -3722,7 +4271,9 @@ json.dumps(result)
                     if (glyphData) {
                         this.ctx.beginPath();
                         const path = new Path2D(glyphData);
-                        this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
+                        this.ctx.strokeStyle = isDarkTheme
+                            ? 'rgba(255, 255, 255, 0.2)'
+                            : 'rgba(0, 0, 0, 0.2)';
                         this.ctx.lineWidth = 1 * invScale;
                         this.ctx.stroke(path);
                     }
@@ -3740,11 +4291,14 @@ json.dumps(result)
             APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_GRID
         ) {
             // Get glyph bounds from layer data (if available)
-            let minX = -100, maxX = 700, minY = -200, maxY = 1000; // Default bounds
+            let minX = -100,
+                maxX = 700,
+                minY = -200,
+                maxY = 1000; // Default bounds
 
             if (this.layerData && this.layerData.shapes) {
                 // Calculate bounds from all contours
-                this.layerData.shapes.forEach(shape => {
+                this.layerData.shapes.forEach((shape) => {
                     if (shape.nodes && shape.nodes.length > 0) {
                         shape.nodes.forEach(([x, y]) => {
                             minX = Math.min(minX, x);
@@ -3762,7 +4316,9 @@ json.dumps(result)
             }
 
             // Draw vertical lines (every 1 unit)
-            const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+            const colors = isDarkTheme
+                ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+                : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
             this.ctx.strokeStyle = colors.GRID;
             this.ctx.lineWidth = 1 * invScale;
             this.ctx.beginPath();
@@ -3780,9 +4336,22 @@ json.dumps(result)
         }
 
         // Draw each shape (contour or component)
-        console.log('Drawing shapes. Component stack depth:', this.componentStack.length, 'layerData.shapes.length:', this.layerData?.shapes?.length);
+        console.log(
+            'Drawing shapes. Component stack depth:',
+            this.componentStack.length,
+            'layerData.shapes.length:',
+            this.layerData?.shapes?.length
+        );
         this.layerData.shapes.forEach((shape, contourIndex) => {
-            console.log('Drawing shape', contourIndex, ':', shape.Component ? 'Component' : 'Path', shape.Component ? `ref=${shape.Component.reference}` : `nodes=${shape.nodes?.length || 0}`);
+            console.log(
+                'Drawing shape',
+                contourIndex,
+                ':',
+                shape.Component ? 'Component' : 'Path',
+                shape.Component
+                    ? `ref=${shape.Component.reference}`
+                    : `nodes=${shape.nodes?.length || 0}`
+            );
             if (shape.ref) {
                 // Component - will be drawn separately as markers
                 return;
@@ -3817,7 +4386,8 @@ json.dumps(result)
             // Draw the outline path
             this.ctx.beginPath();
             this.ctx.strokeStyle = isDarkTheme ? '#ffffff' : '#000000';
-            this.ctx.lineWidth = APP_SETTINGS.OUTLINE_EDITOR.OUTLINE_STROKE_WIDTH * invScale;
+            this.ctx.lineWidth =
+                APP_SETTINGS.OUTLINE_EDITOR.OUTLINE_STROKE_WIDTH * invScale;
 
             // Build the path using the helper method
             const startIdx = this.buildPathFromNodes(nodes);
@@ -3846,10 +4416,16 @@ json.dumps(result)
                         const ndy = dy / distance;
 
                         // Calculate arrow size based on node size (same scaling as nodes, but slightly bigger)
-                        const nodeSizeMax = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MAX_ZOOM;
-                        const nodeSizeMin = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MIN_ZOOM;
-                        const nodeInterpolationMin = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MIN;
-                        const nodeInterpolationMax = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MAX;
+                        const nodeSizeMax =
+                            APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MAX_ZOOM;
+                        const nodeSizeMin =
+                            APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MIN_ZOOM;
+                        const nodeInterpolationMin =
+                            APP_SETTINGS.OUTLINE_EDITOR
+                                .NODE_SIZE_INTERPOLATION_MIN;
+                        const nodeInterpolationMax =
+                            APP_SETTINGS.OUTLINE_EDITOR
+                                .NODE_SIZE_INTERPOLATION_MAX;
 
                         let baseSize;
                         if (
@@ -3890,16 +4466,22 @@ json.dumps(result)
                         this.ctx.lineTo(baseX - perpX, baseY - perpY);
                         this.ctx.closePath();
 
-                        this.ctx.fillStyle = isDarkTheme ? 'rgba(0, 255, 255, 0.8)' : 'rgba(0, 150, 150, 0.8)';
+                        this.ctx.fillStyle = isDarkTheme
+                            ? 'rgba(0, 255, 255, 0.8)'
+                            : 'rgba(0, 150, 150, 0.8)';
                         this.ctx.fill();
-                        this.ctx.strokeStyle = isDarkTheme ? 'rgba(0, 255, 255, 1)' : 'rgba(0, 100, 100, 1)';
+                        this.ctx.strokeStyle = isDarkTheme
+                            ? 'rgba(0, 255, 255, 1)'
+                            : 'rgba(0, 100, 100, 1)';
                         this.ctx.lineWidth = 1 * invScale;
                         this.ctx.stroke();
                     }
                 }
 
                 // Draw control point handle lines (from off-curve to adjacent on-curve points)
-                this.ctx.strokeStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)';
+                this.ctx.strokeStyle = isDarkTheme
+                    ? 'rgba(255, 255, 255, 0.5)'
+                    : 'rgba(0, 0, 0, 0.5)';
                 this.ctx.lineWidth = 1 * invScale;
 
                 nodes.forEach((node, nodeIndex) => {
@@ -3916,8 +4498,10 @@ json.dumps(result)
                         if (nextIdx >= nodes.length) nextIdx = 0;
                         const [, , nextType] = nodes[nextIdx];
 
-                        const isPrevOffCurve = prevType === 'o' || prevType === 'os';
-                        const isNextOffCurve = nextType === 'o' || nextType === 'os';
+                        const isPrevOffCurve =
+                            prevType === 'o' || prevType === 'os';
+                        const isNextOffCurve =
+                            nextType === 'o' || nextType === 'os';
 
                         if (isPrevOffCurve) {
                             // This is the second control point - connect to NEXT on-curve point
@@ -3928,8 +4512,14 @@ json.dumps(result)
                                 if (targetIdx >= nodes.length) targetIdx = 0;
                             }
 
-                            const [targetX, targetY, targetType] = nodes[targetIdx];
-                            if (targetType === 'c' || targetType === 'cs' || targetType === 'l' || targetType === 'ls') {
+                            const [targetX, targetY, targetType] =
+                                nodes[targetIdx];
+                            if (
+                                targetType === 'c' ||
+                                targetType === 'cs' ||
+                                targetType === 'l' ||
+                                targetType === 'ls'
+                            ) {
                                 this.ctx.beginPath();
                                 this.ctx.moveTo(x, y);
                                 this.ctx.lineTo(targetX, targetY);
@@ -3939,8 +4529,14 @@ json.dumps(result)
                             // This is the first control point - connect to PREVIOUS on-curve point
                             let targetIdx = prevIdx;
 
-                            const [targetX, targetY, targetType] = nodes[targetIdx];
-                            if (targetType === 'c' || targetType === 'cs' || targetType === 'l' || targetType === 'ls') {
+                            const [targetX, targetY, targetType] =
+                                nodes[targetIdx];
+                            if (
+                                targetType === 'c' ||
+                                targetType === 'cs' ||
+                                targetType === 'l' ||
+                                targetType === 'ls'
+                            ) {
                                 this.ctx.beginPath();
                                 this.ctx.moveTo(x, y);
                                 this.ctx.lineTo(targetX, targetY);
@@ -3959,11 +4555,14 @@ json.dumps(result)
 
             shape.nodes.forEach((node, nodeIndex) => {
                 const [x, y, type] = node;
-                const isHovered = this.hoveredPointIndex &&
+                const isHovered =
+                    this.hoveredPointIndex &&
                     this.hoveredPointIndex.contourIndex === contourIndex &&
                     this.hoveredPointIndex.nodeIndex === nodeIndex;
-                const isSelected = this.selectedPoints.some(p =>
-                    p.contourIndex === contourIndex && p.nodeIndex === nodeIndex
+                const isSelected = this.selectedPoints.some(
+                    (p) =>
+                        p.contourIndex === contourIndex &&
+                        p.nodeIndex === nodeIndex
                 );
 
                 // Skip quadratic bezier points for now
@@ -3972,10 +4571,14 @@ json.dumps(result)
                 }
 
                 // Calculate point size based on zoom level
-                const nodeSizeMax = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MAX_ZOOM;
-                const nodeSizeMin = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MIN_ZOOM;
-                const nodeInterpolationMin = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MIN;
-                const nodeInterpolationMax = APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MAX;
+                const nodeSizeMax =
+                    APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MAX_ZOOM;
+                const nodeSizeMin =
+                    APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MIN_ZOOM;
+                const nodeInterpolationMin =
+                    APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MIN;
+                const nodeInterpolationMax =
+                    APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MAX;
 
                 let pointSize;
                 if (this.viewportManager.scale >= nodeInterpolationMax) {
@@ -3985,25 +4588,51 @@ json.dumps(result)
                     const zoomFactor =
                         (this.viewportManager.scale - nodeInterpolationMin) /
                         (nodeInterpolationMax - nodeInterpolationMin);
-                    pointSize = (nodeSizeMin + (nodeSizeMax - nodeSizeMin) * zoomFactor) * invScale;
-                } if (type === 'o' || type === 'os') {
+                    pointSize =
+                        (nodeSizeMin +
+                            (nodeSizeMax - nodeSizeMin) * zoomFactor) *
+                        invScale;
+                }
+                if (type === 'o' || type === 'os') {
                     // Off-curve point (cubic bezier control point) - draw as circle
-                    const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+                    const colors = isDarkTheme
+                        ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+                        : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
                     this.ctx.beginPath();
                     this.ctx.arc(x, y, pointSize, 0, Math.PI * 2);
-                    this.ctx.fillStyle = isSelected ? colors.CONTROL_POINT_SELECTED : (isHovered ? colors.CONTROL_POINT_HOVERED : colors.CONTROL_POINT_NORMAL);
+                    this.ctx.fillStyle = isSelected
+                        ? colors.CONTROL_POINT_SELECTED
+                        : isHovered
+                          ? colors.CONTROL_POINT_HOVERED
+                          : colors.CONTROL_POINT_NORMAL;
                     this.ctx.fill();
                     this.ctx.strokeStyle = colors.CONTROL_POINT_STROKE;
                     this.ctx.lineWidth = 1 * invScale;
                     this.ctx.stroke();
                 } else {
                     // On-curve point - draw as square
-                    const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
-                    this.ctx.fillStyle = isSelected ? colors.NODE_SELECTED : (isHovered ? colors.NODE_HOVERED : colors.NODE_NORMAL);
-                    this.ctx.fillRect(x - pointSize, y - pointSize, pointSize * 2, pointSize * 2);
+                    const colors = isDarkTheme
+                        ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+                        : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+                    this.ctx.fillStyle = isSelected
+                        ? colors.NODE_SELECTED
+                        : isHovered
+                          ? colors.NODE_HOVERED
+                          : colors.NODE_NORMAL;
+                    this.ctx.fillRect(
+                        x - pointSize,
+                        y - pointSize,
+                        pointSize * 2,
+                        pointSize * 2
+                    );
                     this.ctx.strokeStyle = colors.NODE_STROKE;
                     this.ctx.lineWidth = 1 * invScale;
-                    this.ctx.strokeRect(x - pointSize, y - pointSize, pointSize * 2, pointSize * 2);
+                    this.ctx.strokeRect(
+                        x - pointSize,
+                        y - pointSize,
+                        pointSize * 2,
+                        pointSize * 2
+                    );
                 }
 
                 // Draw smooth indicator for smooth nodes
@@ -4022,14 +4651,24 @@ json.dumps(result)
                 return; // Not a component
             }
 
-            console.log(`Component ${index}: reference="${shape.Component.reference}", has layerData=${!!shape.Component.layerData}, shapes=${shape.Component.layerData?.shapes?.length || 0}`);
+            console.log(
+                `Component ${index}: reference="${shape.Component.reference}", has layerData=${!!shape.Component.layerData}, shapes=${shape.Component.layerData?.shapes?.length || 0}`
+            );
 
             const isHovered = this.hoveredComponentIndex === index;
             const isSelected = this.selectedComponents.includes(index);
 
             // Get full transform matrix [a, b, c, d, tx, ty]
-            let a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0;
-            if (shape.Component.transform && Array.isArray(shape.Component.transform)) {
+            let a = 1,
+                b = 0,
+                c = 0,
+                d = 1,
+                tx = 0,
+                ty = 0;
+            if (
+                shape.Component.transform &&
+                Array.isArray(shape.Component.transform)
+            ) {
                 a = shape.Component.transform[0] || 1;
                 b = shape.Component.transform[1] || 0;
                 c = shape.Component.transform[2] || 0;
@@ -4046,22 +4685,42 @@ json.dumps(result)
             // Draw the component's outline shapes if they were fetched
             if (shape.Component.layerData && shape.Component.layerData.shapes) {
                 // Recursively render all shapes in the component (including nested components)
-                const renderComponentShapes = (shapes, transform = [1, 0, 0, 1, 0, 0]) => {
-                    shapes.forEach(componentShape => {
+                const renderComponentShapes = (
+                    shapes,
+                    transform = [1, 0, 0, 1, 0, 0]
+                ) => {
+                    shapes.forEach((componentShape) => {
                         // Handle nested components
                         if (componentShape.Component) {
                             // Save context for nested component transform
                             this.ctx.save();
 
                             // Apply nested component's transform
-                            if (componentShape.Component.transform && Array.isArray(componentShape.Component.transform)) {
+                            if (
+                                componentShape.Component.transform &&
+                                Array.isArray(
+                                    componentShape.Component.transform
+                                )
+                            ) {
                                 const t = componentShape.Component.transform;
-                                this.ctx.transform(t[0] || 1, t[1] || 0, t[2] || 0, t[3] || 1, t[4] || 0, t[5] || 0);
+                                this.ctx.transform(
+                                    t[0] || 1,
+                                    t[1] || 0,
+                                    t[2] || 0,
+                                    t[3] || 1,
+                                    t[4] || 0,
+                                    t[5] || 0
+                                );
                             }
 
                             // Recursively render nested component's shapes
-                            if (componentShape.Component.layerData && componentShape.Component.layerData.shapes) {
-                                renderComponentShapes(componentShape.Component.layerData.shapes);
+                            if (
+                                componentShape.Component.layerData &&
+                                componentShape.Component.layerData.shapes
+                            ) {
+                                renderComponentShapes(
+                                    componentShape.Component.layerData.shapes
+                                );
                             }
 
                             this.ctx.restore();
@@ -4069,7 +4728,10 @@ json.dumps(result)
                         }
 
                         // Handle outline shapes (with nodes)
-                        if (componentShape.nodes && componentShape.nodes.length > 0) {
+                        if (
+                            componentShape.nodes &&
+                            componentShape.nodes.length > 0
+                        ) {
                             this.ctx.beginPath();
 
                             // Build the path using the helper method
@@ -4078,12 +4740,22 @@ json.dumps(result)
                             this.ctx.closePath();
 
                             // Fill with semi-transparent color
-                            const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
-                            this.ctx.fillStyle = isSelected ? colors.COMPONENT_FILL_SELECTED : (isHovered ? colors.COMPONENT_FILL_HOVERED : colors.COMPONENT_FILL_NORMAL);
+                            const colors = isDarkTheme
+                                ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+                                : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+                            this.ctx.fillStyle = isSelected
+                                ? colors.COMPONENT_FILL_SELECTED
+                                : isHovered
+                                  ? colors.COMPONENT_FILL_HOVERED
+                                  : colors.COMPONENT_FILL_NORMAL;
                             this.ctx.fill();
 
                             // Stroke the outline
-                            this.ctx.strokeStyle = isSelected ? colors.COMPONENT_SELECTED : (isHovered ? colors.COMPONENT_HOVERED : colors.COMPONENT_NORMAL);
+                            this.ctx.strokeStyle = isSelected
+                                ? colors.COMPONENT_SELECTED
+                                : isHovered
+                                  ? colors.COMPONENT_HOVERED
+                                  : colors.COMPONENT_NORMAL;
                             this.ctx.lineWidth = 1 * invScale;
                             this.ctx.stroke();
                         }
@@ -4103,9 +4775,16 @@ json.dumps(result)
                 return;
             }
 
-            const markerSize = APP_SETTINGS.OUTLINE_EDITOR.COMPONENT_MARKER_SIZE * invScale;            // Draw cross marker
-            const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
-            this.ctx.strokeStyle = isSelected ? colors.COMPONENT_SELECTED : (isHovered ? colors.COMPONENT_HOVERED : colors.COMPONENT_NORMAL);
+            const markerSize =
+                APP_SETTINGS.OUTLINE_EDITOR.COMPONENT_MARKER_SIZE * invScale; // Draw cross marker
+            const colors = isDarkTheme
+                ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+                : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+            this.ctx.strokeStyle = isSelected
+                ? colors.COMPONENT_SELECTED
+                : isHovered
+                  ? colors.COMPONENT_HOVERED
+                  : colors.COMPONENT_NORMAL;
             this.ctx.lineWidth = 2 * invScale;
             this.ctx.beginPath();
             this.ctx.moveTo(-markerSize, 0);
@@ -4124,8 +4803,14 @@ json.dumps(result)
             this.ctx.save();
             this.ctx.scale(1, -1); // Flip Y axis
             this.ctx.font = `${fontSize}px monospace`;
-            this.ctx.fillStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
-            this.ctx.fillText(shape.Component.reference || 'component', markerSize * 1.5, markerSize);
+            this.ctx.fillStyle = isDarkTheme
+                ? 'rgba(255, 255, 255, 0.8)'
+                : 'rgba(0, 0, 0, 0.8)';
+            this.ctx.fillText(
+                shape.Component.reference || 'component',
+                markerSize * 1.5,
+                markerSize
+            );
             this.ctx.restore();
 
             this.ctx.restore();
@@ -4144,10 +4829,14 @@ json.dumps(result)
             this.layerData.anchors.length > 0
         ) {
             // Calculate anchor size based on zoom level
-            const anchorSizeMax = APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_AT_MAX_ZOOM;
-            const anchorSizeMin = APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_AT_MIN_ZOOM;
-            const anchorInterpolationMin = APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_INTERPOLATION_MIN;
-            const anchorInterpolationMax = APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_INTERPOLATION_MAX;
+            const anchorSizeMax =
+                APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_AT_MAX_ZOOM;
+            const anchorSizeMin =
+                APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_AT_MIN_ZOOM;
+            const anchorInterpolationMin =
+                APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_INTERPOLATION_MIN;
+            const anchorInterpolationMax =
+                APP_SETTINGS.OUTLINE_EDITOR.ANCHOR_SIZE_INTERPOLATION_MAX;
 
             let anchorSize;
             if (this.viewportManager.scale >= anchorInterpolationMax) {
@@ -4174,12 +4863,28 @@ json.dumps(result)
                 this.ctx.translate(x, y);
                 this.ctx.rotate(Math.PI / 4); // Rotate 45 degrees to make diamond
 
-                const colors = isDarkTheme ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
-                this.ctx.fillStyle = isSelected ? colors.ANCHOR_SELECTED : (isHovered ? colors.ANCHOR_HOVERED : colors.ANCHOR_NORMAL);
-                this.ctx.fillRect(-anchorSize, -anchorSize, anchorSize * 2, anchorSize * 2);
+                const colors = isDarkTheme
+                    ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+                    : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+                this.ctx.fillStyle = isSelected
+                    ? colors.ANCHOR_SELECTED
+                    : isHovered
+                      ? colors.ANCHOR_HOVERED
+                      : colors.ANCHOR_NORMAL;
+                this.ctx.fillRect(
+                    -anchorSize,
+                    -anchorSize,
+                    anchorSize * 2,
+                    anchorSize * 2
+                );
                 this.ctx.strokeStyle = colors.ANCHOR_STROKE;
                 this.ctx.lineWidth = 1 * invScale;
-                this.ctx.strokeRect(-anchorSize, -anchorSize, anchorSize * 2, anchorSize * 2);
+                this.ctx.strokeRect(
+                    -anchorSize,
+                    -anchorSize,
+                    anchorSize * 2,
+                    anchorSize * 2
+                );
 
                 this.ctx.restore();
 
@@ -4189,7 +4894,9 @@ json.dumps(result)
                     this.ctx.translate(x, y);
                     this.ctx.scale(1, -1); // Flip Y axis to fix upside-down text
                     this.ctx.font = `${fontSize}px monospace`;
-                    this.ctx.fillStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+                    this.ctx.fillStyle = isDarkTheme
+                        ? 'rgba(255, 255, 255, 0.8)'
+                        : 'rgba(0, 0, 0, 0.8)';
                     this.ctx.fillText(name, anchorSize * 1.5, anchorSize);
                     this.ctx.restore();
                 }
@@ -4206,8 +4913,11 @@ json.dumps(result)
         const rect = this.canvas.getBoundingClientRect();
 
         // Use contrasting color based on theme
-        const isDarkTheme = document.documentElement.getAttribute('data-theme') !== 'light';
-        this.ctx.fillStyle = isDarkTheme ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)';
+        const isDarkTheme =
+            document.documentElement.getAttribute('data-theme') !== 'light';
+        this.ctx.fillStyle = isDarkTheme
+            ? 'rgba(255, 255, 255, 0.7)'
+            : 'rgba(0, 0, 0, 0.7)';
         this.ctx.font = '12px monospace';
 
         // Draw zoom level
@@ -4289,7 +4999,11 @@ json.dumps(result)
         }
 
         // Handle Cmd+Enter to enter glyph edit mode at cursor position (text editing mode only)
-        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !this.isGlyphEditMode) {
+        if (
+            (e.metaKey || e.ctrlKey) &&
+            e.key === 'Enter' &&
+            !this.isGlyphEditMode
+        ) {
             e.preventDefault();
             this.enterGlyphEditModeAtCursor();
             return;
@@ -4299,7 +5013,13 @@ json.dumps(result)
         // Note: Escape key is handled globally in constructor for better focus handling
 
         // Handle Cmd+Up/Down to cycle through layers when outline editor is active
-        if ((e.metaKey || e.ctrlKey) && this.isGlyphEditMode && this.selectedLayerId && this.fontData && this.fontData.layers) {
+        if (
+            (e.metaKey || e.ctrlKey) &&
+            this.isGlyphEditMode &&
+            this.selectedLayerId &&
+            this.fontData &&
+            this.fontData.layers
+        ) {
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                 e.preventDefault();
                 this.cycleLayers(e.key === 'ArrowUp');
@@ -4309,7 +5029,11 @@ json.dumps(result)
 
         // Handle Cmd+Left/Right to navigate through glyphs in logical order
         // Only when in glyph edit mode but NOT in nested component mode
-        if ((e.metaKey || e.ctrlKey) && this.isGlyphEditMode && this.componentStack.length === 0) {
+        if (
+            (e.metaKey || e.ctrlKey) &&
+            this.isGlyphEditMode &&
+            this.componentStack.length === 0
+        ) {
             if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 this.navigateToPreviousGlyphLogical();
@@ -4322,7 +5046,13 @@ json.dumps(result)
         }
 
         // Handle arrow keys for point/anchor/component movement in glyph edit mode
-        if (this.isGlyphEditMode && this.selectedLayerId && (this.selectedPoints.length > 0 || this.selectedAnchors.length > 0 || this.selectedComponents.length > 0)) {
+        if (
+            this.isGlyphEditMode &&
+            this.selectedLayerId &&
+            (this.selectedPoints.length > 0 ||
+                this.selectedAnchors.length > 0 ||
+                this.selectedComponents.length > 0)
+        ) {
             const multiplier = e.shiftKey ? 10 : 1;
             let moved = false;
 
@@ -4540,7 +5270,9 @@ json.dumps(result)
         // it's shaped
 
         // Get all glyphs in this cluster
-        const glyphsInCluster = this.shapedGlyphs.filter(g => (g.cl || 0) === clusterValue);
+        const glyphsInCluster = this.shapedGlyphs.filter(
+            (g) => (g.cl || 0) === clusterValue
+        );
 
         // Count how many characters this cluster represents
         // Find the next cluster value to determine the range
@@ -4556,11 +5288,13 @@ json.dumps(result)
         const glyphCount = glyphsInCluster.length;
 
         // Find which position this glyph is within the cluster
-        const positionInCluster = glyphsInCluster.findIndex(g =>
-            this.shapedGlyphs.indexOf(g) === glyphIndex
+        const positionInCluster = glyphsInCluster.findIndex(
+            (g) => this.shapedGlyphs.indexOf(g) === glyphIndex
         );
 
-        console.log(`Glyph ${glyphIndex}: cluster=${clusterValue}, pos in cluster=${positionInCluster}, chars=${characterCount}, glyphs=${glyphCount}`);
+        console.log(
+            `Glyph ${glyphIndex}: cluster=${clusterValue}, pos in cluster=${positionInCluster}, chars=${characterCount}, glyphs=${glyphCount}`
+        );
 
         // If this glyph's position in the cluster is less than the character count,
         // it corresponds to a typed character
@@ -4575,12 +5309,17 @@ json.dumps(result)
                 // RTL: reverse the position within the cluster
                 // Visual position 0 -> logical position (clusterValue + characterCount - 1)
                 // Visual position 1 -> logical position (clusterValue + characterCount - 2)
-                logicalPosition = clusterValue + (characterCount - 1 - positionInCluster);
-                console.log(`  RTL: visual pos ${positionInCluster} -> logical pos ${logicalPosition} (cluster ${clusterValue}, ${characterCount} chars)`);
+                logicalPosition =
+                    clusterValue + (characterCount - 1 - positionInCluster);
+                console.log(
+                    `  RTL: visual pos ${positionInCluster} -> logical pos ${logicalPosition} (cluster ${clusterValue}, ${characterCount} chars)`
+                );
             } else {
                 // LTR: position is straightforward
                 logicalPosition = clusterValue + positionInCluster;
-                console.log(`  LTR: visual pos ${positionInCluster} -> logical pos ${logicalPosition}`);
+                console.log(
+                    `  LTR: visual pos ${positionInCluster} -> logical pos ${logicalPosition}`
+                );
             }
         } else {
             logicalPosition = clusterValue;
@@ -4597,7 +5336,9 @@ json.dumps(result)
 
         for (const run of this.bidiRuns) {
             if (pos >= run.start && pos < run.end) {
-                console.log(`Position ${pos} is in ${run.direction} run [${run.start}-${run.end}]: "${run.text}"`);
+                console.log(
+                    `Position ${pos} is in ${run.direction} run [${run.start}-${run.end}]: "${run.text}"`
+                );
                 return run;
             }
         }
@@ -4605,7 +5346,9 @@ json.dumps(result)
         // If at the very end, return the last run
         if (pos === this.textBuffer.length && this.bidiRuns.length > 0) {
             const lastRun = this.bidiRuns[this.bidiRuns.length - 1];
-            console.log(`Position ${pos} is at end of ${lastRun.direction} run [${lastRun.start}-${lastRun.end}]: "${lastRun.text}"`);
+            console.log(
+                `Position ${pos} is at end of ${lastRun.direction} run [${lastRun.start}-${lastRun.end}]: "${lastRun.text}"`
+            );
             return lastRun;
         }
 
@@ -4620,7 +5363,12 @@ json.dumps(result)
         console.log('Text buffer:', this.textBuffer);
         const run = this.getRunAtPosition(this.cursorPosition);
         if (run) {
-            console.log('Current run:', run.direction, `[${run.start}-${run.end}]`, `"${run.text}"`);
+            console.log(
+                'Current run:',
+                run.direction,
+                `[${run.start}-${run.end}]`,
+                `"${run.text}"`
+            );
         }
         console.log('==================');
     }
@@ -4633,7 +5381,11 @@ json.dumps(result)
     }
 
     hasSelection() {
-        return this.selectionStart !== null && this.selectionEnd !== null && this.selectionStart !== this.selectionEnd;
+        return (
+            this.selectionStart !== null &&
+            this.selectionEnd !== null &&
+            this.selectionStart !== this.selectionEnd
+        );
     }
 
     getSelectionRange() {
@@ -4650,7 +5402,11 @@ json.dumps(result)
         this.selectionStart = 0;
         this.selectionEnd = this.textBuffer.length;
         this.cursorPosition = this.textBuffer.length;
-        console.log('Selected all:', `"${this.textBuffer.slice(0, this.textBuffer.length)}"`, `[${this.selectionStart}-${this.selectionEnd}]`);
+        console.log(
+            'Selected all:',
+            `"${this.textBuffer.slice(0, this.textBuffer.length)}"`,
+            `[${this.selectionStart}-${this.selectionEnd}]`
+        );
         this.updateCursorVisualPosition();
         this.panToCursor();
         this.render();
@@ -4670,7 +5426,11 @@ json.dumps(result)
 
         if (this.hasSelection()) {
             const range = this.getSelectionRange();
-            console.log('Selection:', `"${this.textBuffer.slice(range.start, range.end)}"`, `[${range.start}-${range.end}]`);
+            console.log(
+                'Selection:',
+                `"${this.textBuffer.slice(range.start, range.end)}"`,
+                `[${range.start}-${range.end}]`
+            );
         }
 
         this.panToCursor();
@@ -4691,7 +5451,11 @@ json.dumps(result)
 
         if (this.hasSelection()) {
             const range = this.getSelectionRange();
-            console.log('Selection:', `"${this.textBuffer.slice(range.start, range.end)}"`, `[${range.start}-${range.end}]`);
+            console.log(
+                'Selection:',
+                `"${this.textBuffer.slice(range.start, range.end)}"`,
+                `[${range.start}-${range.end}]`
+            );
         }
 
         this.panToCursor();
@@ -4706,7 +5470,11 @@ json.dumps(result)
         this.selectionEnd = this.cursorPosition;
         const range = this.getSelectionRange();
         if (range.start !== range.end) {
-            console.log('Selection:', `"${this.textBuffer.slice(range.start, range.end)}"`, `[${range.start}-${range.end}]`);
+            console.log(
+                'Selection:',
+                `"${this.textBuffer.slice(range.start, range.end)}"`,
+                `[${range.start}-${range.end}]`
+            );
         }
         this.updateCursorVisualPosition();
         this.panToCursor();
@@ -4721,7 +5489,11 @@ json.dumps(result)
         this.selectionEnd = this.cursorPosition;
         const range = this.getSelectionRange();
         if (range.start !== range.end) {
-            console.log('Selection:', `"${this.textBuffer.slice(range.start, range.end)}"`, `[${range.start}-${range.end}]`);
+            console.log(
+                'Selection:',
+                `"${this.textBuffer.slice(range.start, range.end)}"`,
+                `[${range.start}-${range.end}]`
+            );
         }
         this.updateCursorVisualPosition();
         this.panToCursor();
@@ -4756,8 +5528,14 @@ json.dumps(result)
 
         // Then delete
         const range = this.getSelectionRange();
-        console.log('Cutting selection:', `"${this.textBuffer.slice(range.start, range.end)}"`, `[${range.start}-${range.end}]`);
-        this.textBuffer = this.textBuffer.slice(0, range.start) + this.textBuffer.slice(range.end);
+        console.log(
+            'Cutting selection:',
+            `"${this.textBuffer.slice(range.start, range.end)}"`,
+            `[${range.start}-${range.end}]`
+        );
+        this.textBuffer =
+            this.textBuffer.slice(0, range.start) +
+            this.textBuffer.slice(range.end);
         this.cursorPosition = range.start;
         this.clearSelection();
 
@@ -4797,13 +5575,16 @@ json.dumps(result)
         // If there's a selection, delete it first
         if (this.hasSelection()) {
             const range = this.getSelectionRange();
-            this.textBuffer = this.textBuffer.slice(0, range.start) + this.textBuffer.slice(range.end);
+            this.textBuffer =
+                this.textBuffer.slice(0, range.start) +
+                this.textBuffer.slice(range.end);
             this.cursorPosition = range.start;
             this.clearSelection();
         }
 
         // Insert text at cursor position
-        this.textBuffer = this.textBuffer.slice(0, this.cursorPosition) +
+        this.textBuffer =
+            this.textBuffer.slice(0, this.cursorPosition) +
             text +
             this.textBuffer.slice(this.cursorPosition);
         this.cursorPosition += text.length;
@@ -4825,8 +5606,14 @@ json.dumps(result)
         // If there's a selection, delete it
         if (this.hasSelection()) {
             const range = this.getSelectionRange();
-            console.log('Deleting selection:', `"${this.textBuffer.slice(range.start, range.end)}"`, `[${range.start}-${range.end}]`);
-            this.textBuffer = this.textBuffer.slice(0, range.start) + this.textBuffer.slice(range.end);
+            console.log(
+                'Deleting selection:',
+                `"${this.textBuffer.slice(range.start, range.end)}"`,
+                `[${range.start}-${range.end}]`
+            );
+            this.textBuffer =
+                this.textBuffer.slice(0, range.start) +
+                this.textBuffer.slice(range.end);
             this.cursorPosition = range.start;
             this.clearSelection();
 
@@ -4850,8 +5637,14 @@ json.dumps(result)
             this.render();
         } else if (this.cursorPosition > 0) {
             // Backspace always deletes the character BEFORE cursor (position - 1)
-            console.log('Deleting char at position', this.cursorPosition - 1, ':', this.textBuffer[this.cursorPosition - 1]);
-            this.textBuffer = this.textBuffer.slice(0, this.cursorPosition - 1) +
+            console.log(
+                'Deleting char at position',
+                this.cursorPosition - 1,
+                ':',
+                this.textBuffer[this.cursorPosition - 1]
+            );
+            this.textBuffer =
+                this.textBuffer.slice(0, this.cursorPosition - 1) +
                 this.textBuffer.slice(this.cursorPosition);
             this.cursorPosition--;
 
@@ -4883,8 +5676,14 @@ json.dumps(result)
         // If there's a selection, delete it
         if (this.hasSelection()) {
             const range = this.getSelectionRange();
-            console.log('Deleting selection:', `"${this.textBuffer.slice(range.start, range.end)}"`, `[${range.start}-${range.end}]`);
-            this.textBuffer = this.textBuffer.slice(0, range.start) + this.textBuffer.slice(range.end);
+            console.log(
+                'Deleting selection:',
+                `"${this.textBuffer.slice(range.start, range.end)}"`,
+                `[${range.start}-${range.end}]`
+            );
+            this.textBuffer =
+                this.textBuffer.slice(0, range.start) +
+                this.textBuffer.slice(range.end);
             this.cursorPosition = range.start;
             this.clearSelection();
 
@@ -4908,8 +5707,14 @@ json.dumps(result)
             this.render();
         } else if (this.cursorPosition < this.textBuffer.length) {
             // Delete key always deletes the character AT cursor (position)
-            console.log('Deleting char at position', this.cursorPosition, ':', this.textBuffer[this.cursorPosition]);
-            this.textBuffer = this.textBuffer.slice(0, this.cursorPosition) +
+            console.log(
+                'Deleting char at position',
+                this.cursorPosition,
+                ':',
+                this.textBuffer[this.cursorPosition]
+            );
+            this.textBuffer =
+                this.textBuffer.slice(0, this.cursorPosition) +
                 this.textBuffer.slice(this.cursorPosition + 1);
 
             // Cursor stays at same logical position
@@ -4979,7 +5784,10 @@ json.dumps(result)
         const clusterBounds = new Map();
         for (let i = 0; i < sortedClusters.length; i++) {
             const start = sortedClusters[i];
-            const end = i < sortedClusters.length - 1 ? sortedClusters[i + 1] : this.textBuffer.length;
+            const end =
+                i < sortedClusters.length - 1
+                    ? sortedClusters[i + 1]
+                    : this.textBuffer.length;
             clusterBounds.set(start, end);
         }
 
@@ -4994,18 +5802,24 @@ json.dumps(result)
             // Find all glyphs that belong to this cluster
             let clusterWidth = 0;
             let j = i;
-            while (j < this.shapedGlyphs.length && (this.shapedGlyphs[j].cl || 0) === clusterStart) {
+            while (
+                j < this.shapedGlyphs.length &&
+                (this.shapedGlyphs[j].cl || 0) === clusterStart
+            ) {
                 clusterWidth += this.shapedGlyphs[j].ax || 0;
                 j++;
             }
 
             // Get the proper cluster end from our bounds map
-            const clusterEnd = clusterBounds.get(clusterStart) || (clusterStart + 1);
+            const clusterEnd =
+                clusterBounds.get(clusterStart) || clusterStart + 1;
 
             // Determine the RTL status based on the cluster start position
             const isRTL = this.isPositionRTL(clusterStart);
 
-            console.log(`Cluster [${clusterStart}-${clusterEnd}): ${j - i} glyphs, x=${xPosition.toFixed(0)}, width=${clusterWidth.toFixed(0)}, RTL=${isRTL}`);
+            console.log(
+                `Cluster [${clusterStart}-${clusterEnd}): ${j - i} glyphs, x=${xPosition.toFixed(0)}, width=${clusterWidth.toFixed(0)}, RTL=${isRTL}`
+            );
 
             this.clusterMap.push({
                 glyphIndex: i,
@@ -5026,7 +5840,10 @@ json.dumps(result)
 
     updateCursorVisualPosition() {
         // Calculate the visual X position of the cursor based on logical position
-        console.log('updateCursorVisualPosition: cursor at logical position', this.cursorPosition);
+        console.log(
+            'updateCursorVisualPosition: cursor at logical position',
+            this.cursorPosition
+        );
         this.cursorX = 0;
 
         if (!this.clusterMap || this.clusterMap.length === 0) {
@@ -5035,7 +5852,7 @@ json.dumps(result)
         }
 
         // Get glyph names for each cluster for debugging
-        const clusterWithNames = this.clusterMap.map(c => {
+        const clusterWithNames = this.clusterMap.map((c) => {
             const glyphNames = [];
             for (let i = 0; i < c.glyphCount; i++) {
                 const glyph = this.shapedGlyphs[c.glyphIndex + i];
@@ -5049,8 +5866,12 @@ json.dumps(result)
                 // Get glyph name from font manager (source font) instead of compiled font
                 if (window.fontManager && window.fontManager.babelfontData) {
                     glyphName = window.fontManager.getGlyphName(glyphId);
-                } else if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
-                    glyphName = this.opentypeFont.glyphs.get(glyphId).name || glyphName;
+                } else if (
+                    this.opentypeFont &&
+                    this.opentypeFont.glyphs.get(glyphId)
+                ) {
+                    glyphName =
+                        this.opentypeFont.glyphs.get(glyphId).name || glyphName;
                 }
                 glyphNames.push(glyphName);
             }
@@ -5065,16 +5886,24 @@ json.dumps(result)
         // First pass: Check if this position is at the START of any cluster
         for (const cluster of this.clusterMap) {
             if (this.cursorPosition === cluster.start) {
-                console.log(`Position ${this.cursorPosition} is at START of cluster [${cluster.start}-${cluster.end}), isRTL: ${cluster.isRTL}`);
+                console.log(
+                    `Position ${this.cursorPosition} is at START of cluster [${cluster.start}-${cluster.end}), isRTL: ${cluster.isRTL}`
+                );
 
                 if (cluster.isRTL) {
                     // RTL: cursor before first char = right edge
                     this.cursorX = cluster.x + cluster.width;
-                    console.log('RTL cluster start -> right edge x =', this.cursorX);
+                    console.log(
+                        'RTL cluster start -> right edge x =',
+                        this.cursorX
+                    );
                 } else {
                     // LTR: cursor before first char = left edge
                     this.cursorX = cluster.x;
-                    console.log('LTR cluster start -> left edge x =', this.cursorX);
+                    console.log(
+                        'LTR cluster start -> left edge x =',
+                        this.cursorX
+                    );
                 }
                 found = true;
                 break;
@@ -5084,17 +5913,28 @@ json.dumps(result)
         // Second pass: Check if this position is at the END of any cluster
         if (!found) {
             for (const cluster of this.clusterMap) {
-                if (this.cursorPosition === cluster.end && this.cursorPosition > cluster.start) {
-                    console.log(`Position ${this.cursorPosition} is at END of cluster [${cluster.start}-${cluster.end}), isRTL: ${cluster.isRTL}`);
+                if (
+                    this.cursorPosition === cluster.end &&
+                    this.cursorPosition > cluster.start
+                ) {
+                    console.log(
+                        `Position ${this.cursorPosition} is at END of cluster [${cluster.start}-${cluster.end}), isRTL: ${cluster.isRTL}`
+                    );
 
                     if (cluster.isRTL) {
                         // RTL: cursor after last char = left edge
                         this.cursorX = cluster.x;
-                        console.log('RTL cluster end -> left edge x =', this.cursorX);
+                        console.log(
+                            'RTL cluster end -> left edge x =',
+                            this.cursorX
+                        );
                     } else {
                         // LTR: cursor after last char = right edge
                         this.cursorX = cluster.x + cluster.width;
-                        console.log('LTR cluster end -> right edge x =', this.cursorX);
+                        console.log(
+                            'LTR cluster end -> right edge x =',
+                            this.cursorX
+                        );
                     }
                     found = true;
                     break;
@@ -5105,19 +5945,37 @@ json.dumps(result)
         // Third pass: Check if position is INSIDE a cluster
         if (!found) {
             for (const cluster of this.clusterMap) {
-                if (this.cursorPosition > cluster.start && this.cursorPosition < cluster.end) {
-                    console.log(`Position ${this.cursorPosition} is INSIDE cluster [${cluster.start}-${cluster.end}), isRTL: ${cluster.isRTL}`);
+                if (
+                    this.cursorPosition > cluster.start &&
+                    this.cursorPosition < cluster.end
+                ) {
+                    console.log(
+                        `Position ${this.cursorPosition} is INSIDE cluster [${cluster.start}-${cluster.end}), isRTL: ${cluster.isRTL}`
+                    );
 
                     // Inside a cluster - interpolate
-                    const progress = (this.cursorPosition - cluster.start) / (cluster.end - cluster.start);
+                    const progress =
+                        (this.cursorPosition - cluster.start) /
+                        (cluster.end - cluster.start);
                     if (cluster.isRTL) {
                         // RTL: interpolate from right to left
-                        this.cursorX = cluster.x + cluster.width * (1 - progress);
-                        console.log('RTL inside cluster, progress', progress.toFixed(2), '-> x =', this.cursorX);
+                        this.cursorX =
+                            cluster.x + cluster.width * (1 - progress);
+                        console.log(
+                            'RTL inside cluster, progress',
+                            progress.toFixed(2),
+                            '-> x =',
+                            this.cursorX
+                        );
                     } else {
                         // LTR: interpolate from left to right
                         this.cursorX = cluster.x + cluster.width * progress;
-                        console.log('LTR inside cluster, progress', progress.toFixed(2), '-> x =', this.cursorX);
+                        console.log(
+                            'LTR inside cluster, progress',
+                            progress.toFixed(2),
+                            '-> x =',
+                            this.cursorX
+                        );
                     }
                     found = true;
                     break;
@@ -5126,7 +5984,10 @@ json.dumps(result)
         }
 
         if (!found) {
-            console.warn('Could not find visual position for logical position', this.cursorPosition);
+            console.warn(
+                'Could not find visual position for logical position',
+                this.cursorPosition
+            );
         }
     }
 
@@ -5178,10 +6039,14 @@ json.dumps(result)
                 // Intermediate positions if multi-character cluster
                 if (cluster.end - cluster.start > 1) {
                     for (let i = cluster.start + 1; i < cluster.end; i++) {
-                        const progress = (i - cluster.start) / (cluster.end - cluster.start);
+                        const progress =
+                            (i - cluster.start) / (cluster.end - cluster.start);
                         // RTL: interpolate from right to left
-                        const intermediateX = rightEdge - cluster.width * progress;
-                        const distIntermediate = Math.abs(glyphX - intermediateX);
+                        const intermediateX =
+                            rightEdge - cluster.width * progress;
+                        const distIntermediate = Math.abs(
+                            glyphX - intermediateX
+                        );
                         if (distIntermediate < closestDist) {
                             closestDist = distIntermediate;
                             closestPos = i;
@@ -5210,10 +6075,14 @@ json.dumps(result)
                 // Intermediate positions if multi-character cluster
                 if (cluster.end - cluster.start > 1) {
                     for (let i = cluster.start + 1; i < cluster.end; i++) {
-                        const progress = (i - cluster.start) / (cluster.end - cluster.start);
+                        const progress =
+                            (i - cluster.start) / (cluster.end - cluster.start);
                         // LTR: interpolate from left to right
-                        const intermediateX = leftEdge + cluster.width * progress;
-                        const distIntermediate = Math.abs(glyphX - intermediateX);
+                        const intermediateX =
+                            leftEdge + cluster.width * progress;
+                        const distIntermediate = Math.abs(
+                            glyphX - intermediateX
+                        );
                         if (distIntermediate < closestDist) {
                             closestDist = distIntermediate;
                             closestPos = i;
@@ -5240,7 +6109,11 @@ json.dumps(result)
 
     drawSelection() {
         // Draw selection highlight
-        if (!this.hasSelection() || !this.clusterMap || this.clusterMap.length === 0) {
+        if (
+            !this.hasSelection() ||
+            !this.clusterMap ||
+            this.clusterMap.length === 0
+        ) {
             return;
         }
 
@@ -5249,7 +6122,10 @@ json.dumps(result)
 
         console.log('=== Drawing Selection ===');
         console.log('Selection range:', range);
-        console.log('Text:', `"${this.textBuffer.slice(range.start, range.end)}"`);
+        console.log(
+            'Text:',
+            `"${this.textBuffer.slice(range.start, range.end)}"`
+        );
 
         // Draw selection highlight for each cluster in range
         this.ctx.fillStyle = 'rgba(100, 150, 255, 0.3)';
@@ -5264,7 +6140,9 @@ json.dumps(result)
                 continue;
             }
 
-            console.log(`Drawing selection for cluster [${clusterStart}-${clusterEnd}), RTL=${cluster.isRTL}, x=${cluster.x.toFixed(0)}, width=${cluster.width.toFixed(0)}`);
+            console.log(
+                `Drawing selection for cluster [${clusterStart}-${clusterEnd}), RTL=${cluster.isRTL}, x=${cluster.x.toFixed(0)}, width=${cluster.width.toFixed(0)}`
+            );
 
             // Calculate which part of the cluster is selected
             // Use the actual overlap, not interpolated positions
@@ -5274,7 +6152,8 @@ json.dumps(result)
             console.log(`  Selection overlap: [${selStart}-${selEnd})`);
 
             // Check if we're selecting the entire cluster or just part of it
-            const isFullySelected = (selStart === clusterStart && selEnd === clusterEnd);
+            const isFullySelected =
+                selStart === clusterStart && selEnd === clusterEnd;
             const isPartiallySelected = !isFullySelected;
 
             // Calculate visual position and width for selected portion
@@ -5284,7 +6163,9 @@ json.dumps(result)
                 // Entire cluster is selected - draw full width
                 highlightX = cluster.x;
                 highlightWidth = cluster.width;
-                console.log(`  Full cluster selected: x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`);
+                console.log(
+                    `  Full cluster selected: x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
+                );
             } else if (cluster.isRTL) {
                 // RTL: right edge is start, left edge is end
                 const rightEdge = cluster.x + cluster.width;
@@ -5292,37 +6173,50 @@ json.dumps(result)
 
                 // Only interpolate if this is a multi-character cluster
                 if (clusterEnd - clusterStart > 1) {
-                    const startProgress = (selStart - clusterStart) / (clusterEnd - clusterStart);
-                    const endProgress = (selEnd - clusterStart) / (clusterEnd - clusterStart);
+                    const startProgress =
+                        (selStart - clusterStart) / (clusterEnd - clusterStart);
+                    const endProgress =
+                        (selEnd - clusterStart) / (clusterEnd - clusterStart);
 
                     const startX = rightEdge - cluster.width * startProgress;
                     const endX = rightEdge - cluster.width * endProgress;
 
                     highlightX = Math.min(startX, endX);
                     highlightWidth = Math.abs(startX - endX);
-                    console.log(`  RTL partial (multi-char): progress ${startProgress.toFixed(2)}-${endProgress.toFixed(2)}, x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`);
+                    console.log(
+                        `  RTL partial (multi-char): progress ${startProgress.toFixed(2)}-${endProgress.toFixed(2)}, x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
+                    );
                 } else {
                     // Single character cluster - select full width
                     highlightX = cluster.x;
                     highlightWidth = cluster.width;
-                    console.log(`  RTL partial (single-char): x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`);
+                    console.log(
+                        `  RTL partial (single-char): x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
+                    );
                 }
             } else {
                 // LTR: left edge is start, right edge is end
 
                 // Only interpolate if this is a multi-character cluster
                 if (clusterEnd - clusterStart > 1) {
-                    const startProgress = (selStart - clusterStart) / (clusterEnd - clusterStart);
-                    const endProgress = (selEnd - clusterStart) / (clusterEnd - clusterStart);
+                    const startProgress =
+                        (selStart - clusterStart) / (clusterEnd - clusterStart);
+                    const endProgress =
+                        (selEnd - clusterStart) / (clusterEnd - clusterStart);
 
                     highlightX = cluster.x + cluster.width * startProgress;
-                    highlightWidth = cluster.width * (endProgress - startProgress);
-                    console.log(`  LTR partial (multi-char): progress ${startProgress.toFixed(2)}-${endProgress.toFixed(2)}, x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`);
+                    highlightWidth =
+                        cluster.width * (endProgress - startProgress);
+                    console.log(
+                        `  LTR partial (multi-char): progress ${startProgress.toFixed(2)}-${endProgress.toFixed(2)}, x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
+                    );
                 } else {
                     // Single character cluster - select full width
                     highlightX = cluster.x;
                     highlightWidth = cluster.width;
-                    console.log(`  LTR partial (single-char): x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`);
+                    console.log(
+                        `  LTR partial (single-char): x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
+                    );
                 }
             }
 
@@ -5585,7 +6479,9 @@ function setupFontLoadingListener() {
             window.glyphCanvas.setFont(arrayBuffer);
             console.log('   ✅ Editing font loaded into canvas');
         } else {
-            console.warn('   ⚠️ Cannot load font - missing canvas or fontBytes');
+            console.warn(
+                '   ⚠️ Cannot load font - missing canvas or fontBytes'
+            );
         }
     });
 
