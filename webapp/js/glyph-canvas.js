@@ -1641,6 +1641,11 @@ json.dumps(result)
                     this.updateHoveredComponent();
                     this.updateHoveredAnchor();
                     this.updateHoveredPoint();
+                    
+                    // Render to display the new outlines
+                    if (this.isGlyphEditMode) {
+                        this.render();
+                    }
                 }
                 this.updateLayerSelection();
                 console.log(
