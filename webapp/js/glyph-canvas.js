@@ -70,6 +70,9 @@ class GlyphCanvas {
         // Accumulated vertical bounds for glyph cycling
         this.accumulatedVerticalBounds = null; // {minY, maxY} in font space
 
+        // Glyph selection sequence tracking to prevent race conditions
+        this.glyphSelectionSequence = 0;
+
         // Text change debouncing for font recompilation
         this.textChangeDebounceTimer = null;
         this.textChangeDebounceDelay = 1000; // 1 second delay
@@ -334,8 +337,12 @@ class GlyphCanvas {
         });
         this.textRunEditor.on('glyphselected', async (ix, previousIndex) => {
             const wasInEditMode = this.isGlyphEditMode;
+            
+            // Increment sequence counter to track this selection
+            this.glyphSelectionSequence++;
+            const currentSequence = this.glyphSelectionSequence;
 
-            // Save the previous glyph's vertical bounds before switching
+            // Save the previous glyph's vertical bounds BEFORE clearing layer data
             if (wasInEditMode && previousIndex >= 0 && previousIndex !== ix && this.layerData) {
                 try {
                     const prevBounds = this.calculateGlyphBoundingBox();
@@ -361,6 +368,9 @@ class GlyphCanvas {
                 }
             }
 
+            // Clear layer data immediately to prevent rendering stale outlines
+            this.layerData = null;
+
             if (ix != -1) {
                 this.isGlyphEditMode = true;
             }
@@ -369,6 +379,12 @@ class GlyphCanvas {
 
             // Fetch glyph data and update UI before rendering
             await this.updatePropertiesUI();
+
+            // Check if this selection is still current (not superseded by a newer one)
+            if (currentSequence !== this.glyphSelectionSequence) {
+                console.log('Glyph selection superseded, skipping render/pan for sequence', currentSequence);
+                return;
+            }
 
             // Now render with the loaded data
             this.render();
