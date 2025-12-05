@@ -4883,6 +4883,9 @@ function initCanvas() {
         // Listen for font compilation events
         setupFontLoadingListener();
 
+        // Set up editor shortcuts modal
+        setupEditorShortcutsModal();
+
         console.log('Glyph canvas initialized');
     } else {
         setTimeout(initCanvas, 100);
@@ -4974,6 +4977,44 @@ else:
             } catch (error) {
                 console.error('Error loading font from file system:', error);
             }
+        }
+    });
+}
+
+// Set up editor keyboard shortcuts info modal
+function setupEditorShortcutsModal() {
+    const infoButton = document.getElementById('editor-info-btn');
+    const modal = document.getElementById('editor-shortcuts-modal');
+    const closeBtn = document.getElementById('editor-shortcuts-modal-close-btn');
+
+    if (!infoButton || !modal || !closeBtn) return;
+
+    // Open modal
+    infoButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        modal.style.display = 'flex';
+    });
+
+    // Close modal
+    const closeModal = () => {
+        modal.style.display = 'none';
+    };
+
+    closeBtn.addEventListener('click', closeModal);
+
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.style.display === 'flex') {
+            e.preventDefault();
+            e.stopPropagation();
+            closeModal();
         }
     });
 }
