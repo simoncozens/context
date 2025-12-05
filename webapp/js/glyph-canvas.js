@@ -337,7 +337,7 @@ class GlyphCanvas {
         });
         this.textRunEditor.on('glyphselected', async (ix, previousIndex) => {
             const wasInEditMode = this.isGlyphEditMode;
-            
+
             // Increment sequence counter to track this selection
             this.glyphSelectionSequence++;
             const currentSequence = this.glyphSelectionSequence;
