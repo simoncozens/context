@@ -3223,9 +3223,9 @@ json.dumps(result)
         }, this.textChangeDebounceDelay);
     }
 
-    // Helper function to shift a color's hue on the color wheel
-    // Takes an rgba(), rgb(), or hex string and returns a new color with shifted hue
-    shiftColorHue(colorString, hueDegrees) {
+    // Helper function to shift a color's hue and adjust lightness
+    // Takes an rgba(), rgb(), or hex string and returns a new color with shifted hue and adjusted lightness
+    adjustColorHueAndLightness(colorString, hueDegrees, lightnessPercent) {
         let r, g, b, a;
 
         // Parse the color string
@@ -3277,6 +3277,9 @@ json.dumps(result)
         // Shift hue
         h = (h + hueDegrees / 360) % 1;
         if (h < 0) h += 1;
+
+        // Adjust lightness (negative percentage makes it darker)
+        l = Math.max(0, Math.min(1, l * (1 + lightnessPercent / 100)));
 
         // Convert HSL back to RGB
         let r2, g2, b2;
@@ -4294,96 +4297,121 @@ json.dumps(result)
                                     ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
                                     : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
 
-                                // Determine the fill color based on state
-                                const fillColor = isSelected
-                                    ? colors.COMPONENT_FILL_SELECTED
-                                    : isHovered
-                                      ? colors.COMPONENT_FILL_HOVERED
-                                      : colors.COMPONENT_FILL_NORMAL;
-
-                                const strokeColor = isSelected
+                                // Determine stroke color based on state
+                                const baseStrokeColor = isSelected
                                     ? colors.COMPONENT_SELECTED
-                                    : isHovered
-                                      ? colors.COMPONENT_HOVERED
-                                      : colors.COMPONENT_NORMAL;
+                                    : colors.COMPONENT_NORMAL;
 
-                                // Apply glow effect - blur stays constant in font units
-                                const glowBlur =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .COMPONENT_GLOW_BLUR;
-                                const hueShift =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .COMPONENT_GLOW_HUE_SHIFT;
+                                // For hover, make it 20% darker
+                                const strokeColor = isHovered
+                                    ? this.adjustColorHueAndLightness(
+                                          baseStrokeColor,
+                                          0,
+                                          50
+                                      )
+                                    : baseStrokeColor;
 
-                                // Calculate glow stroke width based on zoom level
-                                const glowStrokeMin =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .COMPONENT_GLOW_STROKE_WIDTH_AT_MIN_ZOOM;
-                                const glowStrokeMax =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .COMPONENT_GLOW_STROKE_WIDTH_AT_MAX_ZOOM;
-                                const glowInterpolationMin =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .COMPONENT_GLOW_STROKE_INTERPOLATION_MIN;
-                                const glowInterpolationMax =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .COMPONENT_GLOW_STROKE_INTERPOLATION_MAX;
+                                // Determine fill color based on state
+                                const baseFillColor = isSelected
+                                    ? colors.COMPONENT_FILL_SELECTED
+                                    : colors.COMPONENT_FILL_NORMAL;
 
-                                let glowStrokeWidth;
-                                if (
-                                    this.viewportManager.scale <=
-                                    glowInterpolationMin
-                                ) {
-                                    glowStrokeWidth = glowStrokeMin * invScale;
-                                } else if (
-                                    this.viewportManager.scale >=
-                                    glowInterpolationMax
-                                ) {
-                                    glowStrokeWidth = glowStrokeMax * invScale;
-                                } else {
-                                    // Interpolate between min and max
-                                    const zoomFactor =
-                                        (this.viewportManager.scale -
-                                            glowInterpolationMin) /
-                                        (glowInterpolationMax -
-                                            glowInterpolationMin);
-                                    glowStrokeWidth =
-                                        (glowStrokeMin +
-                                            (glowStrokeMax - glowStrokeMin) *
-                                                zoomFactor) *
-                                        invScale;
+                                // For hover, make it 20% darker
+                                const fillColor = isHovered
+                                    ? this.adjustColorHueAndLightness(
+                                          baseFillColor,
+                                          0,
+                                          50
+                                      )
+                                    : baseFillColor;
+
+                                // Apply glow effect only in dark theme
+                                if (isDarkTheme) {
+                                    // Apply glow effect - blur stays constant in font units
+                                    const glowBlur =
+                                        APP_SETTINGS.OUTLINE_EDITOR
+                                            .COMPONENT_GLOW_BLUR;
+                                    const hueShift =
+                                        APP_SETTINGS.OUTLINE_EDITOR
+                                            .COMPONENT_GLOW_HUE_SHIFT;
+
+                                    // Calculate glow stroke width based on zoom level
+                                    const glowStrokeMin =
+                                        APP_SETTINGS.OUTLINE_EDITOR
+                                            .COMPONENT_GLOW_STROKE_WIDTH_AT_MIN_ZOOM;
+                                    const glowStrokeMax =
+                                        APP_SETTINGS.OUTLINE_EDITOR
+                                            .COMPONENT_GLOW_STROKE_WIDTH_AT_MAX_ZOOM;
+                                    const glowInterpolationMin =
+                                        APP_SETTINGS.OUTLINE_EDITOR
+                                            .COMPONENT_GLOW_STROKE_INTERPOLATION_MIN;
+                                    const glowInterpolationMax =
+                                        APP_SETTINGS.OUTLINE_EDITOR
+                                            .COMPONENT_GLOW_STROKE_INTERPOLATION_MAX;
+
+                                    let glowStrokeWidth;
+                                    if (
+                                        this.viewportManager.scale <=
+                                        glowInterpolationMin
+                                    ) {
+                                        glowStrokeWidth =
+                                            glowStrokeMin * invScale;
+                                    } else if (
+                                        this.viewportManager.scale >=
+                                        glowInterpolationMax
+                                    ) {
+                                        glowStrokeWidth =
+                                            glowStrokeMax * invScale;
+                                    } else {
+                                        // Interpolate between min and max
+                                        const zoomFactor =
+                                            (this.viewportManager.scale -
+                                                glowInterpolationMin) /
+                                            (glowInterpolationMax -
+                                                glowInterpolationMin);
+                                        glowStrokeWidth =
+                                            (glowStrokeMin +
+                                                (glowStrokeMax -
+                                                    glowStrokeMin) *
+                                                    zoomFactor) *
+                                            invScale;
+                                    }
+
+                                    // Shift hue for glow color using adjustColorHueAndLightness
+                                    let glowColor =
+                                        this.adjustColorHueAndLightness(
+                                            strokeColor,
+                                            hueShift,
+                                            0 // No lightness adjustment
+                                        );
+                                    // Parse and boost opacity if needed
+                                    const glowMatch = glowColor.match(
+                                        /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/
+                                    );
+                                    if (glowMatch) {
+                                        const r = glowMatch[1];
+                                        const g = glowMatch[2];
+                                        const b = glowMatch[3];
+                                        glowColor = `rgba(${r}, ${g}, ${b}, 1.0)`; // Full opacity for strong glow
+                                    }
+
+                                    // First pass: Draw glow on the outside by stroking with shadow
+                                    this.ctx.save();
+                                    this.ctx.shadowBlur = glowBlur;
+                                    this.ctx.shadowColor = glowColor;
+                                    this.ctx.shadowOffsetX = 0;
+                                    this.ctx.shadowOffsetY = 0;
+                                    this.ctx.strokeStyle = glowColor;
+                                    this.ctx.lineWidth = glowStrokeWidth;
+
+                                    this.ctx.beginPath();
+                                    this.buildPathFromNodes(
+                                        componentShape.nodes
+                                    );
+                                    this.ctx.closePath();
+                                    this.ctx.stroke();
+                                    this.ctx.restore();
                                 }
-
-                                // Shift hue and ensure full opacity for visible glow
-                                let glowColor = this.shiftColorHue(
-                                    strokeColor,
-                                    hueShift
-                                );
-                                // Parse and boost opacity if needed
-                                const glowMatch = glowColor.match(
-                                    /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/
-                                );
-                                if (glowMatch) {
-                                    const r = glowMatch[1];
-                                    const g = glowMatch[2];
-                                    const b = glowMatch[3];
-                                    glowColor = `rgba(${r}, ${g}, ${b}, 1.0)`; // Full opacity for strong glow
-                                }
-
-                                // First pass: Draw glow on the outside by stroking with shadow
-                                this.ctx.save();
-                                this.ctx.shadowBlur = glowBlur;
-                                this.ctx.shadowColor = glowColor;
-                                this.ctx.shadowOffsetX = 0;
-                                this.ctx.shadowOffsetY = 0;
-                                this.ctx.strokeStyle = glowColor;
-                                this.ctx.lineWidth = glowStrokeWidth;
-
-                                this.ctx.beginPath();
-                                this.buildPathFromNodes(componentShape.nodes);
-                                this.ctx.closePath();
-                                this.ctx.stroke();
-                                this.ctx.restore();
 
                                 // Second pass: Draw fill and stroke without shadow
                                 this.ctx.shadowBlur = 0;
@@ -4423,11 +4451,18 @@ json.dumps(result)
                 const colors = isDarkTheme
                     ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
                     : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
-                this.ctx.strokeStyle = isSelected
+
+                // Determine marker stroke color based on state
+                const baseMarkerColor = isSelected
                     ? colors.COMPONENT_SELECTED
-                    : isHovered
-                      ? colors.COMPONENT_HOVERED
-                      : colors.COMPONENT_NORMAL;
+                    : colors.COMPONENT_NORMAL;
+
+                // For hover, make it 20% darker
+                const markerStrokeColor = isHovered
+                    ? this.adjustColorHueAndLightness(baseMarkerColor, 0, -20)
+                    : baseMarkerColor;
+
+                this.ctx.strokeStyle = markerStrokeColor;
                 this.ctx.lineWidth = 2 * invScale;
                 this.ctx.beginPath();
                 this.ctx.moveTo(-markerSize, 0);

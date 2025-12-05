@@ -85,7 +85,7 @@ const APP_SETTINGS = {
             ANCHOR_STROKE: '#000000',
 
             // Components
-            COMPONENT_NORMAL: '#0099cc',
+            COMPONENT_NORMAL: '#49b9deff',
             COMPONENT_HOVERED: '#cc66cc',
             COMPONENT_SELECTED: '#cc00cc',
             COMPONENT_STROKE: '#000000',
