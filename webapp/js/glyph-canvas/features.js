@@ -77,16 +77,19 @@ class FeaturesManager {
             return;
         }
 
-        // Clear existing features
-        this.featuresSection.innerHTML = '';
-
         const features = await this.getDiscretionaryFeatures();
         console.log('Updating features');
 
         if (features.length === 0) {
             console.log('No discretionary features found in font');
+            requestAnimationFrame(() => {
+                this.featuresSection.innerHTML = '';
+            });
             return; // No discretionary features
         }
+
+        // Build content off-screen first, then swap in one operation
+        const tempContainer = document.createElement('div');
 
         // Add section header with reset button
         const headerRow = document.createElement('div');
@@ -117,7 +120,7 @@ class FeaturesManager {
 
         headerRow.appendChild(title);
         headerRow.appendChild(resetButton);
-        this.featuresSection.appendChild(headerRow);
+        tempContainer.appendChild(headerRow);
 
         // Store reset button reference
         this.featureResetButton = resetButton;
@@ -171,7 +174,15 @@ class FeaturesManager {
 
             featureRow.appendChild(tagButton);
             featureRow.appendChild(descSpan);
-            this.featuresSection.appendChild(featureRow);
+            tempContainer.appendChild(featureRow);
+        });
+
+        // Swap content in one frame to prevent flicker
+        requestAnimationFrame(() => {
+            this.featuresSection.innerHTML = '';
+            while (tempContainer.firstChild) {
+                this.featuresSection.appendChild(tempContainer.firstChild);
+            }
         });
 
         this.updateFeatureResetButton();

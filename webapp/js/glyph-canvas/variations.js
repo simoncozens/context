@@ -74,20 +74,23 @@ class AxesManager {
     updateAxesUI() {
         if (!this.axesSection) return;
 
-        // Clear existing axes
-        this.axesSection.innerHTML = '';
-
         const axes = this.getVariationAxes();
 
         if (axes.length === 0) {
+            requestAnimationFrame(() => {
+                this.axesSection.innerHTML = '';
+            });
             return; // No variable axes
         }
+
+        // Build content off-screen first, then swap in one operation
+        const tempContainer = document.createElement('div');
 
         // Add section title
         const title = document.createElement('div');
         title.className = 'editor-section-title';
         title.textContent = 'Variable Axes';
-        this.axesSection.appendChild(title);
+        tempContainer.appendChild(title);
 
         // Create slider for each axis
         axes.forEach((axis) => {
@@ -155,7 +158,15 @@ class AxesManager {
 
             axisContainer.appendChild(labelRow);
             axisContainer.appendChild(slider);
-            this.axesSection.appendChild(axisContainer);
+            tempContainer.appendChild(axisContainer);
+        });
+
+        // Swap content in one frame to prevent flicker
+        requestAnimationFrame(() => {
+            this.axesSection.innerHTML = '';
+            while (tempContainer.firstChild) {
+                this.axesSection.appendChild(tempContainer.firstChild);
+            }
         });
 
         console.log(`Created ${axes.length} variable axis sliders`);
