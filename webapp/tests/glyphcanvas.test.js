@@ -60,8 +60,8 @@ describe('GlyphCanvas hit testing', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.selectedGlyphIndex = 0;
-        canvas.shapedGlyphs = [{ ax: 1000, dx: 0, dy: 0, g: 0 }];
+        canvas.textRunEditor.selectedGlyphIndex = 0;
+        canvas.textRunEditor.shapedGlyphs = [{ ax: 1000, dx: 0, dy: 0, g: 0 }];
         canvas.layerData = {
             shapes: [
                 { Component: { transform: [1, 0, 0, 1, 100, 100] } },
@@ -124,7 +124,7 @@ describe('GlyphCanvas mirrored functions', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.shapedGlyphs = [
+        canvas.textRunEditor.shapedGlyphs = [
             { cl: 0, g: 0 },
             { cl: 1, g: 1 },
             { cl: 1, g: 2 },
@@ -133,10 +133,10 @@ describe('GlyphCanvas mirrored functions', () => {
     });
 
     test('findFirstGlyphAtClusterPosition should return the correct index', () => {
-        expect(canvas.findFirstGlyphAtClusterPosition(1)).toBe(1);
+        expect(canvas.textRunEditor.findFirstGlyphAtClusterPosition(1)).toBe(1);
     });
 
     test('findLastGlyphAtClusterPosition should return the correct index', () => {
-        expect(canvas.findLastGlyphAtClusterPosition(1)).toBe(2);
+        expect(canvas.textRunEditor.findLastGlyphAtClusterPosition(1)).toBe(2);
     });
 });
