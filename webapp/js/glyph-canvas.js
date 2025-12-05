@@ -1,5 +1,6 @@
 // Glyph Canvas Editor
 // Handles canvas-based glyph editing with pan/zoom and text rendering
+// Force-commit
 
 class GlyphCanvas {
     constructor(containerId) {
@@ -233,16 +234,7 @@ class GlyphCanvas {
                     this.selectedLayerId = this.previousSelectedLayerId;
 
                     // Restore axis values with animation
-                    if (this.isAnimating) {
-                        this.isAnimating = false;
-                    }
-                    this.animationStartValues = { ...this.variationSettings };
-                    this.animationTargetValues = {
-                        ...this.previousVariationSettings
-                    };
-                    this.animationCurrentFrame = 0;
-                    this.isAnimating = true;
-                    this.animateVariation();
+                    this._setupAnimation({ ...this.previousVariationSettings });
 
                     // Update layer selection UI
                     this.updateLayerSelection();
@@ -798,253 +790,84 @@ class GlyphCanvas {
         }
     }
 
+    _findHoveredItem(items, getCoords, getValue, hitRadius = 10) {
+        if (!this.layerData || !items) {
+            return null;
+        }
+        const { glyphX, glyphY } = this.transformMouseToComponentSpace(
+            this.mouseX,
+            this.mouseY
+        );
+        const scaledHitRadius = hitRadius / this.viewportManager.scale;
+
+        // Iterate backwards to find the top-most item
+        for (let i = items.length - 1; i >= 0; i--) {
+            const item = items[i];
+            const coords = getCoords(item);
+            if (coords) {
+                const dist = Math.sqrt(
+                    (coords.x - glyphX) ** 2 + (coords.y - glyphY) ** 2
+                );
+                if (dist <= scaledHitRadius) {
+                    return getValue(item);
+                }
+            }
+        }
+        return null;
+    }
+
     updateHoveredComponent() {
-        // Check which component is being hovered in outline editor mode
         if (!this.layerData || !this.layerData.shapes) {
             return;
         }
 
-        const mouseX = this.mouseX;
-        const mouseY = this.mouseY;
-        const transform = this.viewportManager.getTransformMatrix();
+        // First, check for hovering near component origins, which take priority.
+        const components = this.layerData.shapes
+            .map((shape, index) => ({ shape, index }))
+            .filter((item) => item.shape.Component);
 
-        // Calculate glyph offset for selected glyph
-        let xPosition = 0;
-        for (let i = 0; i < this.selectedGlyphIndex; i++) {
-            xPosition += this.shapedGlyphs[i].ax || 0;
-        }
-        const glyph = this.shapedGlyphs[this.selectedGlyphIndex];
-        const xOffset = glyph.dx || 0;
-        const yOffset = glyph.dy || 0;
+        const getComponentOrigin = (item) => {
+            const transform = item.shape.Component.transform || [
+                1, 0, 0, 1, 0, 0
+            ];
+            return { x: transform[4] || 0, y: transform[5] || 0 };
+        };
 
-        const hitRadius = 20 / this.viewportManager.scale; // Larger hit radius for origin marker
-        let foundComponentIndex = null;
-
-        // Transform mouse to component local space
-        const { glyphX, glyphY } = this.transformMouseToComponentSpace(
-            mouseX,
-            mouseY
-        );
-        console.log(
-            `updateHoveredComponent: mouseX=${mouseX}, mouseY=${mouseY}, glyphX=${glyphX}, glyphY=${glyphY}, componentStack.length=${this.componentStack.length}`
+        let foundComponentIndex = this._findHoveredItem(
+            components,
+            getComponentOrigin,
+            (item) => item.index,
+            20 // Larger hit radius for origin marker
         );
 
-        this.layerData.shapes.forEach((shape, index) => {
-            if (shape.Component) {
-                // This is a component - check if hovering near its origin OR inside its outline
-                let a = 1,
-                    b = 0,
-                    c = 0,
-                    d = 1,
-                    tx = 0,
-                    ty = 0;
-                if (
-                    shape.Component.transform &&
-                    Array.isArray(shape.Component.transform)
-                ) {
-                    a = shape.Component.transform[0] || 1;
-                    b = shape.Component.transform[1] || 0;
-                    c = shape.Component.transform[2] || 0;
-                    d = shape.Component.transform[3] || 1;
-                    tx = shape.Component.transform[4] || 0;
-                    ty = shape.Component.transform[5] || 0;
-                }
+        // If no origin was hovered, proceed with path-based hit testing.
+        if (foundComponentIndex === null) {
+            const { glyphX, glyphY } = this.transformMouseToComponentSpace(
+                this.mouseX,
+                this.mouseY
+            );
 
-                // Check distance to origin marker first
-                const dist = Math.sqrt((tx - glyphX) ** 2 + (ty - glyphY) ** 2);
-                if (dist <= hitRadius) {
-                    foundComponentIndex = index;
-                    return;
-                }
-
-                // Check if inside component outline (including nested components)
+            for (let index = 0; index < this.layerData.shapes.length; index++) {
+                const shape = this.layerData.shapes[index];
                 if (
+                    shape.Component &&
                     shape.Component.layerData &&
                     shape.Component.layerData.shapes
                 ) {
-                    console.log(
-                        `Checking component ${index}, componentStack.length=${this.componentStack.length}, outer transform=[${a},${b},${c},${d},${tx},${ty}]`
-                    );
-                    if (this.componentStack.length > 0) {
-                        console.log(
-                            `ComponentStack[0].transform:`,
-                            this.componentStack[0].transform
-                        );
-                        console.log(
-                            `Accumulated transform:`,
-                            this.getAccumulatedTransform()
-                        );
-                    }
-
-                    const checkShapesRecursive = (
-                        shapes,
-                        parentTransform = [1, 0, 0, 1, 0, 0],
-                        depth = 0
-                    ) => {
-                        for (const componentShape of shapes) {
-                            // Handle nested components recursively
-                            if (componentShape.Component) {
-                                const nestedTransform = componentShape.Component
-                                    .transform || [1, 0, 0, 1, 0, 0];
-                                console.log(
-                                    `  ${'  '.repeat(depth)}Nested component at depth ${depth}, transform=[${nestedTransform}]`
-                                );
-                                // Multiply parent transform with nested transform
-                                const combinedTransform = [
-                                    parentTransform[0] * nestedTransform[0] +
-                                        parentTransform[2] * nestedTransform[1],
-                                    parentTransform[1] * nestedTransform[0] +
-                                        parentTransform[3] * nestedTransform[1],
-                                    parentTransform[0] * nestedTransform[2] +
-                                        parentTransform[2] * nestedTransform[3],
-                                    parentTransform[1] * nestedTransform[2] +
-                                        parentTransform[3] * nestedTransform[3],
-                                    parentTransform[0] * nestedTransform[4] +
-                                        parentTransform[2] *
-                                            nestedTransform[5] +
-                                        parentTransform[4],
-                                    parentTransform[1] * nestedTransform[4] +
-                                        parentTransform[3] *
-                                            nestedTransform[5] +
-                                        parentTransform[5]
-                                ];
-                                console.log(
-                                    `  ${'  '.repeat(depth)}Combined transform=[${combinedTransform}]`
-                                );
-
-                                if (
-                                    componentShape.Component.layerData &&
-                                    componentShape.Component.layerData.shapes
-                                ) {
-                                    if (
-                                        checkShapesRecursive(
-                                            componentShape.Component.layerData
-                                                .shapes,
-                                            combinedTransform,
-                                            depth + 1
-                                        )
-                                    ) {
-                                        return true;
-                                    }
-                                }
-                                continue;
-                            }
-
-                            // Handle outline shapes
-                            if (
-                                componentShape.nodes &&
-                                componentShape.nodes.length > 0
-                            ) {
-                                console.log(
-                                    `  ${'  '.repeat(depth)}Outline shape at depth ${depth}, parentTransform=[${parentTransform}]`
-                                );
-                                console.log(
-                                    `  ${'  '.repeat(depth)}First node: [${componentShape.nodes[0]}]`
-                                );
-                                const path = new Path2D();
-
-                                // Build the path using the shared helper method
-                                this.buildPathFromNodes(
-                                    componentShape.nodes,
-                                    path
-                                );
-                                path.closePath();
-
-                                // Apply transform to canvas for hit testing
-                                this.ctx.save();
-
-                                // When inside a component, glyphX/glyphY are already in component local space
-                                // (inverse transformed), so we need identity base transform
-                                // When at main level, mouseX/mouseY are in canvas space, so use full view transform
-                                if (this.componentStack.length === 0) {
-                                    const transform =
-                                        this.viewportManager.getTransformMatrix();
-                                    this.ctx.setTransform(
-                                        transform.a,
-                                        transform.b,
-                                        transform.c,
-                                        transform.d,
-                                        transform.e,
-                                        transform.f
-                                    );
-                                    this.ctx.translate(
-                                        xPosition + xOffset,
-                                        yOffset
-                                    );
-                                    console.log(
-                                        `  ${'  '.repeat(
-                                            depth
-                                        )}Canvas setup: base transform + translate(${
-                                            xPosition + xOffset
-                                        }, ${yOffset})`
-                                    );
-                                } else {
-                                    // Identity transform - glyphX/glyphY are already in the right space
-                                    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-                                    console.log(
-                                        `  ${'  '.repeat(depth)}Canvas setup: identity (glyphX/Y already transformed)`
-                                    );
-                                }
-
-                                // Apply the component's own transform
-                                this.ctx.transform(a, b, c, d, tx, ty);
-                                console.log(
-                                    `  ${'  '.repeat(depth)}Applied component transform: [${a},${b},${c},${d},${tx},${ty}]`
-                                );
-                                console.log(
-                                    `  ${'  '.repeat(depth)}After component transform, canvas would place outline at: x=${78 + tx}, y=${631 + ty} (for first node [78,631])`
-                                );
-
-                                // Apply accumulated transforms from nested components within this component
-                                this.ctx.transform(
-                                    parentTransform[0],
-                                    parentTransform[1],
-                                    parentTransform[2],
-                                    parentTransform[3],
-                                    parentTransform[4],
-                                    parentTransform[5]
-                                );
-                                console.log(
-                                    `  ${'  '.repeat(depth)}Applied nested transform: [${parentTransform}]`
-                                );
-
-                                // Test if mouse point is in path
-                                // At main level: use mouseX, mouseY (canvas coordinates)
-                                // Inside component: use glyphX, glyphY (component local coordinates)
-                                const testX =
-                                    this.componentStack.length === 0
-                                        ? mouseX
-                                        : glyphX;
-                                const testY =
-                                    this.componentStack.length === 0
-                                        ? mouseY
-                                        : glyphY;
-                                const isInPath = this.ctx.isPointInPath(
-                                    path,
-                                    testX,
-                                    testY
-                                );
-                                console.log(
-                                    `  ${'  '.repeat(depth)}Hit test at (${testX}, ${testY}): ${isInPath}`
-                                );
-                                this.ctx.restore();
-                                if (isInPath) {
-                                    return true;
-                                }
-                            }
-                        }
-                        return false;
-                    };
-
                     if (
-                        checkShapesRecursive(shape.Component.layerData.shapes)
+                        this._isPointInComponent(
+                            shape,
+                            glyphX,
+                            glyphY,
+                            this.mouseX,
+                            this.mouseY
+                        )
                     ) {
                         foundComponentIndex = index;
-                        return;
                     }
                 }
             }
-        });
+        }
 
         if (foundComponentIndex !== this.hoveredComponentIndex) {
             this.hoveredComponentIndex = foundComponentIndex;
@@ -1052,30 +875,129 @@ class GlyphCanvas {
         }
     }
 
+    _isPointInComponent(shape, glyphX, glyphY, mouseX, mouseY) {
+        const { xPosition, xOffset, yOffset } = this._getGlyphPosition(
+            this.selectedGlyphIndex
+        );
+        const transform = shape.Component.transform || [1, 0, 0, 1, 0, 0];
+
+        const checkShapesRecursive = (
+            shapes,
+            parentTransform = [1, 0, 0, 1, 0, 0]
+        ) => {
+            for (const componentShape of shapes) {
+                if (componentShape.Component) {
+                    const nestedTransform = componentShape.Component
+                        .transform || [1, 0, 0, 1, 0, 0];
+                    const combinedTransform = [
+                        parentTransform[0] * nestedTransform[0] +
+                            parentTransform[2] * nestedTransform[1],
+                        parentTransform[1] * nestedTransform[0] +
+                            parentTransform[3] * nestedTransform[1],
+                        parentTransform[0] * nestedTransform[2] +
+                            parentTransform[2] * nestedTransform[3],
+                        parentTransform[1] * nestedTransform[2] +
+                            parentTransform[3] * nestedTransform[3],
+                        parentTransform[0] * nestedTransform[4] +
+                            parentTransform[2] * nestedTransform[5] +
+                            parentTransform[4],
+                        parentTransform[1] * nestedTransform[4] +
+                            parentTransform[3] * nestedTransform[5] +
+                            parentTransform[5]
+                    ];
+
+                    if (
+                        componentShape.Component.layerData &&
+                        componentShape.Component.layerData.shapes &&
+                        checkShapesRecursive(
+                            componentShape.Component.layerData.shapes,
+                            combinedTransform
+                        )
+                    ) {
+                        return true;
+                    }
+                    continue;
+                }
+
+                if (componentShape.nodes && componentShape.nodes.length > 0) {
+                    const path = new Path2D();
+                    this.buildPathFromNodes(componentShape.nodes, path);
+                    path.closePath();
+
+                    this.ctx.save();
+                    if (this.componentStack.length === 0) {
+                        const viewTransform =
+                            this.viewportManager.getTransformMatrix();
+                        this.ctx.setTransform(
+                            viewTransform.a,
+                            viewTransform.b,
+                            viewTransform.c,
+                            viewTransform.d,
+                            viewTransform.e,
+                            viewTransform.f
+                        );
+                        this.ctx.translate(xPosition + xOffset, yOffset);
+                    } else {
+                        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    }
+
+                    this.ctx.transform(
+                        transform[0],
+                        transform[1],
+                        transform[2],
+                        transform[3],
+                        transform[4],
+                        transform[5]
+                    );
+                    this.ctx.transform(
+                        parentTransform[0],
+                        parentTransform[1],
+                        parentTransform[2],
+                        parentTransform[3],
+                        parentTransform[4],
+                        parentTransform[5]
+                    );
+
+                    const testX =
+                        this.componentStack.length === 0 ? mouseX : glyphX;
+                    const testY =
+                        this.componentStack.length === 0 ? mouseY : glyphY;
+                    const isInPath = this.ctx.isPointInPath(path, testX, testY);
+
+                    this.ctx.restore();
+                    if (isInPath) return true;
+                }
+            }
+            return false;
+        };
+
+        return checkShapesRecursive(shape.Component.layerData.shapes);
+    }
+
+    _getGlyphPosition(glyphIndex) {
+        let xPosition = 0;
+        for (let i = 0; i < glyphIndex; i++) {
+            xPosition += this.shapedGlyphs[i].ax || 0;
+        }
+        const glyph = this.shapedGlyphs[glyphIndex];
+        const xOffset = glyph.dx || 0;
+        const yOffset = glyph.dy || 0;
+        return { xPosition, xOffset, yOffset };
+    }
+
     updateHoveredAnchor() {
-        // Check which anchor is being hovered in outline editor mode
         if (!this.layerData || !this.layerData.anchors) {
             return;
         }
 
-        // Transform mouse coordinates to component local space
-        const { glyphX, glyphY } = this.transformMouseToComponentSpace(
-            this.mouseX,
-            this.mouseY
+        const foundAnchorIndex = this._findHoveredItem(
+            this.layerData.anchors.map((anchor, index) => ({
+                ...anchor,
+                index
+            })),
+            (item) => ({ x: item.x, y: item.y }),
+            (item) => item.index
         );
-
-        // Check each anchor
-        const hitRadius = 10 / this.viewportManager.scale; // 10 pixels in screen space
-        let foundAnchorIndex = null;
-
-        this.layerData.anchors.forEach((anchor, index) => {
-            const dist = Math.sqrt(
-                (anchor.x - glyphX) ** 2 + (anchor.y - glyphY) ** 2
-            );
-            if (dist <= hitRadius) {
-                foundAnchorIndex = index;
-            }
-        });
 
         if (foundAnchorIndex !== this.hoveredAnchorIndex) {
             this.hoveredAnchorIndex = foundAnchorIndex;
@@ -1084,49 +1006,27 @@ class GlyphCanvas {
     }
 
     updateHoveredPoint() {
-        // Check which point is being hovered in outline editor mode
         if (!this.layerData || !this.layerData.shapes) {
             return;
         }
 
-        // Transform mouse coordinates to component local space
-        const { glyphX, glyphY } = this.transformMouseToComponentSpace(
-            this.mouseX,
-            this.mouseY
-        );
-
-        // Check each point in each contour
-        const hitRadius = 10 / this.viewportManager.scale; // 10 pixels in screen space
-        let foundPoint = null;
-
-        this.layerData.shapes.forEach((shape, contourIndex) => {
-            // Parse nodes if not already done
-            if (!shape.nodes && shape.Path && shape.Path.nodes) {
-                const nodesString = shape.Path.nodes;
-                const parts = nodesString.trim().split(/\s+/);
-                shape.nodes = [];
-                for (let i = 0; i < parts.length; i += 3) {
-                    if (i + 2 < parts.length) {
-                        shape.nodes.push([
-                            parseFloat(parts[i]),
-                            parseFloat(parts[i + 1]),
-                            parts[i + 2]
-                        ]);
-                    }
-                }
-            }
-
-            if (shape.ref || !shape.nodes) return;
-
-            shape.nodes.forEach((node, nodeIndex) => {
-                const [x, y] = node;
-                const dist = Math.sqrt((x - glyphX) ** 2 + (y - glyphY) ** 2);
-
-                if (dist <= hitRadius) {
-                    foundPoint = { contourIndex, nodeIndex };
-                }
-            });
+        const points = this.layerData.shapes.flatMap((shape, contourIndex) => {
+            if (shape.ref || !shape.nodes) return [];
+            return shape.nodes.map((node, nodeIndex) => ({
+                node,
+                contourIndex,
+                nodeIndex
+            }));
         });
+
+        const foundPoint = this._findHoveredItem(
+            points,
+            (item) => ({ x: item.node[0], y: item.node[1] }),
+            (item) => ({
+                contourIndex: item.contourIndex,
+                nodeIndex: item.nodeIndex
+            })
+        );
 
         if (
             JSON.stringify(foundPoint) !==
@@ -1390,29 +1290,23 @@ class GlyphCanvas {
         this.shapeText();
     }
 
-    setVariation(axisTag, value) {
-        const previousValue =
-            this.variationSettings[axisTag] !== undefined
-                ? this.variationSettings[axisTag]
-                : this.getVariationAxes().find((a) => a.tag === axisTag)
-                      ?.defaultValue || 0;
-
-        // Cancel any ongoing animation
+    _setupAnimation(newSettings) {
         if (this.isAnimating) {
             this.isAnimating = false;
         }
 
-        // Set up animation
         this.animationStartValues = { ...this.variationSettings };
         this.animationTargetValues = {
             ...this.variationSettings,
-            [axisTag]: value
+            ...newSettings
         };
         this.animationCurrentFrame = 0;
         this.isAnimating = true;
-
-        // Start animation loop
         this.animateVariation();
+    }
+
+    setVariation(axisTag, value) {
+        this._setupAnimation({ [axisTag]: value });
     }
 
     async animateVariation() {
@@ -1649,182 +1543,83 @@ class GlyphCanvas {
         this.render();
     }
 
-    async navigateToNextGlyphLogical() {
-        // Navigate to the next glyph in logical order (forward in text)
+    async _navigateGlyphLogical(direction) {
         if (!this.isGlyphEditMode || this.componentStack.length > 0) {
-            return; // Only works in top-level glyph edit mode
+            return;
         }
 
-        // Get current glyph's cluster position
         if (
-            this.selectedGlyphIndex >= 0 &&
-            this.selectedGlyphIndex < this.shapedGlyphs.length
+            this.selectedGlyphIndex < 0 ||
+            this.selectedGlyphIndex >= this.shapedGlyphs.length
         ) {
-            const currentGlyph = this.shapedGlyphs[this.selectedGlyphIndex];
-            const currentClusterPos = currentGlyph.cl || 0;
-            const isCurrentRTL = this.isPositionRTL(currentClusterPos);
-
-            // First, try to find another glyph at the SAME cluster position
-            // For RTL: move backward in visual buffer (earlier glyphs are visually later)
-            // For LTR: move forward in visual buffer
-            if (isCurrentRTL) {
-                // RTL: check earlier indices (visually they come after)
-                for (let i = this.selectedGlyphIndex - 1; i >= 0; i--) {
-                    const glyph = this.shapedGlyphs[i];
-                    if ((glyph.cl || 0) === currentClusterPos) {
-                        console.log(
-                            `Navigating to next glyph in RTL cluster ${currentClusterPos}: index ${i}`
-                        );
-                        await this.selectGlyphByIndex(i);
-                        return;
-                    }
-                }
-            } else {
-                // LTR: check later indices
-                for (
-                    let i = this.selectedGlyphIndex + 1;
-                    i < this.shapedGlyphs.length;
-                    i++
-                ) {
-                    const glyph = this.shapedGlyphs[i];
-                    if ((glyph.cl || 0) === currentClusterPos) {
-                        console.log(
-                            `Navigating to next glyph in LTR cluster ${currentClusterPos}: index ${i}`
-                        );
-                        await this.selectGlyphByIndex(i);
-                        return;
-                    }
-                }
-            }
-
-            // No more glyphs at current cluster, move to next cluster position logically
-            let nextPosition = currentClusterPos + 1;
-
-            // Find next cluster position that has a glyph
-            while (nextPosition <= this.textBuffer.length) {
-                const isNextRTL = this.isPositionRTL(nextPosition);
-                // For RTL clusters, start with the last glyph (visually first)
-                // For LTR clusters, start with the first glyph
-                const glyphIndex = isNextRTL
-                    ? this.findLastGlyphAtClusterPosition(nextPosition)
-                    : this.findFirstGlyphAtClusterPosition(nextPosition);
-                if (glyphIndex >= 0) {
-                    console.log(
-                        `Navigating from cluster ${currentClusterPos} to ${nextPosition} (glyph ${glyphIndex})`
-                    );
-                    await this.selectGlyphByIndex(glyphIndex);
-                    return;
-                }
-                nextPosition++;
-            }
-
-            console.log('Already at last glyph in logical order');
+            return;
         }
+
+        const currentGlyph = this.shapedGlyphs[this.selectedGlyphIndex];
+        const currentClusterPos = currentGlyph.cl || 0;
+        const isCurrentRTL = this.isPositionRTL(currentClusterPos);
+
+        const step = direction * (isCurrentRTL ? -1 : 1);
+        for (
+            let i = this.selectedGlyphIndex + step;
+            i >= 0 && i < this.shapedGlyphs.length;
+            i += step
+        ) {
+            const glyph = this.shapedGlyphs[i];
+            if ((glyph.cl || 0) === currentClusterPos) {
+                await this.selectGlyphByIndex(i);
+                return;
+            }
+        }
+
+        let nextPosition = currentClusterPos + direction;
+        while (nextPosition >= 0 && nextPosition <= this.textBuffer.length) {
+            const isNextRTL = this.isPositionRTL(nextPosition);
+            const glyphIndex = this.findFirstGlyphAtClusterPosition(
+                nextPosition,
+                isNextRTL
+            );
+            if (glyphIndex >= 0) {
+                await this.selectGlyphByIndex(glyphIndex);
+                return;
+            }
+            nextPosition += direction;
+        }
+    }
+
+    async navigateToNextGlyphLogical() {
+        await this._navigateGlyphLogical(1);
     }
 
     async navigateToPreviousGlyphLogical() {
-        // Navigate to the previous glyph in logical order (backward in text)
-        if (!this.isGlyphEditMode || this.componentStack.length > 0) {
-            return; // Only works in top-level glyph edit mode
+        await this._navigateGlyphLogical(-1);
+    }
+
+    _findGlyphAtClusterPosition(clusterPos, searchFromEnd = false) {
+        if (!this.shapedGlyphs || this.shapedGlyphs.length === 0) {
+            return -1;
         }
 
-        // Get current glyph's cluster position
-        if (
-            this.selectedGlyphIndex >= 0 &&
-            this.selectedGlyphIndex < this.shapedGlyphs.length
-        ) {
-            const currentGlyph = this.shapedGlyphs[this.selectedGlyphIndex];
-            const currentClusterPos = currentGlyph.cl || 0;
-            const isCurrentRTL = this.isPositionRTL(currentClusterPos);
+        const start = searchFromEnd ? this.shapedGlyphs.length - 1 : 0;
+        const end = searchFromEnd ? -1 : this.shapedGlyphs.length;
+        const step = searchFromEnd ? -1 : 1;
 
-            // First, try to find another glyph at the SAME cluster position
-            // For RTL: move forward in visual buffer (later glyphs are visually earlier)
-            // For LTR: move backward in visual buffer
-            if (isCurrentRTL) {
-                // RTL: check later indices (visually they come before)
-                for (
-                    let i = this.selectedGlyphIndex + 1;
-                    i < this.shapedGlyphs.length;
-                    i++
-                ) {
-                    const glyph = this.shapedGlyphs[i];
-                    if ((glyph.cl || 0) === currentClusterPos) {
-                        console.log(
-                            `Navigating to previous glyph in RTL cluster ${currentClusterPos}: index ${i}`
-                        );
-                        await this.selectGlyphByIndex(i);
-                        return;
-                    }
-                }
-            } else {
-                // LTR: check earlier indices
-                for (let i = this.selectedGlyphIndex - 1; i >= 0; i--) {
-                    const glyph = this.shapedGlyphs[i];
-                    if ((glyph.cl || 0) === currentClusterPos) {
-                        console.log(
-                            `Navigating to previous glyph in LTR cluster ${currentClusterPos}: index ${i}`
-                        );
-                        await this.selectGlyphByIndex(i);
-                        return;
-                    }
-                }
+        for (let i = start; i !== end; i += step) {
+            const glyph = this.shapedGlyphs[i];
+            if ((glyph.cl || 0) === clusterPos) {
+                return i;
             }
-
-            // No more glyphs at current cluster, move to previous cluster position logically
-            let prevPosition = currentClusterPos - 1;
-
-            // Find previous cluster position that has a glyph
-            while (prevPosition >= 0) {
-                const isPrevRTL = this.isPositionRTL(prevPosition);
-                // For RTL clusters, start with the first glyph (visually last)
-                // For LTR clusters, start with the last glyph
-                const glyphIndex = isPrevRTL
-                    ? this.findFirstGlyphAtClusterPosition(prevPosition)
-                    : this.findLastGlyphAtClusterPosition(prevPosition);
-                if (glyphIndex >= 0) {
-                    console.log(
-                        `Navigating from cluster ${currentClusterPos} to ${prevPosition} (glyph ${glyphIndex})`
-                    );
-                    await this.selectGlyphByIndex(glyphIndex);
-                    return;
-                }
-                prevPosition--;
-            }
-
-            console.log('Already at first glyph in logical order');
         }
+
+        return -1;
     }
 
     findFirstGlyphAtClusterPosition(clusterPos) {
-        // Find the first visual glyph index that corresponds to a logical cluster position
-        if (!this.shapedGlyphs || this.shapedGlyphs.length === 0) {
-            return -1;
-        }
-
-        for (let i = 0; i < this.shapedGlyphs.length; i++) {
-            const glyph = this.shapedGlyphs[i];
-            if ((glyph.cl || 0) === clusterPos) {
-                return i;
-            }
-        }
-
-        return -1;
+        return this._findGlyphAtClusterPosition(clusterPos, false);
     }
 
     findLastGlyphAtClusterPosition(clusterPos) {
-        // Find the last visual glyph index that corresponds to a logical cluster position
-        if (!this.shapedGlyphs || this.shapedGlyphs.length === 0) {
-            return -1;
-        }
-
-        for (let i = this.shapedGlyphs.length - 1; i >= 0; i--) {
-            const glyph = this.shapedGlyphs[i];
-            if ((glyph.cl || 0) === clusterPos) {
-                return i;
-            }
-        }
-
-        return -1;
+        return this._findGlyphAtClusterPosition(clusterPos, true);
     }
 
     async fetchGlyphData() {
@@ -2104,24 +1899,12 @@ json.dumps(result)
 
         console.log(`Setting axis values to master location:`, master.location);
 
-        // Cancel any ongoing animation
-        if (this.isAnimating) {
-            this.isAnimating = false;
-        }
-
         // Set up animation to all axes at once
-        this.animationStartValues = { ...this.variationSettings };
-        this.animationTargetValues = { ...this.variationSettings };
-
-        // Update target values for all axes in the master location
+        const newSettings = {};
         for (const [axisTag, value] of Object.entries(master.location)) {
-            this.animationTargetValues[axisTag] = value;
+            newSettings[axisTag] = value;
         }
-
-        // Start animation
-        this.animationCurrentFrame = 0;
-        this.isAnimating = true;
-        this.animateVariation();
+        this._setupAnimation(newSettings);
 
         // Update the visual selection highlight for layers without rebuilding the entire UI
         this.updateLayerSelection();
