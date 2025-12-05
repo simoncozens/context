@@ -5430,132 +5430,142 @@ json.dumps(result)
     }
 }
 
-// Initialize when document is ready
-document.addEventListener('DOMContentLoaded', () => {
-    // Wait for the editor view to be ready
-    const initCanvas = () => {
-        const editorContent = document.querySelector('#view-editor .view-content');
-        if (editorContent) {
-            // Create main container with flexbox layout
-            const mainContainer = document.createElement('div');
-            mainContainer.style.display = 'flex';
-            mainContainer.style.width = '100%';
-            mainContainer.style.height = '100%';
-            mainContainer.style.overflow = 'hidden';
+function initCanvas() {
+    const editorContent = document.querySelector('#view-editor .view-content');
+    if (editorContent) {
+        // Create main container with flexbox layout
+        const mainContainer = document.createElement('div');
+        mainContainer.style.display = 'flex';
+        mainContainer.style.width = '100%';
+        mainContainer.style.height = '100%';
+        mainContainer.style.overflow = 'hidden';
 
-            // Create left sidebar for glyph properties
-            const leftSidebar = document.createElement('div');
-            leftSidebar.id = 'glyph-properties-sidebar';
-            leftSidebar.style.width = '200px';
-            leftSidebar.style.minWidth = '200px';
-            leftSidebar.style.height = '100%';
-            leftSidebar.style.backgroundColor = 'var(--bg-editor-sidebar)';
-            leftSidebar.style.borderRight = '1px solid var(--border-primary)';
-            leftSidebar.style.padding = '12px';
-            leftSidebar.style.overflowY = 'auto';
-            leftSidebar.style.display = 'flex';
-            leftSidebar.style.flexDirection = 'column';
-            leftSidebar.style.gap = '12px';
+        // Create left sidebar for glyph properties
+        const leftSidebar = document.createElement('div');
+        leftSidebar.id = 'glyph-properties-sidebar';
+        leftSidebar.style.width = '200px';
+        leftSidebar.style.minWidth = '200px';
+        leftSidebar.style.height = '100%';
+        leftSidebar.style.backgroundColor = 'var(--bg-editor-sidebar)';
+        leftSidebar.style.borderRight = '1px solid var(--border-primary)';
+        leftSidebar.style.padding = '12px';
+        leftSidebar.style.overflowY = 'auto';
+        leftSidebar.style.display = 'flex';
+        leftSidebar.style.flexDirection = 'column';
+        leftSidebar.style.gap = '12px';
 
-            // Create right sidebar for axes
-            const rightSidebar = document.createElement('div');
-            rightSidebar.id = 'glyph-editor-sidebar';
-            rightSidebar.style.width = '200px';
-            rightSidebar.style.minWidth = '200px';
-            rightSidebar.style.height = '100%';
-            rightSidebar.style.backgroundColor = 'var(--bg-editor-sidebar)';
-            rightSidebar.style.borderLeft = '1px solid var(--border-primary)';
-            rightSidebar.style.padding = '12px';
-            rightSidebar.style.overflowY = 'auto';
-            rightSidebar.style.display = 'flex';
-            rightSidebar.style.flexDirection = 'column';
-            rightSidebar.style.gap = '12px';
+        // Create right sidebar for axes
+        const rightSidebar = document.createElement('div');
+        rightSidebar.id = 'glyph-editor-sidebar';
+        rightSidebar.style.width = '200px';
+        rightSidebar.style.minWidth = '200px';
+        rightSidebar.style.height = '100%';
+        rightSidebar.style.backgroundColor = 'var(--bg-editor-sidebar)';
+        rightSidebar.style.borderLeft = '1px solid var(--border-primary)';
+        rightSidebar.style.padding = '12px';
+        rightSidebar.style.overflowY = 'auto';
+        rightSidebar.style.display = 'flex';
+        rightSidebar.style.flexDirection = 'column';
+        rightSidebar.style.gap = '12px';
 
-            // Create canvas container
-            const canvasContainer = document.createElement('div');
-            canvasContainer.id = 'glyph-canvas-container';
-            canvasContainer.style.flex = '1';
-            canvasContainer.style.height = '100%';
-            canvasContainer.style.position = 'relative';
+        // Create canvas container
+        const canvasContainer = document.createElement('div');
+        canvasContainer.id = 'glyph-canvas-container';
+        canvasContainer.style.flex = '1';
+        canvasContainer.style.height = '100%';
+        canvasContainer.style.position = 'relative';
 
-            // Assemble layout (left sidebar, canvas, right sidebar)
-            mainContainer.appendChild(leftSidebar);
-            mainContainer.appendChild(canvasContainer);
-            mainContainer.appendChild(rightSidebar);
-            editorContent.appendChild(mainContainer);
+        // Assemble layout (left sidebar, canvas, right sidebar)
+        mainContainer.appendChild(leftSidebar);
+        mainContainer.appendChild(canvasContainer);
+        mainContainer.appendChild(rightSidebar);
+        editorContent.appendChild(mainContainer);
 
-            // Initialize canvas
-            window.glyphCanvas = new GlyphCanvas('glyph-canvas-container');
+        // Initialize canvas
+        window.glyphCanvas = new GlyphCanvas('glyph-canvas-container');
 
-            // Create glyph properties container (initially empty)
-            const propertiesSection = document.createElement('div');
-            propertiesSection.id = 'glyph-properties-section';
-            propertiesSection.style.display = 'flex';
-            propertiesSection.style.flexDirection = 'column';
-            propertiesSection.style.gap = '10px';
-            leftSidebar.appendChild(propertiesSection);
+        // Create glyph properties container (initially empty)
+        const propertiesSection = document.createElement('div');
+        propertiesSection.id = 'glyph-properties-section';
+        propertiesSection.style.display = 'flex';
+        propertiesSection.style.flexDirection = 'column';
+        propertiesSection.style.gap = '10px';
+        leftSidebar.appendChild(propertiesSection);
 
-            // Create variable axes container (initially empty)
-            const axesSection = document.createElement('div');
-            axesSection.id = 'glyph-axes-section';
-            axesSection.style.display = 'flex';
-            axesSection.style.flexDirection = 'column';
-            axesSection.style.gap = '10px';
-            rightSidebar.appendChild(axesSection);
+        // Create variable axes container (initially empty)
+        const axesSection = document.createElement('div');
+        axesSection.id = 'glyph-axes-section';
+        axesSection.style.display = 'flex';
+        axesSection.style.flexDirection = 'column';
+        axesSection.style.gap = '10px';
+        rightSidebar.appendChild(axesSection);
 
-            // Create OpenType features container (initially empty)
-            const featuresSection = document.createElement('div');
-            featuresSection.id = 'glyph-features-section';
-            featuresSection.style.display = 'flex';
-            featuresSection.style.flexDirection = 'column';
-            featuresSection.style.gap = '2px';
-            featuresSection.style.marginTop = '10px';
-            rightSidebar.appendChild(featuresSection);
+        // Create OpenType features container (initially empty)
+        const featuresSection = document.createElement('div');
+        featuresSection.id = 'glyph-features-section';
+        featuresSection.style.display = 'flex';
+        featuresSection.style.flexDirection = 'column';
+        featuresSection.style.gap = '2px';
+        featuresSection.style.marginTop = '10px';
+        rightSidebar.appendChild(featuresSection);
 
-            // Store reference to sidebars for later updates
-            window.glyphCanvas.leftSidebar = leftSidebar;
-            window.glyphCanvas.propertiesSection = propertiesSection;
-            window.glyphCanvas.rightSidebar = rightSidebar;
-            window.glyphCanvas.axesSection = axesSection;
-            window.glyphCanvas.featuresSection = featuresSection;
+        // Store reference to sidebars for later updates
+        window.glyphCanvas.leftSidebar = leftSidebar;
+        window.glyphCanvas.propertiesSection = propertiesSection;
+        window.glyphCanvas.rightSidebar = rightSidebar;
+        window.glyphCanvas.axesSection = axesSection;
+        window.glyphCanvas.featuresSection = featuresSection;
 
-            // Observe when the editor view gains/loses focus (via 'focused' class)
-            const editorView = document.querySelector('#view-editor');
-            if (editorView) {
-                const updateSidebarStyles = () => {
-                    const isFocused = editorView.classList.contains('focused');
-                    const bgColor = isFocused ? 'var(--bg-editor-sidebar)' : 'var(--bg-secondary)';
-                    leftSidebar.style.backgroundColor = bgColor;
-                    rightSidebar.style.backgroundColor = bgColor;
-                };
+        // Observe when the editor view gains/loses focus (via 'focused' class)
+        const editorView = document.querySelector('#view-editor');
+        if (editorView) {
+            const updateSidebarStyles = () => {
+                const isFocused = editorView.classList.contains('focused');
+                const bgColor = isFocused
+                    ? 'var(--bg-editor-sidebar)'
+                    : 'var(--bg-secondary)';
+                leftSidebar.style.backgroundColor = bgColor;
+                rightSidebar.style.backgroundColor = bgColor;
+            };
 
-                const observer = new MutationObserver((mutations) => {
-                    mutations.forEach((mutation) => {
-                        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                            // Update sidebar styles when focus changes
-                            updateSidebarStyles();
-                            // Render when focused class changes
-                            window.glyphCanvas.render();
-                        }
-                    });
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (
+                        mutation.type === 'attributes' &&
+                        mutation.attributeName === 'class'
+                    ) {
+                        // Update sidebar styles when focus changes
+                        updateSidebarStyles();
+                        // Render when focused class changes
+                        window.glyphCanvas.render();
+                    }
                 });
-                observer.observe(editorView, { attributes: true, attributeFilter: ['class'] });
+            });
+            observer.observe(editorView, {
+                attributes: true,
+                attributeFilter: ['class']
+            });
 
-                // Set initial state
-                updateSidebarStyles();
-            }
-
-            // Listen for font compilation events
-            setupFontLoadingListener();
-
-            console.log('Glyph canvas initialized');
-        } else {
-            setTimeout(initCanvas, 100);
+            // Set initial state
+            updateSidebarStyles();
         }
-    };
 
-    initCanvas();
-});
+        // Listen for font compilation events
+        setupFontLoadingListener();
+
+        console.log('Glyph canvas initialized');
+    } else {
+        setTimeout(initCanvas, 100);
+    }
+}
+
+if (typeof document !== 'undefined' && document.addEventListener) {
+    // Initialize when document is ready
+    document.addEventListener('DOMContentLoaded', () => {
+        // Wait for the editor view to be ready
+        initCanvas();
+    });
+}
 
 // Set up listener for compiled fonts
 function setupFontLoadingListener() {
@@ -5632,8 +5642,7 @@ else:
     });
 }
 
-
 // Export for module use
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = GlyphCanvas;
+    module.exports = { GlyphCanvas };
 }

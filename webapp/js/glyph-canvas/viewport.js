@@ -184,3 +184,7 @@ class ViewportManager {
         animate();
     }
 }
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ViewportManager };
+}
