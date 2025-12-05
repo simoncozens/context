@@ -103,18 +103,18 @@ describe('GlyphCanvas animation setup', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.variationSettings = { wght: 400 };
+        canvas.axesManager.variationSettings = { wght: 400 };
         // Mock the animateVariation method to prevent it from running
-        canvas.animateVariation = jest.fn();
+        canvas.axesManager.animateVariation = jest.fn();
     });
 
     test('setVariation should set up animation correctly', () => {
-        canvas.setVariation('wght', 700);
-        expect(canvas.isAnimating).toBe(true);
-        expect(canvas.animationStartValues).toEqual({ wght: 400 });
-        expect(canvas.animationTargetValues).toEqual({ wght: 700 });
-        expect(canvas.animationCurrentFrame).toBe(0);
-        expect(canvas.animateVariation).toHaveBeenCalled();
+        canvas.axesManager.setVariation('wght', 700);
+        expect(canvas.axesManager.isAnimating).toBe(true);
+        expect(canvas.axesManager.animationStartValues).toEqual({ wght: 400 });
+        expect(canvas.axesManager.animationTargetValues).toEqual({ wght: 700 });
+        expect(canvas.axesManager.animationCurrentFrame).toBe(0);
+        expect(canvas.axesManager.animateVariation).toHaveBeenCalled();
     });
 });
 

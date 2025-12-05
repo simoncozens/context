@@ -1,5 +1,8 @@
 global.ViewportManager =
     require('../js/glyph-canvas/viewport.js').ViewportManager;
+global.AxesManager = require('../js/glyph-canvas/variations.js').AxesManager;
+global.FeaturesManager =
+    require('../js/glyph-canvas/features.js').FeaturesManager;
 global.GlyphCanvas = require('../js/glyph-canvas.js').GlyphCanvas;
 
 // Mock browser-specific APIs that are not available in JSDOM by default
