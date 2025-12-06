@@ -70,6 +70,11 @@ json.dumps(fonts_list)
         }
     }
 
+    // Alias for compatibility
+    async updateDropdown() {
+        return this.populateDropdown();
+    }
+
     async setCurrentFont(fontId) {
         if (!window.pyodide) {
             console.warn('[FontDropdown]', 'Pyodide not yet loaded');
