@@ -56,9 +56,6 @@ class GlyphCanvas {
         this.hoveredAnchorIndex = null; // Index for hovered anchor
         this.selectedComponents = []; // Array of component indices for selected components
         this.hoveredComponentIndex = null; // Index for hovered component
-        this.isDraggingPoint = false;
-        this.isDraggingAnchor = false;
-        this.isDraggingComponent = false;
         this.layerDataDirty = false; // Track if layer data needs saving
         this.isPreviewMode = false; // Preview mode hides outline editor
         this.isSliderActive = false; // Track if user is currently interacting with slider
@@ -74,10 +71,7 @@ class GlyphCanvas {
         this.textChangeDebounceTimer = null;
         this.textChangeDebounceDelay = 1000; // 1 second delay
 
-        // Mouse interaction
-        this.isDragging = false;
-        this.lastMouseX = 0;
-        this.lastMouseY = 0;
+        // Mouse interaction (for dragging elements and canvas panning)\n        this.isDraggingPoint = false;\n        this.isDraggingAnchor = false;\n        this.isDraggingComponent = false;\n        this.isDraggingCanvas = false;
 
         // Resize observer
         this.resizeObserver = null;
@@ -365,20 +359,27 @@ class GlyphCanvas {
                                 prevPos.yOffset + prevBounds.maxY;
 
                             // Update accumulated vertical bounds with previous glyph
-                            if (!this.viewportManager.accumulatedVerticalBounds) {
-                                this.viewportManager.accumulatedVerticalBounds = {
-                                    minY: fontSpaceMinY,
-                                    maxY: fontSpaceMaxY
-                                };
+                            if (
+                                !this.viewportManager.accumulatedVerticalBounds
+                            ) {
+                                this.viewportManager.accumulatedVerticalBounds =
+                                    {
+                                        minY: fontSpaceMinY,
+                                        maxY: fontSpaceMaxY
+                                    };
                             } else {
-                                this.viewportManager.accumulatedVerticalBounds.minY = Math.min(
-                                    this.viewportManager.accumulatedVerticalBounds.minY,
-                                    fontSpaceMinY
-                                );
-                                this.viewportManager.accumulatedVerticalBounds.maxY = Math.max(
-                                    this.viewportManager.accumulatedVerticalBounds.maxY,
-                                    fontSpaceMaxY
-                                );
+                                this.viewportManager.accumulatedVerticalBounds.minY =
+                                    Math.min(
+                                        this.viewportManager
+                                            .accumulatedVerticalBounds.minY,
+                                        fontSpaceMinY
+                                    );
+                                this.viewportManager.accumulatedVerticalBounds.maxY =
+                                    Math.max(
+                                        this.viewportManager
+                                            .accumulatedVerticalBounds.maxY,
+                                        fontSpaceMaxY
+                                    );
                             }
                             console.log(
                                 'Saved previous glyph vertical bounds:',
@@ -664,10 +665,13 @@ class GlyphCanvas {
             }
         }
 
-        this.isDragging = true;
-        this.lastMouseX = e.clientX;
-        this.lastMouseY = e.clientY;
-        this.canvas.style.cursor = 'grabbing';
+        // Start canvas panning when cursor is grab (not hovering over interactive elements)
+        if (this.canvas.style.cursor === 'grab') {
+            this.isDraggingCanvas = true;
+            this.lastMouseX = e.clientX;
+            this.lastMouseY = e.clientY;
+            this.canvas.style.cursor = 'grabbing';
+        }
     }
 
     onMouseMove(e) {
@@ -680,24 +684,21 @@ class GlyphCanvas {
             if (this.layerData) {
                 this._handleDrag(e);
             }
-            return; // Don't do canvas panning while dragging
+            return;
         }
 
-        // Canvas panning (only when not dragging a point)
-        if (!this.isDragging) return;
-
-        // Reset accumulated vertical bounds on manual pan
-        this.viewportManager.accumulatedVerticalBounds = null;
-
-        const dx = e.clientX - this.lastMouseX;
-        const dy = e.clientY - this.lastMouseY;
-
-        this.viewportManager.pan(dx, dy);
-
-        this.lastMouseX = e.clientX;
-        this.lastMouseY = e.clientY;
-
-        this.render();
+        // Handle canvas panning
+        if (this.isDraggingCanvas) {
+            const deltaX = e.clientX - this.lastMouseX;
+            const deltaY = e.clientY - this.lastMouseY;
+            
+            this.viewportManager.pan(deltaX, deltaY);
+            this.render();
+            
+            this.lastMouseX = e.clientX;
+            this.lastMouseY = e.clientY;
+            return;
+        }
     }
 
     _handleDrag(e) {
@@ -778,10 +779,16 @@ class GlyphCanvas {
     }
 
     onMouseUp(e) {
-        this.isDragging = false;
         this.isDraggingPoint = false;
         this.isDraggingAnchor = false;
         this.isDraggingComponent = false;
+        this.isDraggingCanvas = false;
+        
+        // Restore grab cursor if it was grabbing
+        if (this.canvas.style.cursor === 'grabbing') {
+            this.canvas.style.cursor = 'grab';
+        }
+        
         // Update cursor based on current mouse position
         this.updateCursorStyle(e);
     }
@@ -789,23 +796,16 @@ class GlyphCanvas {
     onWheel(e) {
         e.preventDefault();
 
-        // Reset accumulated vertical bounds on manual zoom
-        this.viewportManager.accumulatedVerticalBounds = null;
-
         const rect = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        // Calculate zoom
-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-
-        if (this.viewportManager.zoom(zoomFactor, mouseX, mouseY)) {
-            this.render();
-        }
+        this.viewportManager.handleWheel(e, rect, this.render.bind(this));
     }
 
     onMouseMoveHover(e) {
-        if (this.isDragging || this.isDraggingPoint || this.isDraggingAnchor)
+        if (
+            this.isDraggingPoint ||
+            this.isDraggingAnchor ||
+            this.isDraggingComponent
+        )
             return; // Don't detect hover while dragging
 
         const rect = this.canvas.getBoundingClientRect();
@@ -4408,15 +4408,11 @@ json.dumps(result)
         this.ctx.font = '12px monospace';
 
         // Draw zoom level
-        const zoomText = `Zoom: ${(this.viewportManager.scale * 100).toFixed(
-            1
-        )}%`;
+        const zoomText = `Zoom: ${(this.viewportManager.scale * 100).toFixed(1)}%`;
         this.ctx.fillText(zoomText, 10, rect.height - 10);
 
         // Draw pan position
-        const panText = `Pan: (${Math.round(
-            this.viewportManager.panX
-        )}, ${Math.round(this.viewportManager.panY)})`;
+        const panText = `Pan: (${Math.round(this.viewportManager.panX)}, ${Math.round(this.viewportManager.panY)})`;
         this.ctx.fillText(panText, 10, rect.height - 25);
 
         // Draw text buffer info

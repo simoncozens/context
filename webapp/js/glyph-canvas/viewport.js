@@ -6,6 +6,12 @@ class ViewportManager {
         this.panX = panX;
         this.panY = panY;
         this.accumulatedVerticalBounds = null; // {minY, maxY} in font space - used by panToGlyph
+
+        // Device detection state
+        this.lastWheelTime = 0;
+        this.wheelTimeout = null;
+        this.detectedDevice = null; // 'trackpad' or 'mouse'
+        this.deviceLockDuration = 200; // Lock device type for 200ms after detection
     }
 
     getTransformMatrix() {
@@ -194,7 +200,13 @@ class ViewportManager {
      * @param {Function} renderCallback - Callback to render after each frame
      * @param {number} margin - Canvas margin in pixels (defaults to CANVAS_MARGIN setting)
      */
-    frameGlyph(bounds, glyphPosition, canvasRect, renderCallback, margin = null) {
+    frameGlyph(
+        bounds,
+        glyphPosition,
+        canvasRect,
+        renderCallback,
+        margin = null
+    ) {
         // Use setting if no margin specified
         if (margin === null) {
             margin = APP_SETTINGS.OUTLINE_EDITOR.CANVAS_MARGIN;
@@ -208,7 +220,8 @@ class ViewportManager {
         const centerY = (bounds.minY + bounds.maxY) / 2;
 
         // Convert bbox center to font space
-        const fontSpaceCenterX = glyphPosition.xPosition + glyphPosition.xOffset + centerX;
+        const fontSpaceCenterX =
+            glyphPosition.xPosition + glyphPosition.xOffset + centerX;
         const fontSpaceCenterY = glyphPosition.yOffset + centerY;
 
         // Calculate the scale needed to fit the bounding box with margin
@@ -226,9 +239,11 @@ class ViewportManager {
         );
 
         // Calculate pan to center the glyph both horizontally and vertically
-        const targetPanX = canvasRect.width / 2 - fontSpaceCenterX * clampedScale;
+        const targetPanX =
+            canvasRect.width / 2 - fontSpaceCenterX * clampedScale;
         // Note: Y is flipped in canvas, so we negate fontSpaceCenterY
-        const targetPanY = canvasRect.height / 2 - -fontSpaceCenterY * clampedScale;
+        const targetPanY =
+            canvasRect.height / 2 - -fontSpaceCenterY * clampedScale;
 
         // Animate to target
         this.animateZoomAndPan(
@@ -248,7 +263,13 @@ class ViewportManager {
      * @param {Function} renderCallback - Callback to render after each frame
      * @param {number} margin - Canvas margin in pixels (defaults to CANVAS_MARGIN setting)
      */
-    panToGlyph(bounds, glyphPosition, canvasRect, renderCallback, margin = null) {
+    panToGlyph(
+        bounds,
+        glyphPosition,
+        canvasRect,
+        renderCallback,
+        margin = null
+    ) {
         // Use setting if no margin specified
         if (margin === null) {
             margin = APP_SETTINGS.OUTLINE_EDITOR.CANVAS_MARGIN;
@@ -257,8 +278,10 @@ class ViewportManager {
         console.log('ViewportManager.panToGlyph: calculated bounds', bounds);
 
         // Calculate the full bounding box in font space
-        const fontSpaceMinX = glyphPosition.xPosition + glyphPosition.xOffset + bounds.minX;
-        const fontSpaceMaxX = glyphPosition.xPosition + glyphPosition.xOffset + bounds.maxX;
+        const fontSpaceMinX =
+            glyphPosition.xPosition + glyphPosition.xOffset + bounds.minX;
+        const fontSpaceMaxX =
+            glyphPosition.xPosition + glyphPosition.xOffset + bounds.maxX;
         const fontSpaceMinY = glyphPosition.yOffset + bounds.minY;
         const fontSpaceMaxY = glyphPosition.yOffset + bounds.maxY;
 
@@ -330,14 +353,13 @@ class ViewportManager {
                 const scaleFactor = targetScale / currentScale;
                 const centerX = canvasRect.width / 2;
                 // Adjust panX to keep the horizontal center point stable during zoom
-                targetPanX =
-                    centerX -
-                    (centerX - this.panX) * scaleFactor;
+                targetPanX = centerX - (centerX - this.panX) * scaleFactor;
             }
 
             // Center vertically on the accumulated bounds
             // Note: Y is flipped in canvas, so we negate accumulatedCenterY
-            targetPanY = canvasRect.height / 2 - -accumulatedCenterY * targetScale;
+            targetPanY =
+                canvasRect.height / 2 - -accumulatedCenterY * targetScale;
 
             console.log(
                 'ViewportManager.panToGlyph: centering vertically on accumulated bounds',
@@ -351,12 +373,15 @@ class ViewportManager {
 
             // Pan horizontally: only move if glyph is outside the viewport margins
             // IMPORTANT: Calculate screen position with the NEW scale and adjusted panX
-            const screenLeftAfterZoom = fontSpaceMinX * targetScale + targetPanX;
-            const screenRightAfterZoom = fontSpaceMaxX * targetScale + targetPanX;
+            const screenLeftAfterZoom =
+                fontSpaceMinX * targetScale + targetPanX;
+            const screenRightAfterZoom =
+                fontSpaceMaxX * targetScale + targetPanX;
 
             // Calculate how far outside the viewport the glyph extends
             const leftOverhang = margin - screenLeftAfterZoom; // Positive if glyph is off left edge
-            const rightOverhang = screenRightAfterZoom - (canvasRect.width - margin); // Positive if glyph is off right edge
+            const rightOverhang =
+                screenRightAfterZoom - (canvasRect.width - margin); // Positive if glyph is off right edge
 
             if (leftOverhang > 0) {
                 // Glyph extends past left edge - pan right just enough to bring it to margin
@@ -383,17 +408,187 @@ class ViewportManager {
                     renderCallback
                 );
             } else {
-                this.animatePan(
-                    targetPanX,
-                    targetPanY,
-                    renderCallback
-                );
+                this.animatePan(targetPanX, targetPanY, renderCallback);
             }
         } else {
             console.log(
                 'ViewportManager.panToGlyph: glyph fits comfortably, no viewport adjustment needed'
             );
         }
+    }
+
+    /**
+     * Handle wheel events for zooming and panning.
+     * - Alt + wheel: zoom in/out (down = zoom in, up = zoom out)
+     * - Shift + wheel (or trackpad horizontal): pan horizontally
+     * - Wheel alone: pan vertically
+     * @param {WheelEvent} e - The wheel event
+     * @param {DOMRect} canvasRect - The canvas bounding rectangle
+     * @param {Function} renderCallback - Callback to render after change
+     * @returns {boolean} - True if viewport changed, false otherwise
+     */
+    handleWheel(e, canvasRect, renderCallback) {
+        // Reset accumulated vertical bounds on manual interaction
+        this.accumulatedVerticalBounds = null;
+
+        const now = Date.now();
+
+        // Always perform device detection based on current event characteristics
+        // The magnitude of the delta is the most reliable indicator
+        const deltaX = Math.abs(e.deltaX);
+        const deltaY = Math.abs(e.deltaY);
+        const maxDelta = Math.max(deltaX, deltaY);
+
+        let isTrackpad = false;
+
+        if (e.deltaMode === 0) {
+            // Pixel mode
+            // Primary heuristic: magnitude is the most reliable indicator
+            // Mouse wheel produces larger jumps (typically 40-300+)
+            // Trackpad produces smaller, smoother deltas (typically < 20)
+            if (maxDelta > 25) {
+                // Large values = definitely mouse wheel
+                isTrackpad = false;
+            } else if (maxDelta < 10) {
+                // Very small values = definitely trackpad
+                isTrackpad = true;
+            } else {
+                // Ambiguous range (10-25): use previous detection if recent, otherwise default to trackpad
+                if (this.detectedDevice && now - this.lastWheelTime < 100) {
+                    isTrackpad = this.detectedDevice === 'trackpad';
+                } else {
+                    isTrackpad = maxDelta < 15;
+                }
+            }
+        } else {
+            // deltaMode 1 (line) or 2 (page) = definitely mouse wheel
+            isTrackpad = false;
+        }
+
+        // Store detected device type
+        this.detectedDevice = isTrackpad ? 'trackpad' : 'mouse';
+        this.lastWheelTime = now;
+
+        // Clear any existing timeout and set new one to reset device lock
+        if (this.wheelTimeout) {
+            clearTimeout(this.wheelTimeout);
+        }
+        this.wheelTimeout = setTimeout(() => {
+            this.detectedDevice = null;
+        }, this.deviceLockDuration);
+
+        console.log('handleWheel:', {
+            deltaX: e.deltaX,
+            deltaY: e.deltaY,
+            deltaMode: e.deltaMode,
+            maxDelta: Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY)).toFixed(
+                2
+            ),
+            isTrackpad,
+            detectedDevice: this.detectedDevice,
+            shiftKey: e.shiftKey,
+            altKey: e.altKey
+        });
+
+        // Alt key + wheel = zoom
+        if (e.altKey) {
+            const mouseX = e.clientX - canvasRect.left;
+            const mouseY = e.clientY - canvasRect.top;
+
+            // Determine zoom speed based on input device
+            const zoomSpeed = isTrackpad
+                ? APP_SETTINGS.OUTLINE_EDITOR.ZOOM_SPEED_TRACKPAD
+                : APP_SETTINGS.OUTLINE_EDITOR.ZOOM_SPEED_MOUSE;
+
+            // Normalize deltaY for consistent zoom behavior
+            // Mouse wheels send large discrete values (e.g., ±100-120)
+            // Trackpad sends smooth, smaller values (typically ±1-10)
+            let normalizedDeltaY = e.deltaY;
+            if (!isTrackpad) {
+                // Cap mouse wheel delta to prevent excessive zoom jumps
+                // Use a much lower cap to prevent speed-based zoom differences
+                const maxMouseDelta = 10;
+                normalizedDeltaY =
+                    Math.sign(e.deltaY) *
+                    Math.min(Math.abs(e.deltaY), maxMouseDelta);
+            }
+
+            // deltaY > 0 means scrolling down = zoom in
+            // deltaY < 0 means scrolling up = zoom out
+            const zoomDelta = -normalizedDeltaY * zoomSpeed;
+            const zoomFactor = Math.exp(zoomDelta);
+
+            console.log('zoom:', {
+                rawDeltaY: e.deltaY,
+                normalizedDeltaY,
+                zoomSpeed,
+                zoomDelta,
+                zoomFactor: zoomFactor.toFixed(4),
+                isTrackpad
+            });
+
+            if (this.zoom(zoomFactor, mouseX, mouseY)) {
+                renderCallback();
+                return true;
+            }
+            return false;
+        }
+
+        // For panning, we need to normalize mouse wheel values to prevent acceleration
+        // Mouse wheel typically sends large discrete values (e.g., ±100)
+        // Trackpad sends smooth, smaller values
+        let panDeltaX = e.deltaX;
+        let panDeltaY = e.deltaY;
+
+        // Normalize mouse wheel deltas to a maximum magnitude
+        if (!isTrackpad) {
+            const maxDelta = 40; // Cap the delta to prevent runaway panning
+            panDeltaX =
+                Math.sign(panDeltaX) * Math.min(Math.abs(panDeltaX), maxDelta);
+            panDeltaY =
+                Math.sign(panDeltaY) * Math.min(Math.abs(panDeltaY), maxDelta);
+        }
+
+        // Shift key + wheel = force horizontal pan (mouse only, trackpad ignores shift for natural panning)
+        if (e.shiftKey && !isTrackpad) {
+            // Shift + mouse wheel: use vertical scroll for horizontal panning
+            // Use whichever delta is larger (some mice send deltaX, some send deltaY)
+            const horizontalDelta =
+                Math.abs(panDeltaX) > Math.abs(panDeltaY)
+                    ? panDeltaX
+                    : panDeltaY;
+            // Positive delta means scrolling right/down = pan right
+            // Negative delta means scrolling left/up = pan left
+            const horizontalPanSpeed =
+                APP_SETTINGS.OUTLINE_EDITOR.PAN_SPEED_MOUSE_HORIZONTAL;
+            const dx = -horizontalDelta * horizontalPanSpeed;
+            this.pan(dx, 0);
+            renderCallback();
+            return true;
+        }
+
+        // No shift key: natural panning
+        // Support diagonal panning by applying both deltaX and deltaY if present
+        let panApplied = false;
+
+        if (Math.abs(panDeltaX) > 0 || Math.abs(panDeltaY) > 0) {
+            // Determine speeds based on device type
+            const horizontalPanSpeed = isTrackpad
+                ? APP_SETTINGS.OUTLINE_EDITOR.PAN_SPEED_TRACKPAD
+                : APP_SETTINGS.OUTLINE_EDITOR.PAN_SPEED_MOUSE_HORIZONTAL;
+            const verticalPanSpeed = isTrackpad
+                ? APP_SETTINGS.OUTLINE_EDITOR.PAN_SPEED_TRACKPAD
+                : APP_SETTINGS.OUTLINE_EDITOR.PAN_SPEED_MOUSE_VERTICAL;
+
+            const dx = -panDeltaX * horizontalPanSpeed;
+            const dy = -panDeltaY * verticalPanSpeed;
+
+            this.pan(dx, dy);
+            renderCallback();
+            panApplied = true;
+        }
+
+        return panApplied;
     }
 }
 

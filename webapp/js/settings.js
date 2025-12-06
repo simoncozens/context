@@ -47,6 +47,15 @@ const APP_SETTINGS = {
         CANVAS_MARGIN: 50, // px - margin around glyphs when framing or panning
         MAX_ZOOM_FOR_CMD_ZERO: 1.5, // maximum zoom level (150%) when framing glyph with Cmd+0
 
+        // Zoom settings
+        ZOOM_SPEED_MOUSE: 0.015, // zoom speed for mouse wheel (per deltaY unit)
+        ZOOM_SPEED_TRACKPAD: 0.005, // zoom speed for trackpad (per deltaY unit)
+
+        // Pan settings
+        PAN_SPEED_TRACKPAD: 1.0, // trackpad pan speed (vertical and horizontal)
+        PAN_SPEED_MOUSE_VERTICAL: 1.5, // mouse wheel vertical pan speed
+        PAN_SPEED_MOUSE_HORIZONTAL: 1.5, // mouse wheel horizontal pan speed (Shift+scroll)
+
         // Debug/development
         SHOW_BOUNDING_BOX: false, // Show calculated bounding box in editing mode
 
