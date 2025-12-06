@@ -1,0 +1,10 @@
+{
+    "version": "1.0",
+    "description": "Manifest of example fonts to preload into /user folder on app initialization",
+    "examples": [
+        {
+            "source": "examples/Fustat.babelfont",
+            "destination": "/user/Fustat.babelfont"
+        }
+    ]
+}

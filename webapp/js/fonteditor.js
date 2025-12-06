@@ -122,6 +122,17 @@ async function initFontEditor() {
         `);
 
         console.log('FontEditor initialized successfully');
+
+        // Load example fonts into /user folder
+        if (window.loadExampleFonts) {
+            try {
+                await window.loadExampleFonts();
+            } catch (error) {
+                console.error('Failed to load example fonts:', error);
+                // Continue anyway - this is not critical
+            }
+        }
+
         if (window.updateLoadingStatus) {
             window.updateLoadingStatus('READY', true);
         }

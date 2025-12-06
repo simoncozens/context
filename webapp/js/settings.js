@@ -2,6 +2,9 @@
 // This file contains configuration values used across the application
 
 const APP_SETTINGS = {
+    // App internal ID
+    APP_ID: 'org.context.fonteditor',
+
     // Compilation settings
     COMPILE_DEBOUNCE_DELAY: 150, // ms - delay before auto-compile triggers after changes
 
