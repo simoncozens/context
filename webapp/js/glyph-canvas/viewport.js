@@ -5,6 +5,7 @@ class ViewportManager {
         this.scale = initialScale;
         this.panX = panX;
         this.panY = panY;
+        this.accumulatedVerticalBounds = null; // {minY, maxY} in font space - used by panToGlyph
     }
 
     getTransformMatrix() {
@@ -182,6 +183,217 @@ class ViewportManager {
         };
 
         animate();
+    }
+
+    /**
+     * Frame a glyph to fit within the viewport with margin.
+     * Uses animated camera movement (10 frames).
+     * @param {Object} bounds - The glyph bounding box {minX, maxX, minY, maxY, width, height}
+     * @param {Object} glyphPosition - Glyph position in text run {xPosition, xOffset, yOffset}
+     * @param {DOMRect} canvasRect - The canvas bounding rectangle
+     * @param {Function} renderCallback - Callback to render after each frame
+     * @param {number} margin - Canvas margin in pixels (defaults to CANVAS_MARGIN setting)
+     */
+    frameGlyph(bounds, glyphPosition, canvasRect, renderCallback, margin = null) {
+        // Use setting if no margin specified
+        if (margin === null) {
+            margin = APP_SETTINGS.OUTLINE_EDITOR.CANVAS_MARGIN;
+        }
+
+        // Reset accumulated vertical bounds on frame operation
+        this.accumulatedVerticalBounds = null;
+
+        // Calculate center of the bounding box in glyph-local space
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        const centerY = (bounds.minY + bounds.maxY) / 2;
+
+        // Convert bbox center to font space
+        const fontSpaceCenterX = glyphPosition.xPosition + glyphPosition.xOffset + centerX;
+        const fontSpaceCenterY = glyphPosition.yOffset + centerY;
+
+        // Calculate the scale needed to fit the bounding box with margin
+        const scaleX = (canvasRect.width - margin * 2) / bounds.width;
+        const scaleY = (canvasRect.height - margin * 2) / bounds.height;
+        const targetScale = Math.min(scaleX, scaleY);
+
+        // Clamp scale to reasonable limits (max zoom from settings to avoid over-zooming small glyphs)
+        const clampedScale = Math.max(
+            0.01,
+            Math.min(
+                APP_SETTINGS.OUTLINE_EDITOR.MAX_ZOOM_FOR_CMD_ZERO,
+                targetScale
+            )
+        );
+
+        // Calculate pan to center the glyph both horizontally and vertically
+        const targetPanX = canvasRect.width / 2 - fontSpaceCenterX * clampedScale;
+        // Note: Y is flipped in canvas, so we negate fontSpaceCenterY
+        const targetPanY = canvasRect.height / 2 - -fontSpaceCenterY * clampedScale;
+
+        // Animate to target
+        this.animateZoomAndPan(
+            clampedScale,
+            targetPanX,
+            targetPanY,
+            renderCallback
+        );
+    }
+
+    /**
+     * Pan to show a specific glyph (used when switching glyphs with keyboard shortcuts).
+     * Uses accumulated vertical bounds to maintain consistent vertical view.
+     * @param {Object} bounds - The glyph bounding box {minX, maxX, minY, maxY, width, height}
+     * @param {Object} glyphPosition - Glyph position in text run {xPosition, xOffset, yOffset}
+     * @param {DOMRect} canvasRect - The canvas bounding rectangle
+     * @param {Function} renderCallback - Callback to render after each frame
+     * @param {number} margin - Canvas margin in pixels (defaults to CANVAS_MARGIN setting)
+     */
+    panToGlyph(bounds, glyphPosition, canvasRect, renderCallback, margin = null) {
+        // Use setting if no margin specified
+        if (margin === null) {
+            margin = APP_SETTINGS.OUTLINE_EDITOR.CANVAS_MARGIN;
+        }
+
+        console.log('ViewportManager.panToGlyph: calculated bounds', bounds);
+
+        // Calculate the full bounding box in font space
+        const fontSpaceMinX = glyphPosition.xPosition + glyphPosition.xOffset + bounds.minX;
+        const fontSpaceMaxX = glyphPosition.xPosition + glyphPosition.xOffset + bounds.maxX;
+        const fontSpaceMinY = glyphPosition.yOffset + bounds.minY;
+        const fontSpaceMaxY = glyphPosition.yOffset + bounds.maxY;
+
+        // Update accumulated vertical bounds
+        if (!this.accumulatedVerticalBounds) {
+            this.accumulatedVerticalBounds = {
+                minY: fontSpaceMinY,
+                maxY: fontSpaceMaxY
+            };
+        } else {
+            this.accumulatedVerticalBounds.minY = Math.min(
+                this.accumulatedVerticalBounds.minY,
+                fontSpaceMinY
+            );
+            this.accumulatedVerticalBounds.maxY = Math.max(
+                this.accumulatedVerticalBounds.maxY,
+                fontSpaceMaxY
+            );
+        }
+
+        const accumulatedHeight =
+            this.accumulatedVerticalBounds.maxY -
+            this.accumulatedVerticalBounds.minY;
+        const accumulatedCenterY =
+            (this.accumulatedVerticalBounds.minY +
+                this.accumulatedVerticalBounds.maxY) /
+            2;
+
+        console.log('ViewportManager.panToGlyph: accumulated vertical bounds', {
+            minY: this.accumulatedVerticalBounds.minY,
+            maxY: this.accumulatedVerticalBounds.maxY,
+            height: accumulatedHeight,
+            centerY: accumulatedCenterY
+        });
+
+        const currentScale = this.scale;
+        const availableWidth = canvasRect.width - margin * 2;
+        const availableHeight = canvasRect.height - margin * 2;
+
+        let targetScale = currentScale;
+        let targetPanX = this.panX;
+        let targetPanY = this.panY;
+
+        // Check if current glyph fits within the viewport at current scale
+        const currentScreenLeft = fontSpaceMinX * currentScale + this.panX;
+        const currentScreenRight = fontSpaceMaxX * currentScale + this.panX;
+        const currentScreenTop = -fontSpaceMaxY * currentScale + this.panY;
+        const currentScreenBottom = -fontSpaceMinY * currentScale + this.panY;
+
+        const fitsHorizontally =
+            currentScreenLeft >= margin &&
+            currentScreenRight <= canvasRect.width - margin;
+        const fitsVertically =
+            currentScreenTop >= margin &&
+            currentScreenBottom <= canvasRect.height - margin;
+
+        // Only adjust viewport if glyph doesn't fit comfortably
+        if (!fitsHorizontally || !fitsVertically) {
+            // Calculate scale to fit accumulated vertical height (zoom out only if needed)
+            const scaleY = availableHeight / accumulatedHeight;
+            const scaleX = availableWidth / bounds.width;
+            targetScale = Math.min(scaleY, scaleX, currentScale); // Don't zoom in, only out
+            // Clamp to reasonable limits
+            targetScale = Math.max(0.01, Math.min(100, targetScale));
+
+            // If scale changed, we need to adjust panX to maintain horizontal position
+            // When zooming, content shifts relative to viewport center
+            if (targetScale !== currentScale) {
+                const scaleFactor = targetScale / currentScale;
+                const centerX = canvasRect.width / 2;
+                // Adjust panX to keep the horizontal center point stable during zoom
+                targetPanX =
+                    centerX -
+                    (centerX - this.panX) * scaleFactor;
+            }
+
+            // Center vertically on the accumulated bounds
+            // Note: Y is flipped in canvas, so we negate accumulatedCenterY
+            targetPanY = canvasRect.height / 2 - -accumulatedCenterY * targetScale;
+
+            console.log(
+                'ViewportManager.panToGlyph: centering vertically on accumulated bounds',
+                {
+                    accumulatedCenterY,
+                    targetPanY,
+                    targetScale,
+                    scaleFactor: targetScale / currentScale
+                }
+            );
+
+            // Pan horizontally: only move if glyph is outside the viewport margins
+            // IMPORTANT: Calculate screen position with the NEW scale and adjusted panX
+            const screenLeftAfterZoom = fontSpaceMinX * targetScale + targetPanX;
+            const screenRightAfterZoom = fontSpaceMaxX * targetScale + targetPanX;
+
+            // Calculate how far outside the viewport the glyph extends
+            const leftOverhang = margin - screenLeftAfterZoom; // Positive if glyph is off left edge
+            const rightOverhang = screenRightAfterZoom - (canvasRect.width - margin); // Positive if glyph is off right edge
+
+            if (leftOverhang > 0) {
+                // Glyph extends past left edge - pan right just enough to bring it to margin
+                targetPanX = targetPanX + leftOverhang;
+            } else if (rightOverhang > 0) {
+                // Glyph extends past right edge - pan left just enough to bring it to margin
+                targetPanX = targetPanX - rightOverhang;
+            }
+            // If glyph is within margins horizontally, don't change targetPanX (keep adjusted pan)
+
+            console.log('ViewportManager.panToGlyph: panning to', {
+                targetScale,
+                targetPanX,
+                targetPanY,
+                scaleChanged: targetScale !== currentScale
+            });
+
+            // Animate to target (zoom and pan together if scale changed, otherwise just pan)
+            if (targetScale !== currentScale) {
+                this.animateZoomAndPan(
+                    targetScale,
+                    targetPanX,
+                    targetPanY,
+                    renderCallback
+                );
+            } else {
+                this.animatePan(
+                    targetPanX,
+                    targetPanY,
+                    renderCallback
+                );
+            }
+        } else {
+            console.log(
+                'ViewportManager.panToGlyph: glyph fits comfortably, no viewport adjustment needed'
+            );
+        }
     }
 }
 
