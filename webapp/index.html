@@ -133,6 +133,26 @@
                 }
             })();
         </script>
+        
+        <!-- Extract and display version from service worker -->
+        <script>
+            (function() {
+                // Fetch the service worker file to extract version
+                fetch('coi-serviceworker.js')
+                    .then(response => response.text())
+                    .then(text => {
+                        // Extract version from VERSION constant
+                        const match = text.match(/const\s+VERSION\s*=\s*['"](v\d+)['"]/);
+                        if (match && match[1]) {
+                            const versionSpan = document.getElementById('app-version');
+                            if (versionSpan) {
+                                versionSpan.textContent = match[1];
+                            }
+                        }
+                    })
+                    .catch(err => console.warn('Could not load version:', err));
+            })();
+        </script>
     </head>
 
     <body>
@@ -140,7 +160,10 @@
         <div class="toolbar">
             <div class="toolbar-left">
                 <h1 class="app-name">
-                    contxt <span style="opacity: 0.4">Technical Prototype</span>
+                    contxt <span style="opacity: 0.4">Technical Prototype <span id="app-version"></span></span>
+                    <button id="update-app-btn" class="update-button" style="display: none;" title="New version available - click to reload">
+                        <span class="material-symbols-rounded">system_update</span>
+                    </button>
                 </h1>
             </div>
             <div class="toolbar-center"></div>
@@ -1095,6 +1118,22 @@
                                     console.log(
                                         '[PWA] ✅ App fully cached and ready for offline use'
                                     );
+                                } else if (
+                                    event.data &&
+                                    event.data.type === 'SW_UPDATED'
+                                ) {
+                                    console.log(
+                                        '[PWA] 🔄 New version available:',
+                                        event.data.cacheName
+                                    );
+                                    // Show update button
+                                    const updateBtn = document.getElementById('update-app-btn');
+                                    if (updateBtn) {
+                                        updateBtn.style.display = 'inline-flex';
+                                        updateBtn.onclick = () => {
+                                            window.location.reload();
+                                        };
+                                    }
                                 }
                             }
                         );

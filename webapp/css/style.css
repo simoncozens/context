@@ -457,6 +457,31 @@ kbd + kbd {
     cursor: not-allowed;
 }
 
+.update-button {
+    background-color: transparent;
+    border: 1px solid var(--accent-orange);
+    color: var(--accent-orange);
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+.update-button:hover {
+    background-color: var(--accent-orange);
+    color: var(--bg-primary);
+}
+
+.update-button .material-symbols-rounded {
+    font-size: 18px;
+}
+
 .font-dropdown-container {
     position: relative;
     display: flex;

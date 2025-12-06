@@ -3,8 +3,9 @@
 let coepCredentialless = false;
 
 // PWA Cache configuration
-const CACHE_NAME = 'contxt-pwa-v6';
-const CDN_CACHE_NAME = 'contxt-cdn-cache-v6';
+const VERSION = 'v7';
+const CACHE_NAME = 'contxt-pwa-' + VERSION;
+const CDN_CACHE_NAME = 'contxt-cdn-cache-' + VERSION;
 const OFFLINE_URL = '/index.html';
 
 // Assets to cache on install
@@ -223,6 +224,17 @@ if (typeof window === 'undefined') {
                         });
                     });
                     return self.skipWaiting();
+                })
+                .then(() => {
+                    // Notify clients that a new version is available
+                    self.clients.matchAll().then((clients) => {
+                        clients.forEach((client) => {
+                            client.postMessage({
+                                type: 'SW_UPDATED',
+                                cacheName: CACHE_NAME
+                            });
+                        });
+                    });
                 })
                 .catch((error) => {
                     console.error(
