@@ -71,13 +71,22 @@ class GlyphCanvas {
         this.textChangeDebounceTimer = null;
         this.textChangeDebounceDelay = 1000; // 1 second delay
 
-        // Mouse interaction (for dragging elements and canvas panning)\n        this.isDraggingPoint = false;\n        this.isDraggingAnchor = false;\n        this.isDraggingComponent = false;\n        this.isDraggingCanvas = false;
-
         // Resize observer
         this.resizeObserver = null;
 
         // Nodes which will be filled in layer
         this.propertiesSection = null;
+
+        // Keyboard zoom animation state
+        this.zoomAnimation = {
+            active: false,
+            currentFrame: 0,
+            totalFrames: 0,
+            startScale: 0,
+            endScale: 0,
+            centerX: 0,
+            centerY: 0
+        };
 
         // Initialize
         this.init();
@@ -155,8 +164,112 @@ class GlyphCanvas {
         );
 
         // Keyboard events for cursor and text input
-        this.canvas.addEventListener('keydown', (e) => this.onKeyDown(e));
-        this.canvas.addEventListener('keyup', (e) => this.onKeyUp(e));
+        this.canvas.addEventListener('keydown', (e) => {
+            console.log(
+                'keydown:',
+                e.key,
+                e.code,
+                'metaKey:',
+                e.metaKey,
+                'cmdKeyPressed:',
+                this.cmdKeyPressed,
+                'spaceKeyPressed:',
+                this.spaceKeyPressed
+            );
+            // Track Cmd key for panning
+            if (e.metaKey || e.key === 'Meta') {
+                this.cmdKeyPressed = true;
+                this.updateCursorStyle(e);
+            }
+            // Track Space key for preview mode
+            if (e.code === 'Space') {
+                this.spaceKeyPressed = true;
+            }
+            this.onKeyDown(e);
+        });
+        this.canvas.addEventListener('keyup', (e) => {
+            console.log(
+                'keyup:',
+                e.key,
+                e.code,
+                'metaKey:',
+                e.metaKey,
+                'spaceKeyPressed:',
+                this.spaceKeyPressed,
+                'cmdKeyPressed:',
+                this.cmdKeyPressed,
+                'isPreviewMode:',
+                this.isPreviewMode
+            );
+
+            // Track Cmd key release
+            if (e.key === 'Meta') {
+                console.log('  -> Releasing Cmd key');
+                this.cmdKeyPressed = false;
+                // Stop panning if it was active
+                if (this.isDraggingCanvas) {
+                    this.isDraggingCanvas = false;
+                }
+                // Exit preview mode when Cmd is released if we're in preview mode
+                // This handles the case where Space keyup doesn't fire due to browser/OS issues
+                if (this.isPreviewMode && this.isGlyphEditMode) {
+                    console.log('  -> Exiting preview mode on Cmd release');
+                    this.isPreviewMode = false;
+                    this.spaceKeyPressed = false; // Also reset Space state since keyup might not fire
+                    // Schedule the state update and render in the next frame to batch everything
+                    // Re-enter preview if Space was pressed again (key repeat)
+                    if (this.spaceKeyPressed) {
+                        this.isPreviewMode = true;
+                        console.log(
+                            '  -> Re-entering preview mode due to Space key still pressed'
+                        );
+                    }
+                    this.render();
+                }
+                this.updateCursorStyle(e);
+            }
+
+            // Track Space key release
+            if (e.code === 'Space') {
+                console.log('  -> Releasing Space key');
+                this.spaceKeyPressed = false;
+            }
+
+            // Call onKeyUp to handle Space release (exits preview mode)
+            this.onKeyUp(e);
+        });
+
+        // Reset key states when window loses focus (e.g., Cmd+Tab to switch apps)
+        window.addEventListener('blur', () => {
+            this.cmdKeyPressed = false;
+            this.spaceKeyPressed = false;
+            this.isDraggingCanvas = false;
+            this.isDraggingPoint = false;
+            this.isDraggingAnchor = false;
+            this.isDraggingComponent = false;
+            // Exit preview mode if active
+            if (this.isPreviewMode) {
+                this.isPreviewMode = false;
+                this.render();
+            }
+            if (this.canvas) {
+                this.canvas.style.cursor = this.isGlyphEditMode
+                    ? 'default'
+                    : 'text';
+            }
+        });
+
+        // Also reset when canvas loses focus
+        this.canvas.addEventListener('blur', () => {
+            this.cmdKeyPressed = false;
+            this.spaceKeyPressed = false;
+            this.isDraggingCanvas = false;
+            // Exit preview mode if active
+            if (this.isPreviewMode) {
+                this.isPreviewMode = false;
+                this.render();
+            }
+        });
 
         // Global Escape key handler (works even when sliders have focus)
         // Only active when editor view is focused
@@ -450,6 +563,14 @@ class GlyphCanvas {
         // Focus the canvas when clicked
         this.canvas.focus();
 
+        // Priority: If Cmd key is pressed, start canvas panning immediately
+        if (this.cmdKeyPressed) {
+            this.isDraggingCanvas = true;
+            this.lastMouseX = e.clientX;
+            this.lastMouseY = e.clientY;
+            return;
+        }
+
         // Check for double-click
         if (e.detail === 2) {
             console.log(
@@ -665,12 +786,21 @@ class GlyphCanvas {
             }
         }
 
-        // Start canvas panning when cursor is grab (not hovering over interactive elements)
-        if (this.canvas.style.cursor === 'grab') {
+        // Start canvas panning when Cmd key is pressed
+        if (this.cmdKeyPressed) {
+            console.log(
+                'Starting canvas panning, cmdKeyPressed:',
+                this.cmdKeyPressed
+            );
             this.isDraggingCanvas = true;
             this.lastMouseX = e.clientX;
             this.lastMouseY = e.clientY;
             this.canvas.style.cursor = 'grabbing';
+        } else {
+            console.log(
+                'Not starting panning, cmdKeyPressed:',
+                this.cmdKeyPressed
+            );
         }
     }
 
@@ -691,10 +821,10 @@ class GlyphCanvas {
         if (this.isDraggingCanvas) {
             const deltaX = e.clientX - this.lastMouseX;
             const deltaY = e.clientY - this.lastMouseY;
-            
+
             this.viewportManager.pan(deltaX, deltaY);
             this.render();
-            
+
             this.lastMouseX = e.clientX;
             this.lastMouseY = e.clientY;
             return;
@@ -783,13 +913,8 @@ class GlyphCanvas {
         this.isDraggingAnchor = false;
         this.isDraggingComponent = false;
         this.isDraggingCanvas = false;
-        
-        // Restore grab cursor if it was grabbing
-        if (this.canvas.style.cursor === 'grabbing') {
-            this.canvas.style.cursor = 'grab';
-        }
-        
-        // Update cursor based on current mouse position
+
+        // Update cursor based on current mouse position and Cmd key state
         this.updateCursorStyle(e);
     }
 
@@ -838,42 +963,33 @@ class GlyphCanvas {
     }
 
     updateCursorStyle(e) {
-        // Update cursor style based on mouse position
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        // Cmd key pressed = always show grab cursor for panning
+        if (this.cmdKeyPressed) {
+            this.canvas.style.cursor = this.isDraggingCanvas
+                ? 'grabbing'
+                : 'grab';
+            return;
+        }
 
-        // In outline editing mode, use pointer for components/points/anchors, grab for panning (NO text cursor)
-        // In preview mode, always show grab cursor
+        // In outline editing mode, use pointer for interactive elements
         if (this.isGlyphEditMode) {
             if (
-                this.isPreviewMode ||
-                !this.selectedLayerId ||
-                !this.layerData
-            ) {
-                this.canvas.style.cursor = 'grab';
-            } else if (
-                this.hoveredComponentIndex !== null ||
-                this.hoveredPointIndex ||
-                this.hoveredAnchorIndex !== null
+                this.selectedLayerId &&
+                this.layerData &&
+                !this.isPreviewMode &&
+                (this.hoveredComponentIndex !== null ||
+                    this.hoveredPointIndex ||
+                    this.hoveredAnchorIndex !== null)
             ) {
                 this.canvas.style.cursor = 'pointer';
             } else {
-                this.canvas.style.cursor = 'grab';
+                this.canvas.style.cursor = 'default';
             }
             return;
         }
 
-        // Transform mouse coordinates to glyph space to check if over text area
-        const { x: glyphX, y: glyphY } =
-            this.viewportManager.getFontSpaceCoordinates(mouseX, mouseY);
-
-        // Check if hovering within cursor height range (same as click detection)
-        if (glyphY <= 1000 && glyphY >= -300) {
-            this.canvas.style.cursor = 'text';
-        } else {
-            this.canvas.style.cursor = 'grab';
-        }
+        // In text mode, show text cursor
+        this.canvas.style.cursor = 'text';
     }
 
     updateHoveredGlyph() {
@@ -3037,6 +3153,71 @@ json.dumps(result)
         }, this.textChangeDebounceDelay);
     }
 
+    startKeyboardZoom(zoomIn) {
+        // Don't start a new animation if one is already in progress
+        if (this.zoomAnimation.active) return;
+
+        const settings = window.APP_SETTINGS.OUTLINE_EDITOR;
+        const zoomFactor = zoomIn
+            ? settings.ZOOM_KEYBOARD_FACTOR
+            : 1 / settings.ZOOM_KEYBOARD_FACTOR;
+
+        // Get canvas center for zoom
+        const rect = this.canvas.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        // Set up animation
+        this.zoomAnimation.active = true;
+        this.zoomAnimation.currentFrame = 0;
+        this.zoomAnimation.totalFrames = 10;
+        this.zoomAnimation.startScale = this.viewportManager.scale;
+        this.zoomAnimation.endScale = this.viewportManager.scale * zoomFactor;
+        this.zoomAnimation.centerX = centerX;
+        this.zoomAnimation.centerY = centerY;
+
+        // Start animation loop
+        this.animateKeyboardZoom();
+    }
+
+    animateKeyboardZoom() {
+        if (!this.zoomAnimation.active) return;
+
+        this.zoomAnimation.currentFrame++;
+
+        // Calculate progress (ease-in-out)
+        const progress =
+            this.zoomAnimation.currentFrame / this.zoomAnimation.totalFrames;
+        const easedProgress =
+            progress < 0.5
+                ? 2 * progress * progress
+                : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+        // Interpolate scale
+        const currentScale =
+            this.zoomAnimation.startScale +
+            (this.zoomAnimation.endScale - this.zoomAnimation.startScale) *
+                easedProgress;
+
+        // Apply zoom
+        const zoomFactor = currentScale / this.viewportManager.scale;
+        this.viewportManager.zoom(
+            zoomFactor,
+            this.zoomAnimation.centerX,
+            this.zoomAnimation.centerY
+        );
+
+        // Render
+        this.render();
+
+        // Continue or finish animation
+        if (this.zoomAnimation.currentFrame < this.zoomAnimation.totalFrames) {
+            requestAnimationFrame(() => this.animateKeyboardZoom());
+        } else {
+            this.zoomAnimation.active = false;
+        }
+    }
+
     render() {
         if (!this.ctx || !this.canvas) return;
 
@@ -4454,19 +4635,50 @@ json.dumps(result)
     }
 
     onKeyUp(e) {
+        console.log(
+            'onKeyUp called:',
+            e.code,
+            'isGlyphEditMode:',
+            this.isGlyphEditMode,
+            'isPreviewMode:',
+            this.isPreviewMode
+        );
         // Handle space bar release to exit preview mode
-        if (e.code === 'Space' && this.isGlyphEditMode) {
+        if (e.code === 'Space' && this.isGlyphEditMode && this.isPreviewMode) {
+            console.log('  -> Exiting preview mode from Space release');
             this.isPreviewMode = false;
             this.render();
+        } else if (e.code === 'Space') {
+            console.log(
+                '  -> Space released but not exiting preview:',
+                'isGlyphEditMode:',
+                this.isGlyphEditMode,
+                'isPreviewMode:',
+                this.isPreviewMode
+            );
         }
     }
 
     onKeyDown(e) {
+        // Handle Cmd+Plus/Minus for zoom in/out
+        if (
+            (e.metaKey || e.ctrlKey) &&
+            (e.key === '=' || e.key === '+' || e.key === '-')
+        ) {
+            e.preventDefault();
+            const zoomIn = e.key === '=' || e.key === '+';
+            this.startKeyboardZoom(zoomIn);
+            return;
+        }
+
         // Handle space bar press to enter preview mode
         if (e.code === 'Space' && this.isGlyphEditMode) {
             e.preventDefault();
-            this.isPreviewMode = true;
-            this.render();
+            // Only enter preview mode if not already in it (prevents key repeat from re-entering)
+            if (!this.isPreviewMode) {
+                this.isPreviewMode = true;
+                this.render();
+            }
             return;
         }
 
