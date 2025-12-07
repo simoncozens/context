@@ -64,6 +64,8 @@ class GlyphCanvas {
         this.isPreviewMode = false; // Preview mode hides outline editor
         this.isSliderActive = false; // Track if user is currently interacting with slider
         this.isInterpolating = false; // Track if currently showing interpolated data
+        this.isLayerSwitchAnimating = false; // Track if animating during layer switch
+        this.targetLayerData = null; // Store target layer data during animation
 
         // Component recursion state
         this.componentStack = []; // Stack of {componentIndex, transform, layerData, glyphName} for nested editing
@@ -490,16 +492,57 @@ class GlyphCanvas {
         this.axesManager.on('animationInProgress', () => {
             this.textRunEditor.shapeText();
             
-            // Only interpolate during animation if we're already interpolating (slider being dragged)
-            // Don't interpolate during layer selection animations
-            if (this.isInterpolating && this.isGlyphEditMode && this.currentGlyphName) {
-                this.interpolateCurrentGlyph();
+            // Interpolate during slider dragging OR layer switch animation
+            // But NOT after layer switch animation has ended
+            if (this.isGlyphEditMode && this.currentGlyphName) {
+                if (this.isInterpolating) {
+                    // Slider being dragged
+                    this.interpolateCurrentGlyph();
+                } else if (this.isLayerSwitchAnimating) {
+                    // Layer switch animation in progress - interpolate at current animated position
+                    this.interpolateCurrentGlyph();
+                }
+                // If neither flag is set, don't interpolate (normal axis animation without layer switch)
             }
         });
         this.axesManager.on('animationComplete', async () => {
             // Skip layer matching during manual slider interpolation
             // It will be handled properly in sliderMouseUp
             if (this.isInterpolating) {
+                this.textRunEditor.shapeText();
+                return;
+            }
+            
+            // If we were animating a layer switch, restore the target layer data
+            if (this.isLayerSwitchAnimating) {
+                this.isLayerSwitchAnimating = false;
+                if (this.targetLayerData) {
+                    console.log('[GlyphCanvas]', 'Before restore - layerData.isInterpolated:', this.layerData?.isInterpolated);
+                    console.log('[GlyphCanvas]', 'Before restore - targetLayerData.isInterpolated:', this.targetLayerData?.isInterpolated);
+                    this.layerData = this.targetLayerData;
+                    this.targetLayerData = null;
+                    // Clear interpolated flag to restore editing mode
+                    if (this.layerData) {
+                        this.layerData.isInterpolated = false;
+                        // Also clear on shapes
+                        if (this.layerData.shapes) {
+                            this.layerData.shapes.forEach(shape => {
+                                if (shape.isInterpolated !== undefined) {
+                                    shape.isInterpolated = false;
+                                }
+                            });
+                        }
+                    }
+                    console.log('[GlyphCanvas]', 'After restore - layerData.isInterpolated:', this.layerData?.isInterpolated);
+                    console.log('[GlyphCanvas]', 'Layer switch animation complete, restored target layer for editing');
+                    
+                    // Now check if we're on an exact layer match to update selectedLayerId
+                    await this.autoSelectMatchingLayer();
+                    
+                    if (this.isGlyphEditMode) {
+                        this.render();
+                    }
+                }
                 this.textRunEditor.shapeText();
                 return;
             }
@@ -2008,9 +2051,21 @@ json.dumps(result)
             this.fontData.masters
         );
 
-        // Fetch layer data now, whether editing component or not
-        // This ensures new outlines load before animation starts
+        // Fetch layer data now and store as target for animation
+        // This ensures new outlines are ready before animation starts
         await this.fetchLayerData();
+        
+        // If we're in edit mode, set up animation state
+        if (this.isGlyphEditMode && this.layerData) {
+            console.log('[GlyphCanvas]', 'Before copy - layerData.isInterpolated:', this.layerData.isInterpolated);
+            // Make a deep copy of the target layer data so it doesn't get overwritten during animation
+            this.targetLayerData = JSON.parse(JSON.stringify(this.layerData));
+            // Also store the layer ID for validation
+            this.targetLayerData.layerId = this.layerData.layerId;
+            console.log('[GlyphCanvas]', 'After copy - targetLayerData.isInterpolated:', this.targetLayerData.isInterpolated);
+            this.isLayerSwitchAnimating = true;
+            console.log('[GlyphCanvas]', 'Starting layer switch animation with stored target layer');
+        }
 
         // Perform mouse hit detection after layer data is loaded
         this.updateHoveredComponent();
@@ -2323,6 +2378,13 @@ json.dumps(result)
                 hasGlyphName: !!this.currentGlyphName,
                 hasFontInterpolation: !!window.fontInterpolation
             });
+            return;
+        }
+        
+        // Don't interpolate if we just finished a layer switch animation
+        // The target layer data has already been restored
+        if (!this.isInterpolating && !this.isLayerSwitchAnimating) {
+            console.log('[GlyphCanvas]', 'Skipping interpolation - not in active interpolation state');
             return;
         }
 
