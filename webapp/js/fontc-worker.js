@@ -4,6 +4,9 @@
 
 import init, {
     compile_babelfont,
+    store_font,
+    interpolate_glyph,
+    clear_font_cache,
     version
 } from '../wasm-dist/babelfont_fontc_web.js';
 
@@ -115,37 +118,100 @@ self.onmessage = async (event) => {
         return; // Don't process as compilation request
     }
 
-    // Handle direct compilation request
-    const start = Date.now();
-    const { id, babelfontJson, filename, options } = data;
+    // Handle compilation request
+    if (data.type === 'compile' || (!data.type && data.babelfontJson)) {
+        const start = Date.now();
+        const { id, babelfontJson, filename, options } = data;
 
-    try {
-        console.log(
-            `[Fontc Worker] Compiling ${filename} from .babelfont JSON...`
-        );
-        console.log(`[Fontc Worker] JSON size: ${babelfontJson.length} bytes`);
-        if (options) {
-            console.log(`[Fontc Worker] Options:`, options);
+        try {
+            console.log(
+                `[Fontc Worker] Compiling ${filename} from .babelfont JSON...`
+            );
+            console.log(`[Fontc Worker] JSON size: ${babelfontJson.length} bytes`);
+            if (options) {
+                console.log(`[Fontc Worker] Options:`, options);
+            }
+
+            // STEP 1: Store font in WASM cache for interpolation
+            try {
+                store_font(babelfontJson);
+                console.log('[Fontc Worker] ✅ Font cached in WASM memory');
+            } catch (cacheError) {
+                console.warn('[Fontc Worker] ⚠️ Failed to cache font:', cacheError);
+                // Continue with compilation anyway
+            }
+
+            // STEP 2: Compile to TTF
+            const result = compile_babelfont(babelfontJson, options || {});
+
+            const time_taken = Date.now() - start;
+            console.log(`[Fontc Worker] Compiled ${filename} in ${time_taken}ms`);
+
+            self.postMessage({
+                id,
+                result: Array.from(result),
+                time_taken,
+                filename: filename.replace(/\.babelfont$/, '.ttf')
+            });
+        } catch (e) {
+            console.error('[Fontc Worker] Compilation error:', e);
+            self.postMessage({
+                id,
+                error: e.toString()
+            });
         }
-
-        // THE MAGIC: Direct JSON → compiled font (no file system!)
-        // Pass options as second parameter to compile_babelfont
-        const result = compile_babelfont(babelfontJson, options || {});
-
-        const time_taken = Date.now() - start;
-        console.log(`[Fontc Worker] Compiled ${filename} in ${time_taken}ms`);
-
-        self.postMessage({
-            id,
-            result: Array.from(result),
-            time_taken,
-            filename: filename.replace(/\.babelfont$/, '.ttf')
-        });
-    } catch (e) {
-        console.error('[Fontc Worker] Compilation error:', e);
-        self.postMessage({
-            id,
-            error: e.toString()
-        });
+        return;
     }
+
+    // Handle interpolation request
+    if (data.type === 'interpolate') {
+        const { id, glyphName, location } = data;
+        
+        try {
+            console.log(
+                `[Fontc Worker] Interpolating glyph '${glyphName}' at location:`,
+                location
+            );
+            
+            const locationJson = JSON.stringify(location);
+            const layerJson = interpolate_glyph(glyphName, locationJson);
+            
+            self.postMessage({
+                id,
+                type: 'interpolate',
+                result: layerJson,
+                glyphName
+            });
+        } catch (e) {
+            console.error('[Fontc Worker] Interpolation error:', e);
+            self.postMessage({
+                id,
+                type: 'interpolate',
+                error: e.toString(),
+                glyphName
+            });
+        }
+        return;
+    }
+
+    // Handle cache clear request
+    if (data.type === 'clearCache') {
+        try {
+            clear_font_cache();
+            console.log('[Fontc Worker] 🗑️ Font cache cleared');
+            self.postMessage({
+                type: 'clearCache',
+                success: true
+            });
+        } catch (e) {
+            console.error('[Fontc Worker] Error clearing cache:', e);
+            self.postMessage({
+                type: 'clearCache',
+                error: e.toString()
+            });
+        }
+        return;
+    }
+
+    console.error('[Fontc Worker] Unknown message type:', data);
 };

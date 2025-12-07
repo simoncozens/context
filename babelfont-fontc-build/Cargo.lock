@@ -138,11 +138,13 @@ version = "0.1.0"
 dependencies = [
  "babelfont",
  "console_error_panic_hook",
+ "fontdrasil 0.4.0 (git+https://github.com/googlefonts/fontc?branch=paths-all-optional)",
  "js-sys",
  "serde_json",
  "tempfile",
  "wasm-bindgen",
  "web-sys",
+ "write-fonts",
 ]
 
 [[package]]

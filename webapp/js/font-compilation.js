@@ -294,6 +294,16 @@ class FontCompilation {
                 '[FontCompilation]',
                 '✅ Ready for direct Python → Rust compilation'
             );
+            
+            // Connect interpolation manager to this worker
+            if (window.fontInterpolation) {
+                window.fontInterpolation.setWorker(this.worker);
+                console.log(
+                    '[FontCompilation]',
+                    '✅ Interpolation manager connected to worker'
+                );
+            }
+            
             return true;
         } catch (error) {
             console.error(
@@ -334,6 +344,13 @@ class FontCompilation {
     }
 
     handleWorkerMessage(e) {
+        // Forward interpolation messages to the interpolation manager
+        if (e.data.type === 'interpolate' && window.fontInterpolation) {
+            window.fontInterpolation.handleWorkerMessage(e);
+            return;
+        }
+
+        // Handle compilation messages
         const { id, result, error, time_taken } = e.data;
 
         if (id !== undefined && this.pendingCompilations.has(id)) {

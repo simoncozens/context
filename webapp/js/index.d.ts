@@ -56,6 +56,9 @@ declare global {
         // From font-dropdown.js
         fontDropdownManager: FontDropdownManager;
 
+        // From font-interpolation.js
+        fontInterpolation: FontInterpolationManager;
+
         // From glyph-canvas.js
         glyphCanvas: GlyphCanvas;
 
@@ -127,5 +130,17 @@ declare global {
         VIEW_SETTINGS: Record<string, any>;
     }
 }
+
+/**
+ * Font Interpolation Manager
+ */
+interface FontInterpolationManager {
+    setWorker(worker: Worker): void;
+    interpolateGlyph(glyphName: string, location: Record<string, number>): Promise<any>;
+    interpolateGlyphs(glyphNames: string[], location: Record<string, number>): Promise<Map<string, any>>;
+    clearCache(): Promise<void>;
+    handleWorkerMessage(e: MessageEvent): void;
+}
+
 
 export {};
