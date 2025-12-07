@@ -55,7 +55,7 @@ export function init(): void;
  *
  * # Arguments
  * * `glyph_name` - Name of the glyph to interpolate
- * * `location_json` - JSON object with axis tags and values, e.g., '{"wght": 550.0, "wdth": 100.0}'
+ * * `location_json` - JSON object with axis tags and values in USER SPACE, e.g., '{"wght": 550.0, "wdth": 100.0}'
  *
  * # Returns
  * * `String` - JSON representation of the interpolated Layer

@@ -132,7 +132,7 @@ pub fn clear_font_cache() {
 ///
 /// # Arguments
 /// * `glyph_name` - Name of the glyph to interpolate
-/// * `location_json` - JSON object with axis tags and values, e.g., '{"wght": 550.0, "wdth": 100.0}'
+/// * `location_json` - JSON object with axis tags and values in USER SPACE, e.g., '{"wght": 550.0, "wdth": 100.0}'
 ///
 /// # Returns
 /// * `String` - JSON representation of the interpolated Layer
@@ -142,24 +142,53 @@ pub fn interpolate_glyph(glyph_name: &str, location_json: &str) -> Result<String
     let font = cache.as_ref()
         .ok_or_else(|| JsValue::from_str("No font cached. Call store_font() first."))?;
     
-    // Parse location from JSON
+    // Parse location from JSON (user space coordinates)
     let location_map: HashMap<String, f64> = serde_json::from_str(location_json)
         .map_err(|e| JsValue::from_str(&format!("Location parse error: {}", e)))?;
     
-    // Convert to DesignLocation
+    // Convert user space to design space using axis mappings
     let design_location: DesignLocation = location_map.iter()
-        .map(|(tag_str, value)| {
+        .map(|(tag_str, user_value)| {
             let tag = Tag::from_str(tag_str)
                 .map_err(|e| JsValue::from_str(&format!("Invalid tag '{}': {}", tag_str, e)))?;
-            Ok((tag, DesignCoord::new(*value)))
+            
+            // Find the axis and convert user space to design space
+            let design_value = if let Some(axis) = font.axes.iter().find(|a| a.tag == tag) {
+                match axis.userspace_to_designspace(fontdrasil::coords::UserCoord::new(*user_value)) {
+                    Ok(design_coord) => design_coord,
+                    Err(e) => {
+                        web_sys::console::warn_1(&format!("[Rust] Warning: Could not convert user space value {} for axis {}: {:?}. Using value as-is.", user_value, tag_str, e).into());
+                        DesignCoord::new(*user_value)
+                    }
+                }
+            } else {
+                // No axis found, use value as-is
+                DesignCoord::new(*user_value)
+            };
+            
+            Ok((tag, design_value))
         })
         .collect::<Result<Vec<_>, JsValue>>()?
         .into_iter()
         .collect();
     
+    // Log the design location for debugging
+    web_sys::console::log_1(&format!("[Rust] Interpolating '{}' at USER location: {:?}, DESIGN location: {:?}", glyph_name, location_map, design_location).into());
+    
     // Interpolate the glyph
     let interpolated_layer = font.interpolate_glyph(glyph_name, &design_location)
         .map_err(|e| JsValue::from_str(&format!("Interpolation failed: {:?}", e)))?;
+    
+    web_sys::console::log_1(&format!("[Rust] Interpolation result: {} shapes", interpolated_layer.shapes.len()).into());
+    
+    // Log first point if available for debugging
+    if let Some(first_shape) = interpolated_layer.shapes.first() {
+        if let babelfont::Shape::Path(path) = first_shape {
+            if let Some(first_node) = path.nodes.first() {
+                web_sys::console::log_1(&format!("[Rust] First point after interpolation: x={}, y={}", first_node.x, first_node.y).into());
+            }
+        }
+    }
     
     // Serialize result back to JSON
     let layer_json = serde_json::to_string(&interpolated_layer)

@@ -53,6 +53,7 @@ class GlyphCanvas {
 
         // Outline editor state
         this.layerData = null; // Cached layer data with shapes
+        this.currentGlyphName = null; // Name of currently edited glyph for interpolation
         this.selectedPoints = []; // Array of {contourIndex, nodeIndex} for selected points
         this.hoveredPointIndex = null; // {contourIndex, nodeIndex} for hovered point
         this.selectedAnchors = []; // Array of anchor indices for selected anchors
@@ -62,6 +63,7 @@ class GlyphCanvas {
         this.layerDataDirty = false; // Track if layer data needs saving
         this.isPreviewMode = false; // Preview mode hides outline editor
         this.isSliderActive = false; // Track if user is currently interacting with slider
+        this.isInterpolating = false; // Track if currently showing interpolated data
 
         // Component recursion state
         this.componentStack = []; // Stack of {componentIndex, transform, layerData, glyphName} for nested editing
@@ -381,15 +383,27 @@ class GlyphCanvas {
         this.axesManager.on('sliderMouseDown', () => {
             if (this.isGlyphEditMode) {
                 this.isPreviewMode = true;
+                this.isInterpolating = true; // Flag to track interpolation state
                 this.render();
             }
         });
-        this.axesManager.on('sliderMouseUp', () => {
+        this.axesManager.on('sliderMouseUp', async () => {
             if (this.isGlyphEditMode && this.isPreviewMode) {
                 this.isPreviewMode = false;
+                this.isInterpolating = false;
+                
+                // Check if we're on an exact layer
+                await this.autoSelectMatchingLayer();
+                
+                // If no exact layer match, restore from Python data
+                if (this.selectedLayerId === null && this.layerData && this.layerData.isInterpolated) {
+                    await LayerDataNormalizer.restoreExactLayer(this);
+                }
+                
                 this.render();
             } else if (this.isGlyphEditMode) {
                 this.isPreviewMode = false;
+                this.isInterpolating = false;
                 this.render();
                 // Restore focus to canvas
                 setTimeout(() => this.canvas.focus(), 0);
@@ -400,11 +414,24 @@ class GlyphCanvas {
         });
         this.axesManager.on('animationInProgress', () => {
             this.textRunEditor.shapeText();
+            
+            // During animation, also interpolate glyph if in edit mode
+            if (this.isGlyphEditMode && this.currentGlyphName) {
+                this.isInterpolating = true;
+                this.interpolateCurrentGlyph();
+            }
         });
         this.axesManager.on('animationComplete', async () => {
             // Check if new variation settings match any layer
             if (this.isGlyphEditMode && this.fontData) {
+                this.isInterpolating = false;
                 await this.autoSelectMatchingLayer();
+                
+                // If no exact layer match, keep interpolated data visible
+                if (this.selectedLayerId === null && this.layerData && this.layerData.isInterpolated) {
+                    // Keep showing interpolated data
+                    console.log('[GlyphCanvas]', 'Animation complete: showing interpolated glyph');
+                }
             }
 
             this.textRunEditor.shapeText();
@@ -426,6 +453,11 @@ class GlyphCanvas {
                 };
                 this.selectedLayerId = null; // Deselect layer
                 this.updateLayerSelection(); // Update UI
+            }
+            
+            // Real-time interpolation during slider movement
+            if (this.isGlyphEditMode && this.isInterpolating && this.currentGlyphName) {
+                this.interpolateCurrentGlyph();
             }
         });
     }
@@ -2103,6 +2135,7 @@ json.dumps(result)
 `);
 
             this.layerData = JSON.parse(dataJson);
+            this.currentGlyphName = glyphName; // Store for interpolation
 
             // Recursively parse component layer data nodes strings into arrays
             const parseComponentNodes = (shapes) => {
@@ -2150,6 +2183,53 @@ json.dumps(result)
                 error
             );
             this.layerData = null;
+        }
+    }
+
+    async interpolateCurrentGlyph() {
+        // Interpolate the current glyph at current variation settings
+        if (!this.currentGlyphName || !window.fontInterpolation) {
+            console.log('[GlyphCanvas]', 'Skipping interpolation:', {
+                hasGlyphName: !!this.currentGlyphName,
+                hasFontInterpolation: !!window.fontInterpolation
+            });
+            return;
+        }
+
+        try {
+            const location = this.axesManager.variationSettings;
+            console.log(
+                '[GlyphCanvas]',
+                `🔄 Interpolating glyph "${this.currentGlyphName}" at location:`,
+                JSON.stringify(location)
+            );
+
+            const interpolatedLayer = await window.fontInterpolation.interpolateGlyph(
+                this.currentGlyphName,
+                location
+            );
+
+            console.log(
+                '[GlyphCanvas]',
+                `📦 Received interpolated layer:`,
+                interpolatedLayer
+            );
+
+            // Apply interpolated data using normalizer
+            console.log('[GlyphCanvas]', 'Calling LayerDataNormalizer.applyInterpolatedLayer...');
+            LayerDataNormalizer.applyInterpolatedLayer(this, interpolatedLayer, location);
+            
+            console.log(
+                '[GlyphCanvas]',
+                `✅ Applied interpolated layer for "${this.currentGlyphName}"`
+            );
+        } catch (error) {
+            console.warn(
+                '[GlyphCanvas]',
+                `⚠️ Interpolation failed for "${this.currentGlyphName}":`,
+                error
+            );
+            // On error, keep showing whatever data we have
         }
     }
 
@@ -3486,58 +3566,58 @@ json.dumps(result)
             const isSelected =
                 glyphIndex === this.textRunEditor.selectedGlyphIndex;
 
-            // In outline editor, render the selected glyph with very faint background color
-            // so the outline editor shapes are visible on top
-            if (
+            // Check if we should skip HarfBuzz rendering for selected glyph with layer data
+            // Skip when: selected glyph has layer data (from Python OR interpolated) and not in preview mode
+            const skipHarfBuzz =
                 isSelected &&
-                this.selectedLayerId &&
                 this.layerData &&
-                !this.isPreviewMode
-            ) {
-                // Render with faint background color instead of skipping
-                this.ctx.fillStyle = colors.GLYPH_BACKGROUND_IN_EDITOR;
-            } else if (this.isGlyphEditMode && !this.isPreviewMode) {
-                // Glyph edit mode (not preview): active glyph in solid color, others dimmed
-                if (isSelected) {
-                    this.ctx.fillStyle = colors.GLYPH_ACTIVE_IN_EDITOR;
-                } else if (isHovered) {
-                    // Hovered inactive glyph - darker than normal inactive
-                    this.ctx.fillStyle = colors.GLYPH_HOVERED_IN_EDITOR;
-                } else {
-                    // Dim other glyphs
-                    this.ctx.fillStyle = colors.GLYPH_INACTIVE_IN_EDITOR;
-                }
-            } else if (this.isGlyphEditMode && this.isPreviewMode) {
-                // Preview mode: all glyphs in normal color
-                this.ctx.fillStyle = colors.GLYPH_NORMAL;
-            } else {
-                // Text edit mode: normal coloring
-                if (isHovered) {
-                    this.ctx.fillStyle = colors.GLYPH_HOVERED;
-                } else if (isSelected) {
-                    this.ctx.fillStyle = colors.GLYPH_SELECTED;
-                } else {
+                !this.isPreviewMode;
+
+            if (!skipHarfBuzz) {
+                // Set color based on mode and state
+                if (this.isGlyphEditMode && !this.isPreviewMode) {
+                    // Glyph edit mode (not preview): active glyph in solid color, others dimmed
+                    if (isSelected) {
+                        this.ctx.fillStyle = colors.GLYPH_ACTIVE_IN_EDITOR;
+                    } else if (isHovered) {
+                        // Hovered inactive glyph - darker than normal inactive
+                        this.ctx.fillStyle = colors.GLYPH_HOVERED_IN_EDITOR;
+                    } else {
+                        // Dim other glyphs
+                        this.ctx.fillStyle = colors.GLYPH_INACTIVE_IN_EDITOR;
+                    }
+                } else if (this.isGlyphEditMode && this.isPreviewMode) {
+                    // Preview mode: all glyphs in normal color
                     this.ctx.fillStyle = colors.GLYPH_NORMAL;
+                } else {
+                    // Text edit mode: normal coloring
+                    if (isHovered) {
+                        this.ctx.fillStyle = colors.GLYPH_HOVERED;
+                    } else if (isSelected) {
+                        this.ctx.fillStyle = colors.GLYPH_SELECTED;
+                    } else {
+                        this.ctx.fillStyle = colors.GLYPH_NORMAL;
+                    }
                 }
-            }
 
-            // Get glyph outline from HarfBuzz (supports variations)
-            const glyphData = this.textRunEditor.hbFont.glyphToPath(glyphId);
+                // Get glyph outline from HarfBuzz (supports variations)
+                const glyphData = this.textRunEditor.hbFont.glyphToPath(glyphId);
 
-            if (glyphData) {
-                this.ctx.save();
-                this.ctx.translate(x, y);
+                if (glyphData) {
+                    this.ctx.save();
+                    this.ctx.translate(x, y);
 
-                // Draw the path from HarfBuzz data
-                // No need to flip Y here - the main transform matrix already flips Y
-                this.ctx.beginPath();
+                    // Draw the path from HarfBuzz data
+                    // No need to flip Y here - the main transform matrix already flips Y
+                    this.ctx.beginPath();
 
-                // Parse the SVG path data
-                const path = new Path2D(glyphData);
+                    // Parse the SVG path data
+                    const path = new Path2D(glyphData);
 
-                this.ctx.fill(path);
+                    this.ctx.fill(path);
 
-                this.ctx.restore();
+                    this.ctx.restore();
+                }
             }
 
             xPosition += xAdvance;
@@ -3744,7 +3824,8 @@ json.dumps(result)
         }
 
         // Draw outline editor when a layer is selected (skip in preview mode)
-        if (!this.selectedLayerId || !this.layerData || this.isPreviewMode) {
+        // During interpolation, layerData exists without selectedLayerId
+        if (!this.layerData || this.isPreviewMode) {
             return;
         }
 
@@ -4133,11 +4214,13 @@ json.dumps(result)
 
                 shape.nodes.forEach((node, nodeIndex) => {
                     const [x, y, type] = node;
+                    const isInterpolated = this.layerData && this.layerData.isInterpolated;
                     const isHovered =
+                        !isInterpolated &&
                         this.hoveredPointIndex &&
                         this.hoveredPointIndex.contourIndex === contourIndex &&
                         this.hoveredPointIndex.nodeIndex === nodeIndex;
-                    const isSelected = this.selectedPoints.some(
+                    const isSelected = !isInterpolated && this.selectedPoints.some(
                         (p) =>
                             p.contourIndex === contourIndex &&
                             p.nodeIndex === nodeIndex
@@ -4237,8 +4320,10 @@ json.dumps(result)
                     `Component ${index}: reference="${shape.Component.reference}", has layerData=${!!shape.Component.layerData}, shapes=${shape.Component.layerData?.shapes?.length || 0}`
                 );
 
-                const isHovered = this.hoveredComponentIndex === index;
-                const isSelected = this.selectedComponents.includes(index);
+                // Disable selection/hover highlighting for interpolated data
+                const isInterpolated = this.layerData && this.layerData.isInterpolated;
+                const isHovered = !isInterpolated && (this.hoveredComponentIndex === index);
+                const isSelected = !isInterpolated && this.selectedComponents.includes(index);
 
                 // Get full transform matrix [a, b, c, d, tx, ty]
                 let a = 1,
@@ -4523,6 +4608,7 @@ json.dumps(result)
 
         // Draw anchors
         // Skip drawing anchors if zoom is under minimum threshold
+        // or if showing interpolated data (non-editable)
         const minZoomForHandles =
             APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_HANDLES;
         const minZoomForLabels =
@@ -4560,8 +4646,9 @@ json.dumps(result)
 
             this.layerData.anchors.forEach((anchor, index) => {
                 const { x, y, name } = anchor;
-                const isHovered = this.hoveredAnchorIndex === index;
-                const isSelected = this.selectedAnchors.includes(index);
+                const isInterpolated = this.layerData && this.layerData.isInterpolated;
+                const isHovered = !isInterpolated && this.hoveredAnchorIndex === index;
+                const isSelected = !isInterpolated && this.selectedAnchors.includes(index);
 
                 // Draw anchor as diamond
                 this.ctx.save();

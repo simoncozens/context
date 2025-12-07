@@ -88,19 +88,26 @@ class FontInterpolationManager {
     handleWorkerMessage(e) {
         const data = e.data;
         
+        console.log('[FontInterpolation]', 'Received worker message:', data.type, 'id:', data.id);
+        
         if (data.type === 'interpolate') {
             const pending = this.pendingRequests.get(data.id);
+            console.log('[FontInterpolation]', 'Found pending request:', !!pending);
+            
             if (pending) {
                 this.pendingRequests.delete(data.id);
                 
                 if (data.error) {
+                    console.error('[FontInterpolation]', 'Interpolation error:', data.error);
                     pending.reject(new Error(data.error));
                 } else {
                     // Parse the JSON layer
                     try {
                         const layer = JSON.parse(data.result);
+                        console.log('[FontInterpolation]', '✅ Parsed layer, resolving promise');
                         pending.resolve(layer);
                     } catch (parseError) {
+                        console.error('[FontInterpolation]', 'Parse error:', parseError);
                         pending.reject(new Error(`Failed to parse layer JSON: ${parseError}`));
                     }
                 }

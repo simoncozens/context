@@ -210,7 +210,7 @@ export function init() {
  *
  * # Arguments
  * * `glyph_name` - Name of the glyph to interpolate
- * * `location_json` - JSON object with axis tags and values, e.g., '{"wght": 550.0, "wdth": 100.0}'
+ * * `location_json` - JSON object with axis tags and values in USER SPACE, e.g., '{"wght": 550.0, "wdth": 100.0}'
  *
  * # Returns
  * * `String` - JSON representation of the interpolated Layer
@@ -374,6 +374,9 @@ function __wbg_get_imports() {
         const ret = arg0.length;
         return ret;
     };
+    imports.wbg.__wbg_log_1d990106d99dacb7 = function(arg0) {
+        console.log(arg0);
+    };
     imports.wbg.__wbg_new_0_23cedd11d9b40c9d = function() {
         const ret = new Date();
         return ret;
@@ -392,6 +395,9 @@ function __wbg_get_imports() {
         const len1 = WASM_VECTOR_LEN;
         getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
         getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+    };
+    imports.wbg.__wbg_warn_6e567d0d926ff881 = function(arg0) {
+        console.warn(arg0);
     };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.

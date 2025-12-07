@@ -51,6 +51,16 @@ async function initializeWasm() {
 // Handle compilation requests - supports both message protocols
 self.onmessage = async (event) => {
     const data = event.data;
+    
+    // Debug: log all incoming messages with full details
+    console.log('[Fontc Worker] Received message:', JSON.stringify({
+        type: data.type,
+        hasJson: !!data.babelfontJson,
+        hasGlyphName: !!data.glyphName,
+        hasLocation: !!data.location,
+        id: data.id,
+        filename: data.filename
+    }));
 
     // Protocol 1: Type-based messages (from compile-button.js)
     if (data.type === 'init') {
@@ -118,10 +128,75 @@ self.onmessage = async (event) => {
         return; // Don't process as compilation request
     }
 
+    // Handle interpolation request (check BEFORE compilation)
+    if (data.type === 'interpolate') {
+        const { id, glyphName, location } = data;
+        
+        try {
+            console.log(
+                `[Fontc Worker] Interpolating glyph '${glyphName}' at location:`,
+                location
+            );
+            
+            const locationJson = JSON.stringify(location);
+            const layerJson = interpolate_glyph(glyphName, locationJson);
+            
+            console.log(
+                `[Fontc Worker] ✅ Interpolation successful for '${glyphName}', layer JSON length:`,
+                layerJson.length
+            );
+            
+            self.postMessage({
+                id,
+                type: 'interpolate',
+                result: layerJson,
+                glyphName
+            });
+        } catch (e) {
+            console.error('[Fontc Worker] Interpolation error:', e);
+            self.postMessage({
+                id,
+                type: 'interpolate',
+                error: e.toString(),
+                glyphName
+            });
+        }
+        return;
+    }
+
+    // Handle cache clear request (check BEFORE compilation)
+    if (data.type === 'clearCache') {
+        try {
+            clear_font_cache();
+            console.log('[Fontc Worker] 🗑️ Font cache cleared');
+            self.postMessage({
+                type: 'clearCache',
+                success: true
+            });
+        } catch (e) {
+            console.error('[Fontc Worker] Error clearing cache:', e);
+            self.postMessage({
+                type: 'clearCache',
+                error: e.toString()
+            });
+        }
+        return;
+    }
+
     // Handle compilation request
-    if (data.type === 'compile' || (!data.type && data.babelfontJson)) {
+    if (data.type === 'compile' || (data.type !== 'interpolate' && data.type !== 'clearCache' && !data.type && data.babelfontJson)) {
         const start = Date.now();
         const { id, babelfontJson, filename, options } = data;
+
+        // Validate babelfontJson exists
+        if (!babelfontJson) {
+            console.error('[Fontc Worker] No babelfontJson provided in compilation request, data.type:', data.type);
+            self.postMessage({
+                id,
+                error: 'No babelfontJson provided in compilation request'
+            });
+            return;
+        }
 
         try {
             console.log(
@@ -157,56 +232,6 @@ self.onmessage = async (event) => {
             console.error('[Fontc Worker] Compilation error:', e);
             self.postMessage({
                 id,
-                error: e.toString()
-            });
-        }
-        return;
-    }
-
-    // Handle interpolation request
-    if (data.type === 'interpolate') {
-        const { id, glyphName, location } = data;
-        
-        try {
-            console.log(
-                `[Fontc Worker] Interpolating glyph '${glyphName}' at location:`,
-                location
-            );
-            
-            const locationJson = JSON.stringify(location);
-            const layerJson = interpolate_glyph(glyphName, locationJson);
-            
-            self.postMessage({
-                id,
-                type: 'interpolate',
-                result: layerJson,
-                glyphName
-            });
-        } catch (e) {
-            console.error('[Fontc Worker] Interpolation error:', e);
-            self.postMessage({
-                id,
-                type: 'interpolate',
-                error: e.toString(),
-                glyphName
-            });
-        }
-        return;
-    }
-
-    // Handle cache clear request
-    if (data.type === 'clearCache') {
-        try {
-            clear_font_cache();
-            console.log('[Fontc Worker] 🗑️ Font cache cleared');
-            self.postMessage({
-                type: 'clearCache',
-                success: true
-            });
-        } catch (e) {
-            console.error('[Fontc Worker] Error clearing cache:', e);
-            self.postMessage({
-                type: 'clearCache',
                 error: e.toString()
             });
         }
