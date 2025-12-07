@@ -275,11 +275,9 @@ class GlyphCanvas {
             this.cmdKeyPressed = false;
             this.spaceKeyPressed = false;
             this.isDraggingCanvas = false;
-            // Exit preview mode if active
-            if (this.isPreviewMode) {
-                this.isPreviewMode = false;
-                this.render();
-            }
+            // Don't exit preview mode when canvas loses focus to sidebar elements
+            // (e.g., clicking sliders). Preview mode will be managed by slider events.
+            // Only exit preview mode on true blur events (window blur, etc.)
         });
 
         // Global Escape key handler (works even when sliders have focus)
@@ -382,14 +380,33 @@ class GlyphCanvas {
     setupAxesManagerEventHandlers() {
         this.axesManager.on('sliderMouseDown', () => {
             if (this.isGlyphEditMode) {
-                this.isPreviewMode = true;
-                this.isInterpolating = true; // Flag to track interpolation state
-                this.render();
+                const wasPreviewMode = this.isPreviewMode;
+                // Remember if preview was already on (from keyboard toggle)
+                this.previewModeBeforeSlider = wasPreviewMode;
+                
+                // Enter preview mode if not already in it
+                if (!wasPreviewMode) {
+                    this.isPreviewMode = true;
+                }
+                
+                // Set interpolating flag
+                this.isInterpolating = true;
+                
+                // Only render if we're changing preview mode state
+                if (!wasPreviewMode) {
+                    this.render();
+                }
             }
         });
         this.axesManager.on('sliderMouseUp', async () => {
             if (this.isGlyphEditMode && this.isPreviewMode) {
-                this.isPreviewMode = false;
+                // Only exit preview mode if we entered it via slider
+                // If it was already on (from keyboard), keep it on
+                const shouldExitPreview = !this.previewModeBeforeSlider;
+                
+                if (shouldExitPreview) {
+                    this.isPreviewMode = false;
+                }
                 this.isInterpolating = false;
                 
                 // Check if we're on an exact layer
@@ -400,7 +417,10 @@ class GlyphCanvas {
                     await LayerDataNormalizer.restoreExactLayer(this);
                 }
                 
-                this.render();
+                // Only render if we're changing preview mode state
+                if (shouldExitPreview) {
+                    this.render();
+                }
             } else if (this.isGlyphEditMode) {
                 this.isPreviewMode = false;
                 this.isInterpolating = false;
@@ -456,7 +476,6 @@ class GlyphCanvas {
             }
             
             // Real-time interpolation during slider movement
-            // This will call render() after applying the interpolated layer
             if (this.isGlyphEditMode && this.isInterpolating && this.currentGlyphName) {
                 this.interpolateCurrentGlyph();
             }
@@ -3577,7 +3596,7 @@ json.dumps(result)
                 glyphIndex === this.textRunEditor.selectedGlyphIndex;
 
             // Check if we should skip HarfBuzz rendering for selected glyph
-            // ALWAYS skip HarfBuzz for selected glyph in edit mode (not preview)
+            // Skip HarfBuzz for selected glyph in edit mode (not preview)
             // to prevent black fallback flicker during interpolation
             const skipHarfBuzz =
                 isSelected &&
@@ -4838,12 +4857,18 @@ json.dumps(result)
     onFocus() {
         this.isFocused = true;
         this.cursorVisible = true;
-        this.render();
+        // Don't render on focus change if in preview mode (no cursor visible)
+        if (!this.isPreviewMode) {
+            this.render();
+        }
     }
 
     onBlur() {
         this.isFocused = false;
-        this.render();
+        // Don't render on blur if in preview mode (no cursor visible)
+        if (!this.isPreviewMode) {
+            this.render();
+        }
     }
 
     onKeyUp(e) {
