@@ -396,14 +396,20 @@ class GlyphCanvas {
                 if (shouldExitPreview) {
                     this.isPreviewMode = false;
                 }
-                this.isInterpolating = false;
                 
-                // Check if we're on an exact layer
+                // Check if we're on an exact layer (do this before clearing isInterpolating)
                 await this.autoSelectMatchingLayer();
                 
-                // If no exact layer match, restore from Python data
+                // Now clear interpolating flag
+                this.isInterpolating = false;
+                
+                // If no exact layer match and data is marked as interpolated, restore from Python
+                // But if we have valid interpolated data already, keep it
                 if (this.selectedLayerId === null && this.layerData && this.layerData.isInterpolated) {
-                    await LayerDataNormalizer.restoreExactLayer(this);
+                    // Only restore if shapes are empty/missing, otherwise keep interpolated data
+                    if (!this.layerData.shapes || this.layerData.shapes.length === 0) {
+                        await LayerDataNormalizer.restoreExactLayer(this);
+                    }
                 }
                 
                 // Only render if we're changing preview mode state
@@ -412,7 +418,16 @@ class GlyphCanvas {
                 }
             } else if (this.isGlyphEditMode) {
                 this.isPreviewMode = false;
+                
+                // Check if we're on an exact layer (do this before clearing isInterpolating)
+                await this.autoSelectMatchingLayer();
+                
+                // Now clear interpolating flag
                 this.isInterpolating = false;
+                
+                // If no exact layer match, keep showing interpolated data
+                // Don't restore - we want to keep the interpolated outlines visible
+                
                 this.render();
                 // Restore focus to canvas
                 setTimeout(() => this.canvas.focus(), 0);
@@ -431,9 +446,15 @@ class GlyphCanvas {
             }
         });
         this.axesManager.on('animationComplete', async () => {
+            // Skip layer matching during manual slider interpolation
+            // It will be handled properly in sliderMouseUp
+            if (this.isInterpolating) {
+                this.textRunEditor.shapeText();
+                return;
+            }
+            
             // Check if new variation settings match any layer
             if (this.isGlyphEditMode && this.fontData) {
-                this.isInterpolating = false;
                 await this.autoSelectMatchingLayer();
                 
                 // If no exact layer match, keep interpolated data visible
@@ -461,7 +482,10 @@ class GlyphCanvas {
                     ...this.axesManager.variationSettings
                 };
                 this.selectedLayerId = null; // Deselect layer
-                this.updateLayerSelection(); // Update UI (doesn't render)
+                // Don't update layer selection UI during interpolation to avoid triggering render
+                if (!this.isInterpolating) {
+                    this.updateLayerSelection();
+                }
             }
             
             // Real-time interpolation during slider movement
@@ -1839,19 +1863,23 @@ json.dumps(result)
                 this.previousSelectedLayerId = null;
                 this.previousVariationSettings = null;
 
-                // Only fetch layer data if we're not currently editing a component
-                // If editing a component, the layer switch will be handled by refreshComponentStack
-                if (this.componentStack.length === 0) {
-                    await this.fetchLayerData(); // Fetch layer data for outline editor
+                // Only fetch layer data if we're not currently interpolating
+                // During interpolation, the next interpolateCurrentGlyph() call will handle the data
+                if (!this.isInterpolating) {
+                    // Only fetch layer data if we're not currently editing a component
+                    // If editing a component, the layer switch will be handled by refreshComponentStack
+                    if (this.componentStack.length === 0) {
+                        await this.fetchLayerData(); // Fetch layer data for outline editor
 
-                    // Perform mouse hit detection after layer data is loaded
-                    this.updateHoveredComponent();
-                    this.updateHoveredAnchor();
-                    this.updateHoveredPoint();
+                        // Perform mouse hit detection after layer data is loaded
+                        this.updateHoveredComponent();
+                        this.updateHoveredAnchor();
+                        this.updateHoveredPoint();
 
-                    // Render to display the new outlines
-                    if (this.isGlyphEditMode) {
-                        this.render();
+                        // Render to display the new outlines
+                        if (this.isGlyphEditMode) {
+                            this.render();
+                        }
                     }
                 }
                 this.updateLayerSelection();
@@ -1866,7 +1894,10 @@ json.dumps(result)
         // No matching layer found - deselect current layer
         if (this.selectedLayerId !== null) {
             this.selectedLayerId = null;
-            this.layerData = null; // Clear layer data when deselecting
+            // Don't clear layer data during interpolation - keep showing interpolated data
+            if (!this.isInterpolating) {
+                this.layerData = null; // Clear layer data when deselecting
+            }
             this.selectedPointIndex = null;
             this.hoveredPointIndex = null;
             this.updateLayerSelection();
@@ -3846,6 +3877,12 @@ json.dumps(result)
         // Draw outline editor when a layer is selected (skip in preview mode)
         // During interpolation without preview mode, layerData exists without selectedLayerId
         if (!this.layerData || this.isPreviewMode) {
+            return;
+        }
+
+        // Skip rendering if layer data is invalid (empty shapes array)
+        // This prevents flicker when interpolation hasn't completed yet
+        if (!this.layerData.shapes || this.layerData.shapes.length === 0) {
             return;
         }
 
