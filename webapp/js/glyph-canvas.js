@@ -465,7 +465,8 @@ class GlyphCanvas {
             }
             
             // Real-time interpolation during slider movement
-            if (this.isGlyphEditMode && this.isInterpolating && this.currentGlyphName) {
+            // Skip interpolation if in preview mode (HarfBuzz handles interpolation)
+            if (this.isGlyphEditMode && this.isInterpolating && !this.isPreviewMode && this.currentGlyphName) {
                 this.interpolateCurrentGlyph();
             }
         });
@@ -4877,7 +4878,22 @@ json.dumps(result)
                 '  -> Exiting preview mode from Space release'
             );
             this.isPreviewMode = false;
-            this.render();
+            
+            // Check if current axis position matches an exact layer
+            this.autoSelectMatchingLayer().then(async () => {
+                if (this.selectedLayerId !== null) {
+                    // On an exact layer - fetch that layer's data
+                    await this.fetchLayerData();
+                    this.render();
+                } else {
+                    // Between layers - need to interpolate
+                    if (this.currentGlyphName) {
+                        await this.interpolateCurrentGlyph();
+                    } else {
+                        this.render();
+                    }
+                }
+            });
         } else if (e.code === 'Space') {
             console.log(
                 '[GlyphCanvas]',
