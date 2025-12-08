@@ -104,10 +104,10 @@ elif grep -q "^# Unreleased" "$CHANGELOG_FILE"; then
     # Add new "# Unreleased" section at the top
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
-        sed -i '' '1s/^/# Unreleased\n\n/' "$CHANGELOG_FILE"
+        sed -i '' '1s/^/# Unreleased\n\n- **Add items here** for the next release (Replace this comment)\n\n/' "$CHANGELOG_FILE"
     else
         # Linux
-        sed -i '1s/^/# Unreleased\n\n/' "$CHANGELOG_FILE"
+        sed -i '1s/^/# Unreleased\n\n- **Add items here** for the next release (Replace this comment)\n\n/' "$CHANGELOG_FILE"
     fi
     echo "✅ CHANGELOG.md updated"
     CHANGELOG_UPDATED=true
