@@ -1,15 +1,15 @@
 #!/bin/bash
 
 # Script to prepare a release
-# Usage: ./prepare-release.sh <version-tag>
-# Example: ./prepare-release.sh v1.2.3
+# Usage: ./release.sh <version-tag>
+# Example: ./release.sh v1.2.3
 
 set -e
 
 if [ -z "$1" ]; then
     echo "Error: Version tag required"
-    echo "Usage: ./prepare-release.sh <version-tag>"
-    echo "Example: ./prepare-release.sh v1.2.3"
+    echo "Usage: ./release.sh <version-tag>"
+    echo "Example: ./release.sh v1.2.3"
     exit 1
 fi
 
