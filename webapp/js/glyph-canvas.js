@@ -297,11 +297,15 @@ class GlyphCanvas {
 
                 e.preventDefault();
 
-                console.log('[GlyphCanvas]', 'Escape pressed. Previous state:', {
-                    layerId: this.previousSelectedLayerId,
-                    settings: this.previousVariationSettings,
-                    componentStackDepth: this.componentStack.length
-                });
+                console.log(
+                    '[GlyphCanvas]',
+                    'Escape pressed. Previous state:',
+                    {
+                        layerId: this.previousSelectedLayerId,
+                        settings: this.previousVariationSettings,
+                        componentStackDepth: this.componentStack.length
+                    }
+                );
 
                 // Priority 1: If we have a saved previous state from slider interaction, restore it first
                 // (This takes precedence over exiting component editing)
@@ -312,12 +316,18 @@ class GlyphCanvas {
                 ) {
                     // Check if we're already on the previous layer
                     if (this.previousSelectedLayerId === this.selectedLayerId) {
-                        console.log('[GlyphCanvas]', 'Already on previous layer, clearing state and continuing to exit');
+                        console.log(
+                            '[GlyphCanvas]',
+                            'Already on previous layer, clearing state and continuing to exit'
+                        );
                         this.previousSelectedLayerId = null;
                         this.previousVariationSettings = null;
                         // Don't return - fall through to exit component or edit mode
                     } else {
-                        console.log('[GlyphCanvas]', 'Restoring previous layer state');
+                        console.log(
+                            '[GlyphCanvas]',
+                            'Restoring previous layer state'
+                        );
                         // Restore previous layer selection and axis values
                         this.selectedLayerId = this.previousSelectedLayerId;
 
@@ -325,7 +335,7 @@ class GlyphCanvas {
                         this.fetchLayerData().then(() => {
                             // Update layer selection UI
                             this.updateLayerSelection();
-                            
+
                             // Render with restored layer data
                             this.render();
                         });
@@ -406,10 +416,10 @@ class GlyphCanvas {
             if (this.isGlyphEditMode) {
                 // Remember if preview was already on (from keyboard toggle)
                 this.previewModeBeforeSlider = this.isPreviewMode;
-                
+
                 // Set interpolating flag (don't change preview mode)
                 this.isInterpolating = true;
-                
+
                 // If not in preview mode, mark current layer data as interpolated and render
                 // to show monochrome visual feedback immediately
                 if (!this.isPreviewMode && this.layerData) {
@@ -423,17 +433,17 @@ class GlyphCanvas {
                 // Only exit preview mode if we entered it via slider
                 // If it was already on (from keyboard), keep it on
                 const shouldExitPreview = !this.previewModeBeforeSlider;
-                
+
                 if (shouldExitPreview) {
                     this.isPreviewMode = false;
                 }
-                
+
                 // Check if we're on an exact layer (do this before clearing isInterpolating)
                 await this.autoSelectMatchingLayer();
-                
+
                 // Now clear interpolating flag
                 this.isInterpolating = false;
-                
+
                 // If we landed on an exact layer, update the saved state to this new layer
                 // so Escape will return here, not to the original layer
                 if (this.selectedLayerId) {
@@ -441,30 +451,37 @@ class GlyphCanvas {
                     this.previousVariationSettings = {
                         ...this.axesManager.variationSettings
                     };
-                    console.log('[GlyphCanvas]', 'Updated previous state to new layer:', {
-                        layerId: this.previousSelectedLayerId,
-                        settings: this.previousVariationSettings
-                    });
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Updated previous state to new layer:',
+                        {
+                            layerId: this.previousSelectedLayerId,
+                            settings: this.previousVariationSettings
+                        }
+                    );
                     await this.fetchLayerData();
                 } else if (this.layerData && this.layerData.isInterpolated) {
                     // No exact layer match - keep interpolated data
                     // Only restore if shapes are empty/missing
-                    if (!this.layerData.shapes || this.layerData.shapes.length === 0) {
+                    if (
+                        !this.layerData.shapes ||
+                        this.layerData.shapes.length === 0
+                    ) {
                         await LayerDataNormalizer.restoreExactLayer(this);
                     }
                 }
-                
+
                 // Always render to update colors after clearing isInterpolating flag
                 this.render();
             } else if (this.isGlyphEditMode) {
                 this.isPreviewMode = false;
-                
+
                 // Check if we're on an exact layer (do this before clearing isInterpolating)
                 await this.autoSelectMatchingLayer();
-                
+
                 // Now clear interpolating flag
                 this.isInterpolating = false;
-                
+
                 // If we landed on an exact layer, update the saved state to this new layer
                 // so Escape will return here, not to the original layer
                 if (this.selectedLayerId) {
@@ -472,15 +489,19 @@ class GlyphCanvas {
                     this.previousVariationSettings = {
                         ...this.axesManager.variationSettings
                     };
-                    console.log('[GlyphCanvas]', 'Updated previous state to new layer:', {
-                        layerId: this.previousSelectedLayerId,
-                        settings: this.previousVariationSettings
-                    });
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Updated previous state to new layer:',
+                        {
+                            layerId: this.previousSelectedLayerId,
+                            settings: this.previousVariationSettings
+                        }
+                    );
                     await this.fetchLayerData();
                 }
-                
+
                 // If no exact layer match, keep showing interpolated data
-                
+
                 this.render();
                 // Restore focus to canvas
                 setTimeout(() => this.canvas.focus(), 0);
@@ -491,7 +512,7 @@ class GlyphCanvas {
         });
         this.axesManager.on('animationInProgress', () => {
             this.textRunEditor.shapeText();
-            
+
             // Interpolate during slider dragging OR layer switch animation
             // But NOT after layer switch animation has ended
             if (this.isGlyphEditMode && this.currentGlyphName) {
@@ -512,13 +533,21 @@ class GlyphCanvas {
                 this.textRunEditor.shapeText();
                 return;
             }
-            
+
             // If we were animating a layer switch, restore the target layer data
             if (this.isLayerSwitchAnimating) {
                 this.isLayerSwitchAnimating = false;
                 if (this.targetLayerData) {
-                    console.log('[GlyphCanvas]', 'Before restore - layerData.isInterpolated:', this.layerData?.isInterpolated);
-                    console.log('[GlyphCanvas]', 'Before restore - targetLayerData.isInterpolated:', this.targetLayerData?.isInterpolated);
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Before restore - layerData.isInterpolated:',
+                        this.layerData?.isInterpolated
+                    );
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Before restore - targetLayerData.isInterpolated:',
+                        this.targetLayerData?.isInterpolated
+                    );
                     this.layerData = this.targetLayerData;
                     this.targetLayerData = null;
                     // Clear interpolated flag to restore editing mode
@@ -526,19 +555,26 @@ class GlyphCanvas {
                         this.layerData.isInterpolated = false;
                         // Also clear on shapes
                         if (this.layerData.shapes) {
-                            this.layerData.shapes.forEach(shape => {
+                            this.layerData.shapes.forEach((shape) => {
                                 if (shape.isInterpolated !== undefined) {
                                     shape.isInterpolated = false;
                                 }
                             });
                         }
                     }
-                    console.log('[GlyphCanvas]', 'After restore - layerData.isInterpolated:', this.layerData?.isInterpolated);
-                    console.log('[GlyphCanvas]', 'Layer switch animation complete, restored target layer for editing');
-                    
+                    console.log(
+                        '[GlyphCanvas]',
+                        'After restore - layerData.isInterpolated:',
+                        this.layerData?.isInterpolated
+                    );
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Layer switch animation complete, restored target layer for editing'
+                    );
+
                     // Now check if we're on an exact layer match to update selectedLayerId
                     await this.autoSelectMatchingLayer();
-                    
+
                     if (this.isGlyphEditMode) {
                         this.render();
                     }
@@ -546,15 +582,22 @@ class GlyphCanvas {
                 this.textRunEditor.shapeText();
                 return;
             }
-            
+
             // Check if new variation settings match any layer
             if (this.isGlyphEditMode && this.fontData) {
                 await this.autoSelectMatchingLayer();
-                
+
                 // If no exact layer match, keep interpolated data visible
-                if (this.selectedLayerId === null && this.layerData && this.layerData.isInterpolated) {
+                if (
+                    this.selectedLayerId === null &&
+                    this.layerData &&
+                    this.layerData.isInterpolated
+                ) {
                     // Keep showing interpolated data
-                    console.log('[GlyphCanvas]', 'Animation complete: showing interpolated glyph');
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Animation complete: showing interpolated glyph'
+                    );
                 }
             }
 
@@ -575,20 +618,29 @@ class GlyphCanvas {
                 this.previousVariationSettings = {
                     ...this.axesManager.variationSettings
                 };
-                console.log('[GlyphCanvas]', 'Saved previous state for Escape:', {
-                    layerId: this.previousSelectedLayerId,
-                    settings: this.previousVariationSettings
-                });
+                console.log(
+                    '[GlyphCanvas]',
+                    'Saved previous state for Escape:',
+                    {
+                        layerId: this.previousSelectedLayerId,
+                        settings: this.previousVariationSettings
+                    }
+                );
                 this.selectedLayerId = null; // Deselect layer
                 // Don't update layer selection UI during interpolation to avoid triggering render
                 if (!this.isInterpolating) {
                     this.updateLayerSelection();
                 }
             }
-            
+
             // Real-time interpolation during slider movement
             // Skip interpolation if in preview mode (HarfBuzz handles interpolation)
-            if (this.isGlyphEditMode && this.isInterpolating && !this.isPreviewMode && this.currentGlyphName) {
+            if (
+                this.isGlyphEditMode &&
+                this.isInterpolating &&
+                !this.isPreviewMode &&
+                this.currentGlyphName
+            ) {
                 this.interpolateCurrentGlyph();
             }
         });
@@ -1963,9 +2015,15 @@ json.dumps(result)
                     // Not during slider use - this is a direct layer selection or initial load
                     // Clear previous state to allow Escape to exit components instead
                     this.previousVariationSettings = null;
-                    console.log('[GlyphCanvas]', 'Cleared previous state (not during slider use)');
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Cleared previous state (not during slider use)'
+                    );
                 } else {
-                    console.log('[GlyphCanvas]', 'Keeping previous state (during slider use)');
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Keeping previous state (during slider use)'
+                    );
                 }
 
                 // Only fetch layer data if we're not currently interpolating
@@ -2020,8 +2078,15 @@ json.dumps(result)
         }
 
         // If we're in glyph edit mode and not on a layer, interpolate at current position
-        if (this.isGlyphEditMode && this.selectedLayerId === null && this.currentGlyphName) {
-            console.log('[GlyphCanvas]', 'Interpolating at current position after entering edit mode');
+        if (
+            this.isGlyphEditMode &&
+            this.selectedLayerId === null &&
+            this.currentGlyphName
+        ) {
+            console.log(
+                '[GlyphCanvas]',
+                'Interpolating at current position after entering edit mode'
+            );
             await this.interpolateCurrentGlyph(true); // force=true to bypass guard
         }
     }
@@ -2033,13 +2098,13 @@ json.dumps(result)
         this.previousVariationSettings = null;
 
         this.selectedLayerId = layer.id;
-        
+
         // Immediately clear interpolated flag on existing data
         // to prevent rendering with monochrome colors
         if (this.layerData) {
             this.layerData.isInterpolated = false;
         }
-        
+
         console.log(
             '[GlyphCanvas]',
             `Selected layer: ${layer.name} (ID: ${layer.id})`
@@ -2054,17 +2119,28 @@ json.dumps(result)
         // Fetch layer data now and store as target for animation
         // This ensures new outlines are ready before animation starts
         await this.fetchLayerData();
-        
+
         // If we're in edit mode, set up animation state
         if (this.isGlyphEditMode && this.layerData) {
-            console.log('[GlyphCanvas]', 'Before copy - layerData.isInterpolated:', this.layerData.isInterpolated);
+            console.log(
+                '[GlyphCanvas]',
+                'Before copy - layerData.isInterpolated:',
+                this.layerData.isInterpolated
+            );
             // Make a deep copy of the target layer data so it doesn't get overwritten during animation
             this.targetLayerData = JSON.parse(JSON.stringify(this.layerData));
             // Also store the layer ID for validation
             this.targetLayerData.layerId = this.layerData.layerId;
-            console.log('[GlyphCanvas]', 'After copy - targetLayerData.isInterpolated:', this.targetLayerData.isInterpolated);
+            console.log(
+                '[GlyphCanvas]',
+                'After copy - targetLayerData.isInterpolated:',
+                this.targetLayerData.isInterpolated
+            );
             this.isLayerSwitchAnimating = true;
-            console.log('[GlyphCanvas]', 'Starting layer switch animation with stored target layer');
+            console.log(
+                '[GlyphCanvas]',
+                'Starting layer switch animation with stored target layer'
+            );
         }
 
         // Perform mouse hit detection after layer data is loaded
@@ -2380,12 +2456,15 @@ json.dumps(result)
             });
             return;
         }
-        
+
         // Don't interpolate if we just finished a layer switch animation
         // The target layer data has already been restored
         // Unless force=true (e.g., entering edit mode at interpolated position)
         if (!force && !this.isInterpolating && !this.isLayerSwitchAnimating) {
-            console.log('[GlyphCanvas]', 'Skipping interpolation - not in active interpolation state');
+            console.log(
+                '[GlyphCanvas]',
+                'Skipping interpolation - not in active interpolation state'
+            );
             return;
         }
 
@@ -2397,10 +2476,11 @@ json.dumps(result)
                 JSON.stringify(location)
             );
 
-            const interpolatedLayer = await window.fontInterpolation.interpolateGlyph(
-                this.currentGlyphName,
-                location
-            );
+            const interpolatedLayer =
+                await window.fontInterpolation.interpolateGlyph(
+                    this.currentGlyphName,
+                    location
+                );
 
             console.log(
                 '[GlyphCanvas]',
@@ -2409,12 +2489,19 @@ json.dumps(result)
             );
 
             // Apply interpolated data using normalizer
-            console.log('[GlyphCanvas]', 'Calling LayerDataNormalizer.applyInterpolatedLayer...');
-            LayerDataNormalizer.applyInterpolatedLayer(this, interpolatedLayer, location);
-            
+            console.log(
+                '[GlyphCanvas]',
+                'Calling LayerDataNormalizer.applyInterpolatedLayer...'
+            );
+            LayerDataNormalizer.applyInterpolatedLayer(
+                this,
+                interpolatedLayer,
+                location
+            );
+
             // Render with the new interpolated data
             this.render();
-            
+
             console.log(
                 '[GlyphCanvas]',
                 `✅ Applied interpolated layer for "${this.currentGlyphName}"`
@@ -2422,10 +2509,13 @@ json.dumps(result)
         } catch (error) {
             // Silently ignore cancellation errors
             if (error.message && error.message.includes('cancelled')) {
-                console.log('[GlyphCanvas]', '🚫 Interpolation cancelled (newer request pending)');
+                console.log(
+                    '[GlyphCanvas]',
+                    '🚫 Interpolation cancelled (newer request pending)'
+                );
                 return;
             }
-            
+
             console.warn(
                 '[GlyphCanvas]',
                 `⚠️ Interpolation failed for "${this.currentGlyphName}":`,
@@ -2517,13 +2607,16 @@ json.dumps(result)
         if (!window.pyodide || !this.layerData) {
             return;
         }
-        
+
         // Don't save interpolated data - it's not editable and has no layer ID
         if (this.layerData.isInterpolated) {
-            console.warn('[GlyphCanvas]', 'Cannot save interpolated layer data - not on an exact layer location');
+            console.warn(
+                '[GlyphCanvas]',
+                'Cannot save interpolated layer data - not on an exact layer location'
+            );
             return;
         }
-        
+
         if (!this.selectedLayerId) {
             console.warn('[GlyphCanvas]', 'No layer selected - cannot save');
             return;
@@ -3795,9 +3888,7 @@ json.dumps(result)
             // Skip HarfBuzz only in edit mode when NOT in preview mode
             // In preview mode, always use HarfBuzz (shows final rendered font)
             const skipHarfBuzz =
-                isSelected &&
-                this.isGlyphEditMode &&
-                !this.isPreviewMode;
+                isSelected && this.isGlyphEditMode && !this.isPreviewMode;
 
             if (!skipHarfBuzz) {
                 // Set color based on mode and state
@@ -3827,7 +3918,8 @@ json.dumps(result)
                 }
 
                 // Get glyph outline from HarfBuzz (supports variations)
-                const glyphData = this.textRunEditor.hbFont.glyphToPath(glyphId);
+                const glyphData =
+                    this.textRunEditor.hbFont.glyphToPath(glyphId);
 
                 if (glyphData) {
                     this.ctx.save();
@@ -4228,8 +4320,11 @@ json.dumps(result)
         if (this.layerData.shapes && Array.isArray(this.layerData.shapes)) {
             // Apply monochrome during manual slider interpolation OR when not on an exact layer
             // Don't apply monochrome during layer switch animations
-            const isInterpolated = this.isInterpolating || (this.selectedLayerId === null && this.layerData?.isInterpolated);
-            
+            const isInterpolated =
+                this.isInterpolating ||
+                (this.selectedLayerId === null &&
+                    this.layerData?.isInterpolated);
+
             this.layerData.shapes.forEach((shape, contourIndex) => {
                 console.log(
                     '[GlyphCanvas]',
@@ -4363,12 +4458,12 @@ json.dumps(result)
                             let fillColor = isDarkTheme
                                 ? 'rgba(0, 255, 255, 0.8)'
                                 : 'rgba(0, 150, 150, 0.8)';
-                            
+
                             // Apply monochrome for interpolated data
                             if (isInterpolated) {
                                 fillColor = desaturateColor(fillColor);
                             }
-                            
+
                             this.ctx.fillStyle = fillColor;
                             this.ctx.fill();
                         }
@@ -4452,17 +4547,22 @@ json.dumps(result)
 
                 shape.nodes.forEach((node, nodeIndex) => {
                     const [x, y, type] = node;
-                    const isInterpolated = this.isInterpolating || (this.selectedLayerId === null && this.layerData?.isInterpolated);
+                    const isInterpolated =
+                        this.isInterpolating ||
+                        (this.selectedLayerId === null &&
+                            this.layerData?.isInterpolated);
                     const isHovered =
                         !isInterpolated &&
                         this.hoveredPointIndex &&
                         this.hoveredPointIndex.contourIndex === contourIndex &&
                         this.hoveredPointIndex.nodeIndex === nodeIndex;
-                    const isSelected = !isInterpolated && this.selectedPoints.some(
-                        (p) =>
-                            p.contourIndex === contourIndex &&
-                            p.nodeIndex === nodeIndex
-                    );
+                    const isSelected =
+                        !isInterpolated &&
+                        this.selectedPoints.some(
+                            (p) =>
+                                p.contourIndex === contourIndex &&
+                                p.nodeIndex === nodeIndex
+                        );
 
                     // Skip quadratic bezier points for now
                     if (type === 'q' || type === 'qs') {
@@ -4505,12 +4605,12 @@ json.dumps(result)
                             : isHovered
                               ? colors.CONTROL_POINT_HOVERED
                               : colors.CONTROL_POINT_NORMAL;
-                        
+
                         // Apply monochrome for interpolated data
                         if (isInterpolated) {
                             fillColor = desaturateColor(fillColor);
                         }
-                        
+
                         this.ctx.fillStyle = fillColor;
                         this.ctx.fill();
                         // Stroke permanently removed
@@ -4524,12 +4624,12 @@ json.dumps(result)
                             : isHovered
                               ? colors.NODE_HOVERED
                               : colors.NODE_NORMAL;
-                        
+
                         // Apply monochrome for interpolated data
                         if (isInterpolated) {
                             fillColor = desaturateColor(fillColor);
                         }
-                        
+
                         this.ctx.fillStyle = fillColor;
                         this.ctx.fillRect(
                             x - pointSize,
@@ -4542,15 +4642,13 @@ json.dumps(result)
 
                     // Draw smooth indicator for smooth nodes
                     if (type === 'cs' || type === 'os' || type === 'ls') {
-                        let smoothColor = isDarkTheme
-                            ? '#ffffff'
-                            : '#000000';
-                        
+                        let smoothColor = isDarkTheme ? '#ffffff' : '#000000';
+
                         // Apply monochrome for interpolated data
                         if (isInterpolated) {
                             smoothColor = desaturateColor(smoothColor);
                         }
-                        
+
                         this.ctx.beginPath();
                         this.ctx.arc(x, y, pointSize * 0.4, 0, Math.PI * 2);
                         this.ctx.fillStyle = smoothColor;
@@ -4571,9 +4669,14 @@ json.dumps(result)
                 );
 
                 // Disable selection/hover highlighting for interpolated data
-                const isInterpolated = this.isInterpolating || (this.selectedLayerId === null && this.layerData?.isInterpolated);
-                const isHovered = !isInterpolated && (this.hoveredComponentIndex === index);
-                const isSelected = !isInterpolated && this.selectedComponents.includes(index);
+                const isInterpolated =
+                    this.isInterpolating ||
+                    (this.selectedLayerId === null &&
+                        this.layerData?.isInterpolated);
+                const isHovered =
+                    !isInterpolated && this.hoveredComponentIndex === index;
+                const isSelected =
+                    !isInterpolated && this.selectedComponents.includes(index);
 
                 // Get full transform matrix [a, b, c, d, tx, ty]
                 let a = 1,
@@ -4896,9 +4999,14 @@ json.dumps(result)
 
             this.layerData.anchors.forEach((anchor, index) => {
                 const { x, y, name } = anchor;
-                const isInterpolated = this.isInterpolating || (this.selectedLayerId === null && this.layerData?.isInterpolated);
-                const isHovered = !isInterpolated && this.hoveredAnchorIndex === index;
-                const isSelected = !isInterpolated && this.selectedAnchors.includes(index);
+                const isInterpolated =
+                    this.isInterpolating ||
+                    (this.selectedLayerId === null &&
+                        this.layerData?.isInterpolated);
+                const isHovered =
+                    !isInterpolated && this.hoveredAnchorIndex === index;
+                const isSelected =
+                    !isInterpolated && this.selectedAnchors.includes(index);
 
                 // Draw anchor as diamond
                 this.ctx.save();
@@ -4913,12 +5021,12 @@ json.dumps(result)
                     : isHovered
                       ? colors.ANCHOR_HOVERED
                       : colors.ANCHOR_NORMAL;
-                
+
                 // Apply monochrome for interpolated data
                 if (isInterpolated) {
                     fillColor = desaturateColor(fillColor);
                 }
-                
+
                 this.ctx.fillStyle = fillColor;
                 this.ctx.fillRect(
                     -anchorSize,
@@ -5108,7 +5216,7 @@ json.dumps(result)
                 '  -> Exiting preview mode from Space release'
             );
             this.isPreviewMode = false;
-            
+
             // Check if current axis position matches an exact layer
             this.autoSelectMatchingLayer().then(async () => {
                 if (this.selectedLayerId !== null) {

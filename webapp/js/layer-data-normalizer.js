@@ -15,10 +15,10 @@
 
 /**
  * Layer Data Normalizer
- * 
- * Transforms layer data from multiple sources (Python layer.to_dict() and 
+ *
+ * Transforms layer data from multiple sources (Python layer.to_dict() and
  * babelfont-rs interpolate_glyph JSON) into a unified format for GlyphCanvas rendering.
- * 
+ *
  * This ensures both editable Python layers and read-only interpolated layers
  * can be displayed using the same rendering code.
  */
@@ -26,7 +26,7 @@
 class LayerDataNormalizer {
     /**
      * Normalize layer data from any source
-     * 
+     *
      * @param {Object} layerData - Layer data from either Python or babelfont-rs
      * @param {string} source - 'python' or 'interpolated'
      * @returns {Object} Normalized layer data with isInterpolated flag
@@ -37,19 +37,22 @@ class LayerDataNormalizer {
         }
 
         const isInterpolated = source === 'interpolated';
-        
+
         // Both sources already have similar structure from babelfont format
         // Main difference: babelfont-rs uses serialized nodes string, Python has already parsed them
         const normalized = {
             width: layerData.width || 0,
-            shapes: this.normalizeShapes(layerData.shapes || [], isInterpolated),
+            shapes: this.normalizeShapes(
+                layerData.shapes || [],
+                isInterpolated
+            ),
             anchors: this.normalizeAnchors(layerData.anchors || []),
             guides: layerData.guides || [],
             format_specific: layerData.format_specific || {},
             // Add metadata flag for rendering
             isInterpolated: isInterpolated,
             name: layerData.name || null,
-            id: layerData.id || null,
+            id: layerData.id || null
         };
 
         return normalized;
@@ -57,18 +60,21 @@ class LayerDataNormalizer {
 
     /**
      * Normalize shapes array (Paths and Components)
-     * 
+     *
      * @param {Array} shapes - Array of shape objects
      * @param {boolean} isInterpolated - Whether this is interpolated data
      * @returns {Array} Normalized shapes array
      */
     static normalizeShapes(shapes, isInterpolated) {
-        return shapes.map(shape => {
+        return shapes.map((shape) => {
             if (shape.Path) {
                 return {
                     Path: {
                         nodes: shape.Path.nodes,
-                        closed: shape.Path.closed !== undefined ? shape.Path.closed : true,
+                        closed:
+                            shape.Path.closed !== undefined
+                                ? shape.Path.closed
+                                : true,
                         format_specific: shape.Path.format_specific || {}
                     },
                     // For rendering: parse nodes if they're a string (from babelfont-rs)
@@ -79,11 +85,16 @@ class LayerDataNormalizer {
                 return {
                     Component: {
                         reference: shape.Component.reference,
-                        transform: shape.Component.transform || [1, 0, 0, 1, 0, 0],
+                        transform: shape.Component.transform || [
+                            1, 0, 0, 1, 0, 0
+                        ],
                         format_specific: shape.Component.format_specific || {},
                         // Recursively normalize nested component layer data
-                        layerData: shape.Component.layerData 
-                            ? this.normalize(shape.Component.layerData, isInterpolated ? 'interpolated' : 'python')
+                        layerData: shape.Component.layerData
+                            ? this.normalize(
+                                  shape.Component.layerData,
+                                  isInterpolated ? 'interpolated' : 'python'
+                              )
                             : null
                     },
                     isInterpolated: isInterpolated
@@ -95,10 +106,10 @@ class LayerDataNormalizer {
 
     /**
      * Parse nodes from string or array format
-     * 
+     *
      * babelfont format: "x1 y1 type [x2 y2 type ...]"
      * where type is: m, l, o, c, q (with optional 's' suffix for smooth)
-     * 
+     *
      * @param {string|Array} nodes - Nodes as string or already-parsed array
      * @returns {Array} Array of [x, y, type] triplets
      */
@@ -118,9 +129,9 @@ class LayerDataNormalizer {
 
             for (let i = 0; i + 2 < tokens.length; i += 3) {
                 nodesArray.push([
-                    parseFloat(tokens[i]),     // x
+                    parseFloat(tokens[i]), // x
                     parseFloat(tokens[i + 1]), // y
-                    tokens[i + 2]              // type (m, l, o, c, q, ms, ls, etc.)
+                    tokens[i + 2] // type (m, l, o, c, q, ms, ls, etc.)
                 ]);
             }
 
@@ -132,12 +143,12 @@ class LayerDataNormalizer {
 
     /**
      * Normalize anchors array
-     * 
+     *
      * @param {Array} anchors - Array of anchor objects
      * @returns {Array} Normalized anchors array
      */
     static normalizeAnchors(anchors) {
-        return anchors.map(anchor => ({
+        return anchors.map((anchor) => ({
             name: anchor.name || '',
             x: anchor.x || 0,
             y: anchor.y || 0,
@@ -147,7 +158,7 @@ class LayerDataNormalizer {
 
     /**
      * Check if layer data is from an exact layer (not interpolated)
-     * 
+     *
      * @param {Object} normalizedData - Normalized layer data
      * @returns {boolean} True if this is an exact layer
      */
@@ -157,26 +168,41 @@ class LayerDataNormalizer {
 
     /**
      * Apply interpolated layer data from babelfont-rs to GlyphCanvas
-     * 
+     *
      * @param {GlyphCanvas} glyphCanvas - The glyph canvas instance
      * @param {Object} interpolatedLayer - Layer data from babelfont-rs interpolate_glyph
      * @param {Object} location - The designspace location used for interpolation
      */
     static applyInterpolatedLayer(glyphCanvas, interpolatedLayer, location) {
-        console.log('[LayerDataNormalizer]', '📍 Location:', JSON.stringify(location));
-        console.log('[LayerDataNormalizer]', 'Applying interpolated layer:', interpolatedLayer);
-        
+        console.log(
+            '[LayerDataNormalizer]',
+            '📍 Location:',
+            JSON.stringify(location)
+        );
+        console.log(
+            '[LayerDataNormalizer]',
+            'Applying interpolated layer:',
+            interpolatedLayer
+        );
+
         const normalized = this.normalize(interpolatedLayer, 'interpolated');
-        
+
         console.log('[LayerDataNormalizer]', 'Normalized layer:', normalized);
-        console.log('[LayerDataNormalizer]', 'Normalized shapes count:', normalized?.shapes?.length);
-        
+        console.log(
+            '[LayerDataNormalizer]',
+            'Normalized shapes count:',
+            normalized?.shapes?.length
+        );
+
         // Log first point coordinates to see if they're changing
         if (normalized?.shapes?.[0]?.nodes?.[0]) {
             const [x, y, type] = normalized.shapes[0].nodes[0];
-            console.log('[LayerDataNormalizer]', `First point: x=${x}, y=${y}, type=${type}`);
+            console.log(
+                '[LayerDataNormalizer]',
+                `First point: x=${x}, y=${y}, type=${type}`
+            );
         }
-        
+
         // Parse component nodes recursively
         const parseComponentNodes = (shapes) => {
             if (!shapes) return;
@@ -188,7 +214,11 @@ class LayerDataNormalizer {
                 }
 
                 // Recursively parse nested component data
-                if (shape.Component && shape.Component.layerData && shape.Component.layerData.shapes) {
+                if (
+                    shape.Component &&
+                    shape.Component.layerData &&
+                    shape.Component.layerData.shapes
+                ) {
                     parseComponentNodes(shape.Component.layerData.shapes);
                 }
             });
@@ -206,7 +236,7 @@ class LayerDataNormalizer {
 
     /**
      * Restore exact layer from Python
-     * 
+     *
      * @param {GlyphCanvas} glyphCanvas - The glyph canvas instance
      */
     static async restoreExactLayer(glyphCanvas) {

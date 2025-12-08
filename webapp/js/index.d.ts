@@ -136,11 +136,16 @@ declare global {
  */
 interface FontInterpolationManager {
     setWorker(worker: Worker): void;
-    interpolateGlyph(glyphName: string, location: Record<string, number>): Promise<any>;
-    interpolateGlyphs(glyphNames: string[], location: Record<string, number>): Promise<Map<string, any>>;
+    interpolateGlyph(
+        glyphName: string,
+        location: Record<string, number>
+    ): Promise<any>;
+    interpolateGlyphs(
+        glyphNames: string[],
+        location: Record<string, number>
+    ): Promise<Map<string, any>>;
     clearCache(): Promise<void>;
     handleWorkerMessage(e: MessageEvent): void;
 }
-
 
 export {};

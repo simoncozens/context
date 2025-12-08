@@ -294,7 +294,7 @@ class FontCompilation {
                 '[FontCompilation]',
                 '✅ Ready for direct Python → Rust compilation'
             );
-            
+
             // Connect interpolation manager to this worker
             if (window.fontInterpolation) {
                 window.fontInterpolation.setWorker(this.worker);
@@ -303,7 +303,7 @@ class FontCompilation {
                     '✅ Interpolation manager connected to worker'
                 );
             }
-            
+
             return true;
         } catch (error) {
             console.error(

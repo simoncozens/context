@@ -51,16 +51,19 @@ async function initializeWasm() {
 // Handle compilation requests - supports both message protocols
 self.onmessage = async (event) => {
     const data = event.data;
-    
+
     // Debug: log all incoming messages with full details
-    console.log('[Fontc Worker] Received message:', JSON.stringify({
-        type: data.type,
-        hasJson: !!data.babelfontJson,
-        hasGlyphName: !!data.glyphName,
-        hasLocation: !!data.location,
-        id: data.id,
-        filename: data.filename
-    }));
+    console.log(
+        '[Fontc Worker] Received message:',
+        JSON.stringify({
+            type: data.type,
+            hasJson: !!data.babelfontJson,
+            hasGlyphName: !!data.glyphName,
+            hasLocation: !!data.location,
+            id: data.id,
+            filename: data.filename
+        })
+    );
 
     // Protocol 1: Type-based messages (from compile-button.js)
     if (data.type === 'init') {
@@ -131,21 +134,21 @@ self.onmessage = async (event) => {
     // Handle interpolation request (check BEFORE compilation)
     if (data.type === 'interpolate') {
         const { id, glyphName, location } = data;
-        
+
         try {
             console.log(
                 `[Fontc Worker] Interpolating glyph '${glyphName}' at location:`,
                 location
             );
-            
+
             const locationJson = JSON.stringify(location);
             const layerJson = interpolate_glyph(glyphName, locationJson);
-            
+
             console.log(
                 `[Fontc Worker] ✅ Interpolation successful for '${glyphName}', layer JSON length:`,
                 layerJson.length
             );
-            
+
             self.postMessage({
                 id,
                 type: 'interpolate',
@@ -184,13 +187,22 @@ self.onmessage = async (event) => {
     }
 
     // Handle compilation request
-    if (data.type === 'compile' || (data.type !== 'interpolate' && data.type !== 'clearCache' && !data.type && data.babelfontJson)) {
+    if (
+        data.type === 'compile' ||
+        (data.type !== 'interpolate' &&
+            data.type !== 'clearCache' &&
+            !data.type &&
+            data.babelfontJson)
+    ) {
         const start = Date.now();
         const { id, babelfontJson, filename, options } = data;
 
         // Validate babelfontJson exists
         if (!babelfontJson) {
-            console.error('[Fontc Worker] No babelfontJson provided in compilation request, data.type:', data.type);
+            console.error(
+                '[Fontc Worker] No babelfontJson provided in compilation request, data.type:',
+                data.type
+            );
             self.postMessage({
                 id,
                 error: 'No babelfontJson provided in compilation request'
@@ -202,7 +214,9 @@ self.onmessage = async (event) => {
             console.log(
                 `[Fontc Worker] Compiling ${filename} from .babelfont JSON...`
             );
-            console.log(`[Fontc Worker] JSON size: ${babelfontJson.length} bytes`);
+            console.log(
+                `[Fontc Worker] JSON size: ${babelfontJson.length} bytes`
+            );
             if (options) {
                 console.log(`[Fontc Worker] Options:`, options);
             }
@@ -212,7 +226,10 @@ self.onmessage = async (event) => {
                 store_font(babelfontJson);
                 console.log('[Fontc Worker] ✅ Font cached in WASM memory');
             } catch (cacheError) {
-                console.warn('[Fontc Worker] ⚠️ Failed to cache font:', cacheError);
+                console.warn(
+                    '[Fontc Worker] ⚠️ Failed to cache font:',
+                    cacheError
+                );
                 // Continue with compilation anyway
             }
 
@@ -220,7 +237,9 @@ self.onmessage = async (event) => {
             const result = compile_babelfont(babelfontJson, options || {});
 
             const time_taken = Date.now() - start;
-            console.log(`[Fontc Worker] Compiled ${filename} in ${time_taken}ms`);
+            console.log(
+                `[Fontc Worker] Compiled ${filename} in ${time_taken}ms`
+            );
 
             self.postMessage({
                 id,

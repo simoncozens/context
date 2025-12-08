@@ -15,15 +15,15 @@
 
 /**
  * Font Interpolation Module
- * 
+ *
  * Provides high-level API for glyph interpolation using the fontc worker.
  * The worker automatically caches fonts during compilation, so you don't need
  * to explicitly store them - just compile after edits and interpolation will work!
- * 
+ *
  * @example
  * // After compilation, interpolation is ready:
  * const layer = await fontInterpolation.interpolateGlyph('A', { wght: 550 });
- * 
+ *
  * // Batch interpolate:
  * const layers = await fontInterpolation.interpolateGlyphs(['A', 'B', 'C'], { wght: 550 });
  */
@@ -38,23 +38,26 @@ class FontInterpolationManager {
 
     /**
      * Initialize the interpolation manager with the fontc worker
-     * 
+     *
      * @param {Worker} worker - The fontc worker instance
      */
     setWorker(worker) {
         this.worker = worker;
-        console.log('[FontInterpolation]', '✅ Worker connected for interpolation');
+        console.log(
+            '[FontInterpolation]',
+            '✅ Worker connected for interpolation'
+        );
     }
 
     /**
      * Interpolate a glyph at a specific location in design space
      * Cancels any pending interpolation for the same glyph
-     * 
+     *
      * @param {string} glyphName - Name of the glyph to interpolate
      * @param {Object} location - Axis locations, e.g., { wght: 550, wdth: 100 }
      * @returns {Promise<Object>} Interpolated layer object with shapes, anchors, width, etc.
      * @throws {Error} If no font is cached or interpolation fails
-     * 
+     *
      * @example
      * const layer = await interpolateGlyph('A', { wght: 550 });
      * console.log(layer.width); // 600
@@ -68,18 +71,23 @@ class FontInterpolationManager {
         }
 
         // Cancel previous request for this glyph if it exists
-        if (this.currentGlyphRequest && this.currentGlyphRequest.glyphName === glyphName) {
+        if (
+            this.currentGlyphRequest &&
+            this.currentGlyphRequest.glyphName === glyphName
+        ) {
             const oldId = this.currentGlyphRequest.id;
             const oldRequest = this.pendingRequests.get(oldId);
             if (oldRequest) {
                 // Reject the old request as cancelled
-                oldRequest.reject(new Error('Interpolation cancelled - newer request pending'));
+                oldRequest.reject(
+                    new Error('Interpolation cancelled - newer request pending')
+                );
                 this.pendingRequests.delete(oldId);
             }
         }
 
         const id = this.requestId++;
-        
+
         // Track this as the current request for this glyph
         this.currentGlyphRequest = { id, glyphName };
 
@@ -103,28 +111,53 @@ class FontInterpolationManager {
      */
     handleWorkerMessage(e) {
         const data = e.data;
-        
-        console.log('[FontInterpolation]', 'Received worker message:', data.type, 'id:', data.id);
-        
+
+        console.log(
+            '[FontInterpolation]',
+            'Received worker message:',
+            data.type,
+            'id:',
+            data.id
+        );
+
         if (data.type === 'interpolate') {
             const pending = this.pendingRequests.get(data.id);
-            console.log('[FontInterpolation]', 'Found pending request:', !!pending);
-            
+            console.log(
+                '[FontInterpolation]',
+                'Found pending request:',
+                !!pending
+            );
+
             if (pending) {
                 this.pendingRequests.delete(data.id);
-                
+
                 if (data.error) {
-                    console.error('[FontInterpolation]', 'Interpolation error:', data.error);
+                    console.error(
+                        '[FontInterpolation]',
+                        'Interpolation error:',
+                        data.error
+                    );
                     pending.reject(new Error(data.error));
                 } else {
                     // Parse the JSON layer
                     try {
                         const layer = JSON.parse(data.result);
-                        console.log('[FontInterpolation]', '✅ Parsed layer, resolving promise');
+                        console.log(
+                            '[FontInterpolation]',
+                            '✅ Parsed layer, resolving promise'
+                        );
                         pending.resolve(layer);
                     } catch (parseError) {
-                        console.error('[FontInterpolation]', 'Parse error:', parseError);
-                        pending.reject(new Error(`Failed to parse layer JSON: ${parseError}`));
+                        console.error(
+                            '[FontInterpolation]',
+                            'Parse error:',
+                            parseError
+                        );
+                        pending.reject(
+                            new Error(
+                                `Failed to parse layer JSON: ${parseError}`
+                            )
+                        );
                     }
                 }
             }
@@ -133,11 +166,11 @@ class FontInterpolationManager {
 
     /**
      * Interpolate multiple glyphs at once
-     * 
+     *
      * @param {Array<string>} glyphNames - Array of glyph names
      * @param {Object} location - Axis locations
      * @returns {Promise<Map<string, Object>>} Map of glyph name to interpolated layer
-     * 
+     *
      * @example
      * const layers = await interpolateGlyphs(['A', 'B', 'C'], { wght: 550 });
      * layers.get('A').width; // 600
@@ -171,7 +204,7 @@ class FontInterpolationManager {
         }
 
         console.log('[FontInterpolation]', '🗑️ Clearing font cache...');
-        
+
         return new Promise((resolve, reject) => {
             const messageHandler = (e) => {
                 if (e.data.type === 'clearCache') {
@@ -183,7 +216,7 @@ class FontInterpolationManager {
                     }
                 }
             };
-            
+
             this.worker.addEventListener('message', messageHandler);
             this.worker.postMessage({ type: 'clearCache' });
         });
