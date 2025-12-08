@@ -341,7 +341,7 @@ babelfont_json
         // Extract from compiled typing font using opentype.js
         if (this.typingFont) {
             try {
-                const font = opentype.parse(this.typingFont.buffer);
+                const font = window.opentype.parse(this.typingFont.buffer);
                 const glyphOrder = [];
                 for (let i = 0; i < font.numGlyphs; i++) {
                     const glyph = font.glyphs.get(i);
