@@ -1798,28 +1798,8 @@ class GlyphCanvas {
         if (!window.pyodide || this.textRunEditor.selectedGlyphIndex < 0) {
             return null;
         }
-
+        let glyphName = this.getCurrentGlyphName();
         try {
-            const glyphId =
-                this.textRunEditor.shapedGlyphs[
-                    this.textRunEditor.selectedGlyphIndex
-                ].g;
-            let glyphName = `GID ${glyphId}`;
-
-            // Get glyph name from font manager (source font) instead of compiled font
-            if (window.fontManager && window.fontManager.babelfontData) {
-                glyphName = window.fontManager.getGlyphName(glyphId);
-            } else if (
-                this.opentypeFont &&
-                this.opentypeFont.glyphs.get(glyphId)
-            ) {
-                // Fallback to compiled font name (will be production name like glyph00001)
-                const glyph = this.opentypeFont.glyphs.get(glyphId);
-                if (glyph.name) {
-                    glyphName = glyph.name;
-                }
-            }
-
             // Fetch glyph and font data from Python
             const dataJson = await window.pyodide.runPythonAsync(`
 import json
@@ -2294,29 +2274,11 @@ json.dumps(result)
                 this.textRunEditor.shapedGlyphs[
                     this.textRunEditor.selectedGlyphIndex
                 ].g;
-            let glyphName = `GID ${glyphId}`;
-
-            // Get glyph name from font manager (source font) instead of compiled font
-            if (window.fontManager && window.fontManager.babelfontData) {
-                glyphName = window.fontManager.getGlyphName(glyphId);
-                console.log(
-                    '[GlyphCanvas]',
-                    `🔍 Fetching layer data for glyph: "${glyphName}" (GID ${glyphId}), layer: ${this.selectedLayerId}`
-                );
-            } else if (
-                this.opentypeFont &&
-                this.opentypeFont.glyphs.get(glyphId)
-            ) {
-                // Fallback to compiled font name (will be production name like glyph00001)
-                const glyph = this.opentypeFont.glyphs.get(glyphId);
-                if (glyph.name) {
-                    glyphName = glyph.name;
-                }
-                console.log(
-                    '[GlyphCanvas]',
-                    `🔍 Fetching layer data for glyph: "${glyphName}" (GID ${glyphId}, production name), layer: ${this.selectedLayerId}`
-                );
-            }
+            let glyphName = this.getCurrentGlyphName();
+            console.log(
+                '[GlyphCanvas]',
+                `🔍 Fetching layer data for glyph: "${glyphName}" (GID ${glyphId}, production name), layer: ${this.selectedLayerId}`
+            );
 
             const dataJson = await window.pyodide.runPythonAsync(`
 import json
@@ -2612,6 +2574,24 @@ json.dumps(result)
         }
     }
 
+    getCurrentGlyphName() {
+        // We're editing the main glyph
+        const glyphId = this.textRunEditor.selectedGlyph?.g;
+        let glyphName = `GID ${glyphId}`;
+
+        // Get glyph name from font manager (source font) instead of compiled font
+        if (window.fontManager && window.fontManager.babelfontData) {
+            glyphName = window.fontManager.getGlyphName(glyphId);
+        } else if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
+            // Fallback to compiled font name (will be production name like glyph00001)
+            const glyph = this.opentypeFont.glyphs.get(glyphId);
+            if (glyph.name) {
+                glyphName = glyph.name;
+            }
+        }
+        return glyphName;
+    }
+
     async saveLayerData() {
         // Save layer data back to Python using from_dict()
         if (!window.pyodide || !this.layerData) {
@@ -2645,23 +2625,7 @@ json.dumps(result)
                     parentState.layerData.shapes[this.editingComponentIndex];
                 glyphName = componentShape.Component.reference;
             } else {
-                // We're editing the main glyph
-                const glyphId = this.textRunEditor.selectedGlyph?.g;
-                glyphName = `GID ${glyphId}`;
-
-                // Get glyph name from font manager (source font) instead of compiled font
-                if (window.fontManager && window.fontManager.babelfontData) {
-                    glyphName = window.fontManager.getGlyphName(glyphId);
-                } else if (
-                    this.opentypeFont &&
-                    this.opentypeFont.glyphs.get(glyphId)
-                ) {
-                    // Fallback to compiled font name (will be production name like glyph00001)
-                    const glyph = this.opentypeFont.glyphs.get(glyphId);
-                    if (glyph.name) {
-                        glyphName = glyph.name;
-                    }
-                }
+                glyphName = this.getCurrentGlyphName();
             }
 
             // Convert nodes array back to string format for Python
