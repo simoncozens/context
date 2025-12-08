@@ -49,6 +49,10 @@ declare global {
             json: any,
             outputFile: string
         ) => Promise<Uint8Array>;
+        shapeTextWithFont: (
+            fontBytes: Uint8Array,
+            text: string
+        ) => Promise<string[]>;
 
         // From font-manager.js
         fontManager: FontManager;
