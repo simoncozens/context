@@ -65,6 +65,9 @@ declare global {
         // From keyboard-navigation.js
         focusView: (viewId: string) => void;
 
+        // From layer-data-normalizer.js
+        LayerDataNormalizer: LayerDataNormalizer; // LayerDataNormalizer class
+
         // From loading-animation.js
         updateLoadingStatus: (status: string, isReady: boolean = false) => void;
         WarpSpeedAnimation: {
