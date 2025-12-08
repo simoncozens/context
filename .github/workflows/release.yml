@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Sets permissions
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Update service worker version
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          echo "Updating service worker to version $VERSION"
+          sed -i "s/const VERSION = '[^']*'/const VERSION = '$VERSION'/" webapp/coi-serviceworker.js
+          echo "Updated version:"
+          grep "const VERSION = " webapp/coi-serviceworker.js
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          # Extract content between first and second # headlines
+          awk '/^# / {if (++count == 2) exit} count == 1 && !/^# / {print}' CHANGELOG.md > release-notes.md
+
+          # Show extracted content
+          echo "Release notes:"
+          cat release-notes.md
+
+          # Set output for GitHub release
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+          cat release-notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body: ${{ steps.changelog.outputs.RELEASE_NOTES }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./webapp"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Release ${{ steps.version.outputs.VERSION }} deployed successfully!"
+          echo "📦 GitHub Release created"
+          echo "🚀 Deployed to GitHub Pages: ${{ steps.deployment.outputs.page_url }}"

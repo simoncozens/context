@@ -48,3 +48,6 @@ This is a WebAssembly-based font editor using Rust (fontc/babelfont) compiled to
 ## Important Notes
 - CORS headers are required for SharedArrayBuffer (see _headers and coi-serviceworker.js)
 - Keep instructions/ directory updated with architectural decisions
+
+## Github Repository
+- Add major changes since last push to CHANGELOG.md. Be as concise as possibel. Don't keep adding new items for fixes to the same topic, maybe do a rewrite.

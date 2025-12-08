@@ -482,6 +482,25 @@ kbd + kbd {
     font-size: 18px;
 }
 
+.release-notes-link {
+    color: var(--accent-orange);
+    text-decoration: none;
+    margin-left: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: var(--font-mono);
+    transition: all 0.2s ease;
+    display: none;
+    align-items: center;
+    vertical-align: middle;
+}
+
+.release-notes-link:hover {
+    background-color: rgba(255, 153, 51, 0.1);
+    text-decoration: underline;
+}
+
 .font-dropdown-container {
     position: relative;
     display: flex;

@@ -1,0 +1,126 @@
+#!/bin/bash
+
+# Script to prepare a release
+# Usage: ./prepare-release.sh <version-tag>
+# Example: ./prepare-release.sh v1.2.3
+
+set -e
+
+if [ -z "$1" ]; then
+    echo "Error: Version tag required"
+    echo "Usage: ./prepare-release.sh <version-tag>"
+    echo "Example: ./prepare-release.sh v1.2.3"
+    exit 1
+fi
+
+VERSION_TAG="$1"
+SERVICE_WORKER_FILE="webapp/coi-serviceworker.js"
+CHANGELOG_FILE="CHANGELOG.md"
+RELEASE_NOTES_FILE="release-notes.md"
+
+# Validate version tag format (v followed by number)
+if ! echo "$VERSION_TAG" | grep -qE '^v[0-9]+'; then
+    echo "Error: Version tag must start with 'v' followed by a number (e.g., v1, v10, v1.2.3)"
+    exit 1
+fi
+
+# Check if required files exist
+if [ ! -f "$SERVICE_WORKER_FILE" ]; then
+    echo "Error: $SERVICE_WORKER_FILE not found"
+    exit 1
+fi
+
+if [ ! -f "$CHANGELOG_FILE" ]; then
+    echo "Error: $CHANGELOG_FILE not found"
+    exit 1
+fi
+
+echo "Preparing release $VERSION_TAG..."
+
+# Update version in service worker
+echo "Updating version in $SERVICE_WORKER_FILE..."
+CURRENT_VERSION=$(grep "const VERSION = " "$SERVICE_WORKER_FILE" | sed -E "s/.*'([^']+)'.*/\1/")
+echo "  Current version: $CURRENT_VERSION"
+echo "  New version: $VERSION_TAG"
+
+# Use sed to replace the VERSION constant
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' "s/const VERSION = '[^']*'/const VERSION = '$VERSION_TAG'/" "$SERVICE_WORKER_FILE"
+else
+    # Linux
+    sed -i "s/const VERSION = '[^']*'/const VERSION = '$VERSION_TAG'/" "$SERVICE_WORKER_FILE"
+fi
+
+echo "✅ Version updated in $SERVICE_WORKER_FILE"
+
+# Extract changelog section between first and second # headlines
+echo "Extracting release notes from $CHANGELOG_FILE..."
+awk '/^# / {if (++count == 2) exit} count == 1 && !/^# / {print}' "$CHANGELOG_FILE" > "$RELEASE_NOTES_FILE"
+
+# Trim leading/trailing whitespace
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$RELEASE_NOTES_FILE"
+else
+    # Linux
+    sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$RELEASE_NOTES_FILE"
+fi
+
+echo "✅ Release notes extracted to $RELEASE_NOTES_FILE"
+echo ""
+echo "Release notes content:"
+echo "----------------------------------------"
+cat "$RELEASE_NOTES_FILE"
+echo "----------------------------------------"
+echo ""
+
+# Check for uncommitted changes (other than the version update we just made)
+if ! git diff --quiet --exit-code -- . ':!webapp/coi-serviceworker.js'; then
+    echo "Warning: You have uncommitted changes besides the version update."
+    read -p "Do you want to continue and commit everything? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Release cancelled."
+        # Revert version change
+        git checkout -- "$SERVICE_WORKER_FILE"
+        rm -f "$RELEASE_NOTES_FILE"
+        exit 1
+    fi
+fi
+
+# Check if tag already exists
+if git rev-parse "$VERSION_TAG" >/dev/null 2>&1; then
+    echo "Error: Tag $VERSION_TAG already exists"
+    # Revert version change
+    git checkout -- "$SERVICE_WORKER_FILE"
+    rm -f "$RELEASE_NOTES_FILE"
+    exit 1
+fi
+
+# Commit the version change
+echo ""
+echo "Committing version update..."
+git add "$SERVICE_WORKER_FILE"
+git commit -m "Release $VERSION_TAG"
+
+# Create and push tag
+echo "Creating tag $VERSION_TAG..."
+git tag "$VERSION_TAG"
+
+echo ""
+echo "Pushing to GitHub..."
+git push origin main
+git push origin "$VERSION_TAG"
+
+echo ""
+echo "✅ Release $VERSION_TAG complete!"
+echo "🚀 GitHub Actions will now:"
+echo "   - Create a GitHub Release with changelog"
+echo "   - Deploy to GitHub Pages"
+echo "   - Users will see update notification within 10 minutes"
+echo ""
+echo "View your release at: https://github.com/yanone/context/releases/tag/$VERSION_TAG"
+
+# Clean up release notes file
+rm -f "$RELEASE_NOTES_FILE"

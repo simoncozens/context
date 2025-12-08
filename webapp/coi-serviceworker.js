@@ -3,7 +3,7 @@
 let coepCredentialless = false;
 
 // PWA Cache configuration
-const VERSION = 'v7';
+const VERSION = 'v8';
 const CACHE_NAME = 'contxt-pwa-' + VERSION;
 const CDN_CACHE_NAME = 'contxt-cdn-cache-' + VERSION;
 const OFFLINE_URL = '/index.html';
@@ -265,7 +265,8 @@ if (typeof window === 'undefined') {
                         clients.forEach((client) => {
                             client.postMessage({
                                 type: 'SW_UPDATED',
-                                cacheName: CACHE_NAME
+                                cacheName: CACHE_NAME,
+                                version: VERSION
                             });
                         });
                     });
