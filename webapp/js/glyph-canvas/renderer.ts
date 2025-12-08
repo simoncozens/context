@@ -396,6 +396,10 @@ export class GlyphCanvasRenderer {
             !this.glyphCanvas.layerData.shapes ||
             this.glyphCanvas.layerData.shapes.length === 0
         ) {
+            console.log(
+                '[GlyphCanvas]',
+                'Skipping drawOutlineEditor: no shapes'
+            );
             return;
         }
 
@@ -405,6 +409,10 @@ export class GlyphCanvasRenderer {
             this.textRunEditor.selectedGlyphIndex >=
                 this.textRunEditor.shapedGlyphs.length
         ) {
+            console.log(
+                '[GlyphCanvas]',
+                'Skipping drawOutlineEditor: invalid selectedGlyphIndex'
+            );
             return;
         }
 
@@ -1462,7 +1470,7 @@ export class GlyphCanvasRenderer {
         this.ctx.restore();
     }
 
-    buildPathFromNodes(nodes: any[], pathTarget = null) {
+    buildPathFromNodes(nodes: any[], pathTarget?: Path2D) {
         // Build a canvas path from a nodes array
         // pathTarget: if provided (Path2D object), draws to it; otherwise draws to this.ctx
         // Returns the startIdx for use in drawing direction arrows
@@ -1718,8 +1726,4 @@ export class GlyphCanvasRenderer {
 
         console.log('[GlyphCanvas]', '========================');
     }
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { GlyphCanvasRenderer };
 }

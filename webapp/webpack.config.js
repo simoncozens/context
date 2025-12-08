@@ -14,7 +14,7 @@ const entryPoints = {
     'font-manager': './js/font-manager.ts',
     'fontc-worker': './js/fontc-worker.ts',
     'fonteditor': './js/fonteditor.js',
-    'glyph-canvas': './js/glyph-canvas.js',
+    'glyph-canvas': './js/glyph-canvas.ts',
     'keyboard-navigation': './js/keyboard-navigation.js',
     'loading-animation': './js/loading-animation.js',
     'matplotlib-handler': './js/matplotlib-handler.js',

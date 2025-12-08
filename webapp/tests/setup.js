@@ -1,4 +1,4 @@
-global.GlyphCanvas = require('../js/glyph-canvas.js').GlyphCanvas;
+global.GlyphCanvas = require('../js/glyph-canvas').GlyphCanvas;
 global.ViewportManager = require('../js/glyph-canvas/viewport').ViewportManager;
 
 // Load design utility functions

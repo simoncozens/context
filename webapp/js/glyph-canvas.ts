@@ -1,23 +1,129 @@
 // Glyph Canvas Editor
 // Handles canvas-based glyph editing with pan/zoom and text rendering
 
-let AxesManager = require('./glyph-canvas/variations').AxesManager;
-let FeaturesManager = require('./glyph-canvas/features').FeaturesManager;
-let TextRunEditor = require('./glyph-canvas/textrun').TextRunEditor;
-let ViewportManager = require('./glyph-canvas/viewport').ViewportManager;
-let GlyphCanvasRenderer =
-    require('./glyph-canvas/renderer').GlyphCanvasRenderer;
-let LayerDataNormalizer =
-    require('./layer-data-normalizer').LayerDataNormalizer;
-let FontInterpolationManager =
-    require('./font-interpolation').FontInterpolationManager;
+import { AxesManager } from './glyph-canvas/variations';
+import { FeaturesManager } from './glyph-canvas/features';
+import { TextRunEditor } from './glyph-canvas/textrun';
+import { ViewportManager } from './glyph-canvas/viewport';
+import { GlyphCanvasRenderer } from './glyph-canvas/renderer';
+import { LayerDataNormalizer } from './layer-data-normalizer';
+import { FontInterpolationManager } from './font-interpolation';
+import * as opentype from 'opentype.js';
 
 // Create singleton instance
 const fontInterpolation = new FontInterpolationManager();
 
+// Define some types for clarity
+type Point = { contourIndex: number; nodeIndex: number };
+type ComponentStackItem = {
+    componentIndex: number;
+    transform: number[];
+    layerData: any;
+    selectedPoints: Point[];
+    selectedAnchors: number[];
+    selectedComponents: number[];
+    glyphName: string;
+};
+
 class GlyphCanvas {
-    constructor(containerId) {
-        this.container = document.getElementById(containerId);
+    container: HTMLElement;
+    canvas: HTMLCanvasElement | null = null;
+    ctx: CanvasRenderingContext2D | null = null;
+
+    axesManager: AxesManager | null = null;
+    featuresManager: FeaturesManager | null = null;
+    textRunEditor: TextRunEditor | null = null;
+    renderer: GlyphCanvasRenderer | null = null;
+
+    initialScale: number = 0.2;
+    viewportManager: ViewportManager | null = null;
+
+    currentFont: any = null;
+    fontBlob: Blob | null = null;
+    opentypeFont: opentype.Font | null = null;
+    sourceGlyphNames: { [gid: number]: string } = {};
+
+    isFocused: boolean = false;
+
+    mouseX: number = 0;
+    mouseY: number = 0;
+    hoveredGlyphIndex: number = -1;
+    glyphBounds: any[] = [];
+
+    isGlyphEditMode: boolean = false;
+
+    fontData: any = null;
+    selectedLayerId: string | null = null;
+    previousSelectedLayerId: string | null = null;
+    previousVariationSettings: Record<string, number> | null = null;
+
+    layerData: any = null;
+    currentGlyphName: string | null = null;
+    selectedPoints: Point[] = [];
+    hoveredPointIndex: Point | null = null;
+    selectedAnchors: number[] = [];
+    hoveredAnchorIndex: number | null = null;
+    selectedComponents: number[] = [];
+    hoveredComponentIndex: number | null = null;
+    layerDataDirty: boolean = false;
+    isPreviewMode: boolean = false;
+    isSliderActive: boolean = false;
+    isInterpolating: boolean = false;
+    isLayerSwitchAnimating: boolean = false;
+    targetLayerData: any = null;
+
+    componentStack: ComponentStackItem[] = [];
+    editingComponentIndex: number | null = null;
+
+    glyphSelectionSequence: number = 0;
+
+    textChangeDebounceTimer: any = null; // NodeJS.Timeout is not available in browser
+    textChangeDebounceDelay: number = 1000;
+
+    resizeObserver: ResizeObserver | null = null;
+
+    propertiesSection: HTMLElement | null = null;
+    leftSidebar: HTMLElement | null = null;
+    rightSidebar: HTMLElement | null = null;
+    axesSection: HTMLElement | null = null;
+
+    zoomAnimation: {
+        active: boolean;
+        currentFrame: number;
+        totalFrames: number;
+        startScale: number;
+        endScale: number;
+        centerX: number;
+        centerY: number;
+    } = {
+        active: false,
+        currentFrame: 0,
+        totalFrames: 0,
+        startScale: 0,
+        endScale: 0,
+        centerX: 0,
+        centerY: 0
+    };
+
+    // Internal state properties not in constructor
+    cmdKeyPressed: boolean = false;
+    spaceKeyPressed: boolean = false;
+    isDraggingCanvas: boolean = false;
+    isDraggingPoint: boolean = false;
+    isDraggingAnchor: boolean = false;
+    isDraggingComponent: boolean = false;
+    lastMouseX: number = 0;
+    lastMouseY: number = 0;
+    lastGlyphX: number | null = null;
+    lastGlyphY: number | null = null;
+    previewModeBeforeSlider: boolean = false;
+    mouseCanvasX: number = 0;
+    mouseCanvasY: number = 0;
+    cursorVisible: boolean = true;
+    selectedPointIndex: any = null;
+
+    constructor(containerId: string) {
+        this.container = document.getElementById(containerId)!;
         if (!this.container) {
             console.error(
                 '[GlyphCanvas]',
@@ -26,95 +132,17 @@ class GlyphCanvas {
             return;
         }
 
-        // Canvas and context
-        this.canvas = null;
-        this.ctx = null;
-
         this.axesManager = new AxesManager();
         this.featuresManager = new FeaturesManager();
         this.textRunEditor = new TextRunEditor(
             this.featuresManager,
             this.axesManager
         );
-        this.renderer = null; // Will be filled in init()
 
-        // Transformation state
-        this.initialScale = 0.2; // Zoomed out to see glyphs better
-        this.viewportManager = null; // Loaded in init() when we have a client rect
-
-        // Text buffer and shaping
-        this.currentFont = null;
-        this.fontBlob = null;
-        this.opentypeFont = null; // For glyph path extraction
-        this.sourceGlyphNames = {}; // Map of GID to glyph names from source font
-
-        // Focus state for background color
-        this.isFocused = false;
-
-        // Mouse interaction
-        this.mouseX = 0;
-        this.mouseY = 0;
-        this.hoveredGlyphIndex = -1; // Index of glyph being hovered
-        this.glyphBounds = []; // Store bounding boxes for hit testing
-
-        // Edit mode: false = text edit mode, true = glyph edit mode
-        this.isGlyphEditMode = false;
-
-        // Font data and selected layer for layer switching
-        this.fontData = null;
-        this.selectedLayerId = null;
-        this.previousSelectedLayerId = null; // For restoring on Escape
-        this.previousVariationSettings = null; // For restoring on Escape
-
-        // Outline editor state
-        this.layerData = null; // Cached layer data with shapes
-        this.currentGlyphName = null; // Name of currently edited glyph for interpolation
-        this.selectedPoints = []; // Array of {contourIndex, nodeIndex} for selected points
-        this.hoveredPointIndex = null; // {contourIndex, nodeIndex} for hovered point
-        this.selectedAnchors = []; // Array of anchor indices for selected anchors
-        this.hoveredAnchorIndex = null; // Index for hovered anchor
-        this.selectedComponents = []; // Array of component indices for selected components
-        this.hoveredComponentIndex = null; // Index for hovered component
-        this.layerDataDirty = false; // Track if layer data needs saving
-        this.isPreviewMode = false; // Preview mode hides outline editor
-        this.isSliderActive = false; // Track if user is currently interacting with slider
-        this.isInterpolating = false; // Track if currently showing interpolated data
-        this.isLayerSwitchAnimating = false; // Track if animating during layer switch
-        this.targetLayerData = null; // Store target layer data during animation
-
-        // Component recursion state
-        this.componentStack = []; // Stack of {componentIndex, transform, layerData, glyphName} for nested editing
-        this.editingComponentIndex = null; // Index of component being edited (null = editing main glyph)
-
-        // Glyph selection sequence tracking to prevent race conditions
-        this.glyphSelectionSequence = 0;
-
-        // Text change debouncing for font recompilation
-        this.textChangeDebounceTimer = null;
-        this.textChangeDebounceDelay = 1000; // 1 second delay
-
-        // Resize observer
-        this.resizeObserver = null;
-
-        // Nodes which will be filled in layer
-        this.propertiesSection = null;
-
-        // Keyboard zoom animation state
-        this.zoomAnimation = {
-            active: false,
-            currentFrame: 0,
-            totalFrames: 0,
-            startScale: 0,
-            endScale: 0,
-            centerX: 0,
-            centerY: 0
-        };
-
-        // Initialize
         this.init();
     }
 
-    init() {
+    init(): void {
         // Create canvas element
         this.canvas = document.createElement('canvas');
         this.canvas.style.width = '100%';
@@ -139,7 +167,7 @@ class GlyphCanvas {
             this.canvas,
             this,
             this.viewportManager,
-            this.textRunEditor
+            this.textRunEditor!
         );
 
         // Set up event listeners
@@ -148,10 +176,10 @@ class GlyphCanvas {
         // Initial render
         this.render();
 
-        this.textRunEditor.init();
+        this.textRunEditor!.init();
     }
 
-    setupHiDPI() {
+    setupHiDPI(): void {
         const dpr = window.devicePixelRatio || 1;
 
         // Get the container size (not the canvas bounding rect, which might be stale)
@@ -159,37 +187,37 @@ class GlyphCanvas {
         const containerHeight = this.container.clientHeight;
 
         // Set the canvas size in actual pixels (accounting for DPR)
-        this.canvas.width = containerWidth * dpr;
-        this.canvas.height = containerHeight * dpr;
+        this.canvas!.width = containerWidth * dpr;
+        this.canvas!.height = containerHeight * dpr;
 
         // Set CSS size to match container
-        this.canvas.style.width = containerWidth + 'px';
-        this.canvas.style.height = containerHeight + 'px';
+        this.canvas!.style.width = containerWidth + 'px';
+        this.canvas!.style.height = containerHeight + 'px';
 
         // Get context again and scale for DPR
-        this.ctx = this.canvas.getContext('2d');
-        this.ctx.scale(dpr, dpr);
+        this.ctx = this.canvas!.getContext('2d');
+        this.ctx!.scale(dpr, dpr);
     }
 
-    setupEventListeners() {
+    setupEventListeners(): void {
         // Mouse events for panning
-        this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
-        this.canvas.addEventListener('mouseleave', (e) => this.onMouseUp(e));
+        this.canvas!.addEventListener('mousedown', (e) => this.onMouseDown(e));
+        this.canvas!.addEventListener('mousemove', (e) => this.onMouseMove(e));
+        this.canvas!.addEventListener('mouseup', (e) => this.onMouseUp(e));
+        this.canvas!.addEventListener('mouseleave', (e) => this.onMouseUp(e));
 
         // Wheel event for zooming
-        this.canvas.addEventListener('wheel', (e) => this.onWheel(e), {
+        this.canvas!.addEventListener('wheel', (e) => this.onWheel(e), {
             passive: false
         });
 
         // Mouse move for hover detection
-        this.canvas.addEventListener('mousemove', (e) =>
+        this.canvas!.addEventListener('mousemove', (e) =>
             this.onMouseMoveHover(e)
         );
 
         // Keyboard events for cursor and text input
-        this.canvas.addEventListener('keydown', (e) => {
+        this.canvas!.addEventListener('keydown', (e) => {
             console.log(
                 '[GlyphCanvas]',
                 'keydown:',
@@ -213,7 +241,7 @@ class GlyphCanvas {
             }
             this.onKeyDown(e);
         });
-        this.canvas.addEventListener('keyup', (e) => {
+        this.canvas!.addEventListener('keyup', (e) => {
             console.log(
                 '[GlyphCanvas]',
                 'keyup:',
@@ -291,7 +319,7 @@ class GlyphCanvas {
         });
 
         // Also reset when canvas loses focus
-        this.canvas.addEventListener('blur', () => {
+        this.canvas!.addEventListener('blur', () => {
             this.cmdKeyPressed = false;
             this.spaceKeyPressed = false;
             this.isDraggingCanvas = false;
@@ -359,7 +387,7 @@ class GlyphCanvas {
                         });
 
                         // Restore axis values with animation
-                        this.axesManager._setupAnimation({
+                        this.axesManager!._setupAnimation({
                             ...this.previousVariationSettings
                         });
 
@@ -368,7 +396,7 @@ class GlyphCanvas {
                         this.previousVariationSettings = null;
 
                         // Return focus to canvas
-                        this.canvas.focus();
+                        this.canvas!.focus();
                         return;
                     }
                 }
@@ -386,8 +414,8 @@ class GlyphCanvas {
         });
 
         // Focus/blur for cursor blinking
-        this.canvas.addEventListener('focus', () => this.onFocus());
-        this.canvas.addEventListener('blur', () => this.onBlur());
+        this.canvas!.addEventListener('focus', () => this.onFocus());
+        this.canvas!.addEventListener('blur', () => this.onBlur());
 
         // Window resize
         window.addEventListener('resize', () => this.onResize());
@@ -399,24 +427,24 @@ class GlyphCanvas {
         // Sidebar click handlers to restore canvas focus in editor mode
         this.setupSidebarFocusHandlers();
         this.setupAxesManagerEventHandlers();
-        this.featuresManager.on('change', () => {
-            this.textRunEditor.shapeText();
+        this.featuresManager!.on('change', () => {
+            this.textRunEditor!.shapeText();
         });
         this.setupTextEditorEventHandlers();
     }
 
-    setupSidebarFocusHandlers() {
+    setupSidebarFocusHandlers(): void {
         // Add event listeners to both sidebars to restore canvas focus when clicked in editor mode
         const leftSidebar = document.getElementById('glyph-properties-sidebar');
         const rightSidebar = document.getElementById('glyph-editor-sidebar');
 
-        const restoreFocus = (e) => {
+        const restoreFocus = (e: MouseEvent) => {
             // Only restore focus when in editor mode
             if (this.isGlyphEditMode) {
                 // Use setTimeout to allow the click event to complete first
                 // (e.g., slider interaction, button click)
                 setTimeout(() => {
-                    this.canvas.focus();
+                    this.canvas!.focus();
                 }, 0);
             }
         };
@@ -429,8 +457,8 @@ class GlyphCanvas {
             rightSidebar.addEventListener('mousedown', restoreFocus);
         }
     }
-    setupAxesManagerEventHandlers() {
-        this.axesManager.on('sliderMouseDown', () => {
+    setupAxesManagerEventHandlers(): void {
+        this.axesManager!.on('sliderMouseDown', () => {
             if (this.isGlyphEditMode) {
                 // Remember if preview was already on (from keyboard toggle)
                 this.previewModeBeforeSlider = this.isPreviewMode;
@@ -446,7 +474,7 @@ class GlyphCanvas {
                 }
             }
         });
-        this.axesManager.on('sliderMouseUp', async () => {
+        this.axesManager!.on('sliderMouseUp', async () => {
             if (this.isGlyphEditMode && this.isPreviewMode) {
                 // Only exit preview mode if we entered it via slider
                 // If it was already on (from keyboard), keep it on
@@ -467,7 +495,7 @@ class GlyphCanvas {
                 if (this.selectedLayerId) {
                     this.previousSelectedLayerId = this.selectedLayerId;
                     this.previousVariationSettings = {
-                        ...this.axesManager.variationSettings
+                        ...this.axesManager!.variationSettings
                     };
                     console.log(
                         '[GlyphCanvas]',
@@ -505,7 +533,7 @@ class GlyphCanvas {
                 if (this.selectedLayerId) {
                     this.previousSelectedLayerId = this.selectedLayerId;
                     this.previousVariationSettings = {
-                        ...this.axesManager.variationSettings
+                        ...this.axesManager!.variationSettings
                     };
                     console.log(
                         '[GlyphCanvas]',
@@ -522,14 +550,14 @@ class GlyphCanvas {
 
                 this.render();
                 // Restore focus to canvas
-                setTimeout(() => this.canvas.focus(), 0);
+                setTimeout(() => this.canvas!.focus(), 0);
             } else {
                 // In text editing mode, restore focus to canvas
-                setTimeout(() => this.canvas.focus(), 0);
+                setTimeout(() => this.canvas!.focus(), 0);
             }
         });
-        this.axesManager.on('animationInProgress', () => {
-            this.textRunEditor.shapeText();
+        this.axesManager!.on('animationInProgress', () => {
+            this.textRunEditor!.shapeText();
 
             // Interpolate during slider dragging OR layer switch animation
             // But NOT after layer switch animation has ended
@@ -544,11 +572,11 @@ class GlyphCanvas {
                 // If neither flag is set, don't interpolate (normal axis animation without layer switch)
             }
         });
-        this.axesManager.on('animationComplete', async () => {
+        this.axesManager!.on('animationComplete', async () => {
             // Skip layer matching during manual slider interpolation
             // It will be handled properly in sliderMouseUp
             if (this.isInterpolating) {
-                this.textRunEditor.shapeText();
+                this.textRunEditor!.shapeText();
                 return;
             }
 
@@ -573,7 +601,7 @@ class GlyphCanvas {
                         this.layerData.isInterpolated = false;
                         // Also clear on shapes
                         if (this.layerData.shapes) {
-                            this.layerData.shapes.forEach((shape) => {
+                            this.layerData.shapes.forEach((shape: any) => {
                                 if (shape.isInterpolated !== undefined) {
                                     shape.isInterpolated = false;
                                 }
@@ -597,7 +625,7 @@ class GlyphCanvas {
                         this.render();
                     }
                 }
-                this.textRunEditor.shapeText();
+                this.textRunEditor!.shapeText();
                 return;
             }
 
@@ -619,72 +647,79 @@ class GlyphCanvas {
                 }
             }
 
-            this.textRunEditor.shapeText();
+            this.textRunEditor!.shapeText();
 
             // Restore focus to canvas after animation completes (for text editing mode)
             if (!this.isGlyphEditMode) {
-                setTimeout(() => this.canvas.focus(), 0);
+                setTimeout(() => this.canvas!.focus(), 0);
             }
         });
-        this.axesManager.on('onSliderChange', (axisTag, value) => {
-            // Save current state before manual adjustment (only once per manual session)
-            if (
-                this.selectedLayerId !== null &&
-                this.previousSelectedLayerId === null
-            ) {
-                this.previousSelectedLayerId = this.selectedLayerId;
-                this.previousVariationSettings = {
-                    ...this.axesManager.variationSettings
-                };
-                console.log(
-                    '[GlyphCanvas]',
-                    'Saved previous state for Escape:',
-                    {
-                        layerId: this.previousSelectedLayerId,
-                        settings: this.previousVariationSettings
+        this.axesManager!.on(
+            'onSliderChange',
+            (axisTag: string, value: number) => {
+                // Save current state before manual adjustment (only once per manual session)
+                if (
+                    this.selectedLayerId !== null &&
+                    this.previousSelectedLayerId === null
+                ) {
+                    this.previousSelectedLayerId = this.selectedLayerId;
+                    this.previousVariationSettings = {
+                        ...this.axesManager!.variationSettings
+                    };
+                    console.log(
+                        '[GlyphCanvas]',
+                        'Saved previous state for Escape:',
+                        {
+                            layerId: this.previousSelectedLayerId,
+                            settings: this.previousVariationSettings
+                        }
+                    );
+                    this.selectedLayerId = null; // Deselect layer
+                    // Don't update layer selection UI during interpolation to avoid triggering render
+                    if (!this.isInterpolating) {
+                        this.updateLayerSelection();
                     }
-                );
-                this.selectedLayerId = null; // Deselect layer
-                // Don't update layer selection UI during interpolation to avoid triggering render
-                if (!this.isInterpolating) {
-                    this.updateLayerSelection();
+                }
+
+                // Real-time interpolation during slider movement
+                // Skip interpolation if in preview mode (HarfBuzz handles interpolation)
+                if (
+                    this.isGlyphEditMode &&
+                    this.isInterpolating &&
+                    !this.isPreviewMode &&
+                    this.currentGlyphName
+                ) {
+                    this.interpolateCurrentGlyph();
                 }
             }
-
-            // Real-time interpolation during slider movement
-            // Skip interpolation if in preview mode (HarfBuzz handles interpolation)
-            if (
-                this.isGlyphEditMode &&
-                this.isInterpolating &&
-                !this.isPreviewMode &&
-                this.currentGlyphName
-            ) {
-                this.interpolateCurrentGlyph();
-            }
-        });
+        );
     }
 
-    setupTextEditorEventHandlers() {
-        this.textRunEditor.on('cursormoved', () => {
+    setupTextEditorEventHandlers(): void {
+        this.textRunEditor!.on('cursormoved', () => {
             this.panToCursor();
             this.render();
         });
-        this.textRunEditor.on('textchanged', () => {
+        this.textRunEditor!.on('textchanged', () => {
             this.onTextChange();
         });
-        this.textRunEditor.on('render', () => {
+        this.textRunEditor!.on('render', () => {
             this.render();
         });
-        this.textRunEditor.on('exitcomponentediting', () => {
+        this.textRunEditor!.on('exitcomponentediting', () => {
             // If we're in nested component mode, exit all levels first
             // Skip UI updates during batch exit to avoid duplicate layer interfaces
             while (this.componentStack.length > 0) {
                 this.exitComponentEditing(true); // Skip UI updates
             }
         });
-        this.textRunEditor.on(
+        this.textRunEditor!.on(
             'glyphselected',
-            async (ix, previousIndex, fromKeyboard = false) => {
+            async (
+                ix: number,
+                previousIndex: number,
+                fromKeyboard: boolean = false
+            ) => {
                 const wasInEditMode = this.isGlyphEditMode;
 
                 // Increment sequence counter to track this selection
@@ -703,10 +738,10 @@ class GlyphCanvas {
                         if (
                             prevBounds &&
                             previousIndex <
-                                this.textRunEditor.shapedGlyphs.length
+                                this.textRunEditor!.shapedGlyphs.length
                         ) {
                             const prevPos =
-                                this.textRunEditor._getGlyphPosition(
+                                this.textRunEditor!._getGlyphPosition(
                                     previousIndex
                                 );
                             const fontSpaceMinY =
@@ -716,23 +751,23 @@ class GlyphCanvas {
 
                             // Update accumulated vertical bounds with previous glyph
                             if (
-                                !this.viewportManager.accumulatedVerticalBounds
+                                !this.viewportManager!.accumulatedVerticalBounds
                             ) {
-                                this.viewportManager.accumulatedVerticalBounds =
+                                this.viewportManager!.accumulatedVerticalBounds =
                                     {
                                         minY: fontSpaceMinY,
                                         maxY: fontSpaceMaxY
                                     };
                             } else {
-                                this.viewportManager.accumulatedVerticalBounds.minY =
+                                this.viewportManager!.accumulatedVerticalBounds.minY =
                                     Math.min(
-                                        this.viewportManager
+                                        this.viewportManager!
                                             .accumulatedVerticalBounds.minY,
                                         fontSpaceMinY
                                     );
-                                this.viewportManager.accumulatedVerticalBounds.maxY =
+                                this.viewportManager!.accumulatedVerticalBounds.maxY =
                                     Math.max(
-                                        this.viewportManager
+                                        this.viewportManager!
                                             .accumulatedVerticalBounds.maxY,
                                         fontSpaceMaxY
                                     );
@@ -805,9 +840,9 @@ class GlyphCanvas {
         );
     }
 
-    onMouseDown(e) {
+    onMouseDown(e: MouseEvent): void {
         // Focus the canvas when clicked
-        this.canvas.focus();
+        this.canvas!.focus();
 
         // Priority: If Cmd key is pressed, start canvas panning immediately
         if (this.cmdKeyPressed) {
@@ -862,9 +897,9 @@ class GlyphCanvas {
                 if (
                     this.hoveredGlyphIndex >= 0 &&
                     this.hoveredGlyphIndex !==
-                        this.textRunEditor.selectedGlyphIndex
+                        this.textRunEditor!.selectedGlyphIndex
                 ) {
-                    this.textRunEditor.selectGlyphByIndex(
+                    this.textRunEditor!.selectGlyphByIndex(
                         this.hoveredGlyphIndex
                     );
                     return;
@@ -873,7 +908,7 @@ class GlyphCanvas {
 
             // Double-click on glyph - select glyph (when not in edit mode)
             if (!this.isGlyphEditMode && this.hoveredGlyphIndex >= 0) {
-                this.textRunEditor.selectGlyphByIndex(this.hoveredGlyphIndex);
+                this.textRunEditor!.selectGlyphByIndex(this.hoveredGlyphIndex);
                 return;
             }
         }
@@ -968,8 +1003,8 @@ class GlyphCanvas {
                     const existingIndex = this.selectedPoints.findIndex(
                         (p) =>
                             p.contourIndex ===
-                                this.hoveredPointIndex.contourIndex &&
-                            p.nodeIndex === this.hoveredPointIndex.nodeIndex
+                                this.hoveredPointIndex!.contourIndex &&
+                            p.nodeIndex === this.hoveredPointIndex!.nodeIndex
                     );
                     if (existingIndex >= 0) {
                         // Remove from selection
@@ -984,8 +1019,8 @@ class GlyphCanvas {
                     const isInSelection = this.selectedPoints.some(
                         (p) =>
                             p.contourIndex ===
-                                this.hoveredPointIndex.contourIndex &&
-                            p.nodeIndex === this.hoveredPointIndex.nodeIndex
+                                this.hoveredPointIndex!.contourIndex &&
+                            p.nodeIndex === this.hoveredPointIndex!.nodeIndex
                     );
 
                     if (!isInSelection) {
@@ -1024,12 +1059,12 @@ class GlyphCanvas {
         ) {
             const clickedPos = this.getClickedCursorPosition(e);
             if (clickedPos !== null) {
-                this.textRunEditor.clearSelection();
-                this.textRunEditor.cursorPosition = clickedPos;
-                this.textRunEditor.updateCursorVisualPosition();
+                this.textRunEditor!.clearSelection();
+                this.textRunEditor!.cursorPosition = clickedPos;
+                this.textRunEditor!.updateCursorVisualPosition();
                 this.render();
                 // Keep text cursor
-                this.canvas.style.cursor = 'text';
+                this.canvas!.style.cursor = 'text';
                 return; // Don't start dragging if clicking on text
             }
         }
@@ -1044,7 +1079,7 @@ class GlyphCanvas {
             this.isDraggingCanvas = true;
             this.lastMouseX = e.clientX;
             this.lastMouseY = e.clientY;
-            this.canvas.style.cursor = 'grabbing';
+            this.canvas!.style.cursor = 'grabbing';
         } else {
             console.log(
                 '[GlyphCanvas]',
@@ -1054,7 +1089,7 @@ class GlyphCanvas {
         }
     }
 
-    onMouseMove(e) {
+    onMouseMove(e: MouseEvent): void {
         // Handle component, anchor, or point dragging in outline editor
         if (
             (this.isDraggingComponent && this.selectedComponents.length > 0) ||
@@ -1072,7 +1107,7 @@ class GlyphCanvas {
             const deltaX = e.clientX - this.lastMouseX;
             const deltaY = e.clientY - this.lastMouseY;
 
-            this.viewportManager.pan(deltaX, deltaY);
+            this.viewportManager!.pan(deltaX, deltaY);
             this.render();
 
             this.lastMouseX = e.clientX;
@@ -1081,18 +1116,18 @@ class GlyphCanvas {
         }
     }
 
-    _handleDrag(e) {
-        const rect = this.canvas.getBoundingClientRect();
+    _handleDrag(e: MouseEvent): void {
+        const rect = this.canvas!.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
         // Transform to glyph space
         const { glyphX, glyphY } =
-            this.viewportManager.getGlyphLocalCoordinates(
+            this.viewportManager!.getGlyphLocalCoordinates(
                 mouseX,
                 mouseY,
-                this.textRunEditor.shapedGlyphs,
-                this.textRunEditor.selectedGlyphIndex
+                this.textRunEditor!.shapedGlyphs,
+                this.textRunEditor!.selectedGlyphIndex
             );
 
         // Calculate delta from last position
@@ -1115,7 +1150,7 @@ class GlyphCanvas {
         this.render();
     }
 
-    _updateDraggedPoints(deltaX, deltaY) {
+    _updateDraggedPoints(deltaX: number, deltaY: number): void {
         for (const point of this.selectedPoints) {
             const { contourIndex, nodeIndex } = point;
             if (
@@ -1130,7 +1165,7 @@ class GlyphCanvas {
         }
     }
 
-    _updateDraggedAnchors(deltaX, deltaY) {
+    _updateDraggedAnchors(deltaX: number, deltaY: number): void {
         for (const anchorIndex of this.selectedAnchors) {
             const anchor = this.layerData.anchors[anchorIndex];
             if (anchor) {
@@ -1140,7 +1175,7 @@ class GlyphCanvas {
         }
     }
 
-    _updateDraggedComponents(deltaX, deltaY) {
+    _updateDraggedComponents(deltaX: number, deltaY: number): void {
         for (const compIndex of this.selectedComponents) {
             const shape = this.layerData.shapes[compIndex];
             if (shape && shape.Component) {
@@ -1158,7 +1193,7 @@ class GlyphCanvas {
         }
     }
 
-    onMouseUp(e) {
+    onMouseUp(e: MouseEvent): void {
         this.isDraggingPoint = false;
         this.isDraggingAnchor = false;
         this.isDraggingComponent = false;
@@ -1168,14 +1203,14 @@ class GlyphCanvas {
         this.updateCursorStyle(e);
     }
 
-    onWheel(e) {
+    onWheel(e: WheelEvent): void {
         e.preventDefault();
 
-        const rect = this.canvas.getBoundingClientRect();
-        this.viewportManager.handleWheel(e, rect, this.render.bind(this));
+        const rect = this.canvas!.getBoundingClientRect();
+        this.viewportManager!.handleWheel(e, rect, this.render.bind(this));
     }
 
-    onMouseMoveHover(e) {
+    onMouseMoveHover(e: MouseEvent): void {
         if (
             this.isDraggingPoint ||
             this.isDraggingAnchor ||
@@ -1183,13 +1218,13 @@ class GlyphCanvas {
         )
             return; // Don't detect hover while dragging
 
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.canvas!.getBoundingClientRect();
         // Store both canvas and client coordinates
         this.mouseX = e.clientX - rect.left;
         this.mouseY = e.clientY - rect.top;
         // Scale for HiDPI
-        this.mouseCanvasX = (this.mouseX * this.canvas.width) / rect.width;
-        this.mouseCanvasY = (this.mouseY * this.canvas.height) / rect.height;
+        this.mouseCanvasX = (this.mouseX * this.canvas!.width) / rect.width;
+        this.mouseCanvasY = (this.mouseY * this.canvas!.height) / rect.height;
 
         // In outline editor mode, check for hovered components, anchors and points first (unless in preview mode), then other glyphs
         if (
@@ -1212,10 +1247,10 @@ class GlyphCanvas {
         this.updateCursorStyle(e);
     }
 
-    updateCursorStyle(e) {
+    updateCursorStyle(e: MouseEvent | KeyboardEvent): void {
         // Cmd key pressed = always show grab cursor for panning
         if (this.cmdKeyPressed) {
-            this.canvas.style.cursor = this.isDraggingCanvas
+            this.canvas!.style.cursor = this.isDraggingCanvas
                 ? 'grabbing'
                 : 'grab';
             return;
@@ -1231,32 +1266,32 @@ class GlyphCanvas {
                     this.hoveredPointIndex ||
                     this.hoveredAnchorIndex !== null)
             ) {
-                this.canvas.style.cursor = 'pointer';
+                this.canvas!.style.cursor = 'pointer';
             } else {
-                this.canvas.style.cursor = 'default';
+                this.canvas!.style.cursor = 'default';
             }
             return;
         }
 
         // In text mode, show text cursor
-        this.canvas.style.cursor = 'text';
+        this.canvas!.style.cursor = 'text';
     }
 
-    updateHoveredGlyph() {
+    updateHoveredGlyph(): void {
         // Use HiDPI-scaled mouse coordinates for hit testing
         const mouseX = this.mouseCanvasX || this.mouseX;
         const mouseY = this.mouseCanvasY || this.mouseY;
 
         // Transform mouse coordinates to glyph space
         const { x: glyphX, y: glyphY } =
-            this.viewportManager.getFontSpaceCoordinates(mouseX, mouseY);
+            this.viewportManager!.getFontSpaceCoordinates(mouseX, mouseY);
 
         let foundIndex = -1;
 
         // Check each glyph using path hit testing
         let xPosition = 0;
-        for (let i = 0; i < this.textRunEditor.shapedGlyphs.length; i++) {
-            const glyph = this.textRunEditor.shapedGlyphs[i];
+        for (let i = 0; i < this.textRunEditor!.shapedGlyphs.length; i++) {
+            const glyph = this.textRunEditor!.shapedGlyphs[i];
             const glyphId = glyph.g;
             const xOffset = glyph.dx || 0;
             const yOffset = glyph.dy || 0;
@@ -1268,16 +1303,17 @@ class GlyphCanvas {
             // Check if point is within this glyph's path
             try {
                 const glyphData =
-                    this.textRunEditor.hbFont.glyphToPath(glyphId);
+                    this.textRunEditor!.hbFont.glyphToPath(glyphId);
                 if (glyphData) {
                     const path = new Path2D(glyphData);
 
                     // Create a temporary context for hit testing with proper transform
-                    this.ctx.save();
+                    this.ctx!.save();
 
                     // Apply the same transform as rendering
-                    const transform = this.viewportManager.getTransformMatrix();
-                    this.ctx.setTransform(
+                    const transform =
+                        this.viewportManager!.getTransformMatrix();
+                    this.ctx!.setTransform(
                         transform.a,
                         transform.b,
                         transform.c,
@@ -1285,18 +1321,18 @@ class GlyphCanvas {
                         transform.e,
                         transform.f
                     );
-                    this.ctx.translate(x, y);
+                    this.ctx!.translate(x, y);
 
                     // Test if mouse point is in path (in canvas coordinates)
                     if (
-                        this.ctx.isPointInPath(path, this.mouseX, this.mouseY)
+                        this.ctx!.isPointInPath(path, this.mouseX, this.mouseY)
                     ) {
                         foundIndex = i;
-                        this.ctx.restore();
+                        this.ctx!.restore();
                         break;
                     }
 
-                    this.ctx.restore();
+                    this.ctx!.restore();
                 }
             } catch (error) {
                 // Skip this glyph if path extraction fails
@@ -1311,7 +1347,12 @@ class GlyphCanvas {
         }
     }
 
-    _findHoveredItem(items, getCoords, getValue, hitRadius = 10) {
+    _findHoveredItem<T, U>(
+        items: T[],
+        getCoords: (item: T) => { x: number; y: number } | null,
+        getValue: (item: T) => U,
+        hitRadius: number = 10
+    ): U | null {
         if (!this.layerData || !items) {
             return null;
         }
@@ -1319,7 +1360,7 @@ class GlyphCanvas {
             this.mouseX,
             this.mouseY
         );
-        const scaledHitRadius = hitRadius / this.viewportManager.scale;
+        const scaledHitRadius = hitRadius / this.viewportManager!.scale;
 
         // Iterate backwards to find the top-most item
         for (let i = items.length - 1; i >= 0; i--) {
@@ -1337,24 +1378,24 @@ class GlyphCanvas {
         return null;
     }
 
-    updateHoveredComponent() {
+    updateHoveredComponent(): void {
         if (!this.layerData || !this.layerData.shapes) {
             return;
         }
 
         // First, check for hovering near component origins, which take priority.
         const components = this.layerData.shapes
-            .map((shape, index) => ({ shape, index }))
-            .filter((item) => item.shape.Component);
+            .map((shape: any, index: number) => ({ shape, index }))
+            .filter((item: any) => item.shape.Component);
 
-        const getComponentOrigin = (item) => {
+        const getComponentOrigin = (item: any) => {
             const transform = item.shape.Component.transform || [
                 1, 0, 0, 1, 0, 0
             ];
             return { x: transform[4] || 0, y: transform[5] || 0 };
         };
 
-        let foundComponentIndex = this._findHoveredItem(
+        let foundComponentIndex: number | null = this._findHoveredItem(
             components,
             getComponentOrigin,
             (item) => item.index,
@@ -1396,17 +1437,23 @@ class GlyphCanvas {
         }
     }
 
-    _isPointInComponent(shape, glyphX, glyphY, mouseX, mouseY) {
+    _isPointInComponent(
+        shape: any,
+        glyphX: number,
+        glyphY: number,
+        mouseX: number,
+        mouseY: number
+    ): boolean {
         const { xPosition, xOffset, yOffset } =
-            this.textRunEditor._getGlyphPosition(
-                this.textRunEditor.selectedGlyphIndex
+            this.textRunEditor!._getGlyphPosition(
+                this.textRunEditor!.selectedGlyphIndex
             );
         const transform = shape.Component.transform || [1, 0, 0, 1, 0, 0];
 
         const checkShapesRecursive = (
-            shapes,
-            parentTransform = [1, 0, 0, 1, 0, 0]
-        ) => {
+            shapes: any[],
+            parentTransform: number[] = [1, 0, 0, 1, 0, 0]
+        ): boolean => {
             for (const componentShape of shapes) {
                 if (componentShape.Component) {
                     const nestedTransform = componentShape.Component
@@ -1443,18 +1490,18 @@ class GlyphCanvas {
 
                 if (componentShape.nodes && componentShape.nodes.length > 0) {
                     const path = new Path2D();
-                    this.renderer.buildPathFromNodes(
+                    this.renderer!.buildPathFromNodes(
                         componentShape.nodes,
                         path
                     );
                     path.closePath();
 
-                    this.ctx.save();
+                    this.ctx!.save();
                     // Always use identity transform since glyphX/glyphY are already
                     // in glyph-local space (xPosition has been subtracted)
-                    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    this.ctx!.setTransform(1, 0, 0, 1, 0, 0);
 
-                    this.ctx.transform(
+                    this.ctx!.transform(
                         transform[0],
                         transform[1],
                         transform[2],
@@ -1462,7 +1509,7 @@ class GlyphCanvas {
                         transform[4],
                         transform[5]
                     );
-                    this.ctx.transform(
+                    this.ctx!.transform(
                         parentTransform[0],
                         parentTransform[1],
                         parentTransform[2],
@@ -1472,13 +1519,13 @@ class GlyphCanvas {
                     );
 
                     // Always use glyphX/glyphY which are in glyph-local space
-                    const isInPath = this.ctx.isPointInPath(
+                    const isInPath = this.ctx!.isPointInPath(
                         path,
                         glyphX,
                         glyphY
                     );
 
-                    this.ctx.restore();
+                    this.ctx!.restore();
                     if (isInPath) return true;
                 }
             }
@@ -1488,18 +1535,18 @@ class GlyphCanvas {
         return checkShapesRecursive(shape.Component.layerData.shapes);
     }
 
-    updateHoveredAnchor() {
+    updateHoveredAnchor(): void {
         if (!this.layerData || !this.layerData.anchors) {
             return;
         }
 
         const foundAnchorIndex = this._findHoveredItem(
-            this.layerData.anchors.map((anchor, index) => ({
+            this.layerData.anchors.map((anchor: any, index: number) => ({
                 ...anchor,
                 index
             })),
-            (item) => ({ x: item.x, y: item.y }),
-            (item) => item.index
+            (item: any) => ({ x: item.x, y: item.y }),
+            (item: any) => item.index
         );
 
         if (foundAnchorIndex !== this.hoveredAnchorIndex) {
@@ -1508,24 +1555,26 @@ class GlyphCanvas {
         }
     }
 
-    updateHoveredPoint() {
+    updateHoveredPoint(): void {
         if (!this.layerData || !this.layerData.shapes) {
             return;
         }
 
-        const points = this.layerData.shapes.flatMap((shape, contourIndex) => {
-            if (shape.ref || !shape.nodes) return [];
-            return shape.nodes.map((node, nodeIndex) => ({
-                node,
-                contourIndex,
-                nodeIndex
-            }));
-        });
+        const points = this.layerData.shapes.flatMap(
+            (shape: any, contourIndex: number) => {
+                if (shape.ref || !shape.nodes) return [];
+                return shape.nodes.map((node: any, nodeIndex: number) => ({
+                    node,
+                    contourIndex,
+                    nodeIndex
+                }));
+            }
+        );
 
         const foundPoint = this._findHoveredItem(
             points,
-            (item) => ({ x: item.node[0], y: item.node[1] }),
-            (item) => ({
+            (item: any) => ({ x: item.node[0], y: item.node[1] }),
+            (item: any) => ({
                 contourIndex: item.contourIndex,
                 nodeIndex: item.nodeIndex
             })
@@ -1540,7 +1589,7 @@ class GlyphCanvas {
         }
     }
 
-    moveSelectedPoints(deltaX, deltaY) {
+    moveSelectedPoints(deltaX: number, deltaY: number): void {
         // Move all selected points by the given delta
         if (
             !this.layerData ||
@@ -1564,7 +1613,7 @@ class GlyphCanvas {
         this.render();
     }
 
-    moveSelectedAnchors(deltaX, deltaY) {
+    moveSelectedAnchors(deltaX: number, deltaY: number): void {
         // Move all selected anchors by the given delta
         if (
             !this.layerData ||
@@ -1587,7 +1636,7 @@ class GlyphCanvas {
         this.render();
     }
 
-    moveSelectedComponents(deltaX, deltaY) {
+    moveSelectedComponents(deltaX: number, deltaY: number): void {
         // Move all selected components by the given delta
         if (
             !this.layerData ||
@@ -1616,7 +1665,7 @@ class GlyphCanvas {
         this.render();
     }
 
-    togglePointSmooth(pointIndex) {
+    togglePointSmooth(pointIndex: Point): void {
         // Toggle smooth state of a point
         if (!this.layerData || !this.layerData.shapes) {
             return;
@@ -1661,12 +1710,12 @@ class GlyphCanvas {
         );
     }
 
-    onResize() {
+    onResize(): void {
         this.setupHiDPI();
         this.render();
     }
 
-    setFont(fontArrayBuffer) {
+    setFont(fontArrayBuffer: ArrayBuffer): void {
         if (!fontArrayBuffer) {
             console.error('[GlyphCanvas]', 'No font data provided');
             return;
@@ -1675,81 +1724,81 @@ class GlyphCanvas {
         try {
             // Store current variation settings to restore after font reload
             const previousVariationSettings = {
-                ...this.axesManager.variationSettings
+                ...this.axesManager!.variationSettings
             };
 
             // Parse with opentype.js for glyph path extraction
             if (window.opentype) {
                 this.opentypeFont = window.opentype.parse(fontArrayBuffer);
-                this.axesManager.opentypeFont = this.opentypeFont;
-                this.featuresManager.opentypeFont = this.opentypeFont;
-                this.textRunEditor.opentypeFont = this.opentypeFont;
+                this.axesManager!.opentypeFont = this.opentypeFont;
+                this.featuresManager!.opentypeFont = this.opentypeFont;
+                this.textRunEditor!.opentypeFont = this.opentypeFont;
                 console.log(
                     '[GlyphCanvas]',
                     'Font parsed with opentype.js:',
-                    this.opentypeFont.names.fontFamily.en
+                    this.opentypeFont!.names.fontFamily.en
                 );
             }
 
             // Create HarfBuzz blob, face, and font if HarfBuzz is loaded
-            this.textRunEditor
-                .setFont(new Uint8Array(fontArrayBuffer))
-                .then((hbFont) => {
+            this.textRunEditor!.setFont(new Uint8Array(fontArrayBuffer)).then(
+                (hbFont) => {
                     // Restore previous variation settings before updating UI
                     // This ensures the sliders show the previous values
-                    this.axesManager.variationSettings =
+                    this.axesManager!.variationSettings =
                         previousVariationSettings;
 
                     // Update axes UI (will restore slider positions from variationSettings)
-                    this.axesManager.updateAxesUI();
+                    this.axesManager!.updateAxesUI();
                     console.log(
                         '[GlyphCanvas]',
                         'Updated axes UI after font load'
                     );
 
                     // Update features UI (async, then shape text)
-                    this.featuresManager.updateFeaturesUI().then(() => {
+                    this.featuresManager!.updateFeaturesUI().then(() => {
                         // Shape text with new font after features are initialized
-                        this.textRunEditor.shapeText();
+                        this.textRunEditor!.shapeText();
                     });
-                });
+                }
+            );
         } catch (error) {
             console.error('[GlyphCanvas]', 'Error setting font:', error);
         }
     }
 
-    async enterGlyphEditModeAtCursor() {
+    async enterGlyphEditModeAtCursor(): Promise<void> {
         // Enter glyph edit mode for the glyph at the current cursor position
         if (this.isGlyphEditMode) return;
-        let glyphIndex = this.textRunEditor.getGlyphIndexAtCursorPosition();
+        let glyphIndex = this.textRunEditor!.getGlyphIndexAtCursorPosition();
 
-        if (glyphIndex >= 0) {
+        if (glyphIndex && glyphIndex >= 0) {
             console.log(
                 '[GlyphCanvas]',
-                `Entering glyph edit mode at cursor position ${this.textRunEditor.cursorPosition}, glyph index ${glyphIndex}`
+                `Entering glyph edit mode at cursor position ${this.textRunEditor!.cursorPosition}, glyph index ${glyphIndex}`
             );
-            await this.textRunEditor.selectGlyphByIndex(glyphIndex);
+            await this.textRunEditor!.selectGlyphByIndex(glyphIndex);
         } else {
             console.log(
                 '[GlyphCanvas]',
-                `No glyph found at cursor position ${this.textRunEditor.cursorPosition}`
+                `No glyph found at cursor position ${this.textRunEditor!.cursorPosition}`
             );
         }
     }
 
-    exitGlyphEditMode() {
+    exitGlyphEditMode(): void {
         // Exit glyph edit mode and return to text edit mode
 
         // Determine cursor position based on whether glyph was typed or shaped
-        const savedGlyphIndex = this.textRunEditor.selectedGlyphIndex;
+        const savedGlyphIndex = this.textRunEditor!.selectedGlyphIndex;
 
-        const glyph = this.textRunEditor.shapedGlyphs[savedGlyphIndex];
+        const glyph = this.textRunEditor!.shapedGlyphs[savedGlyphIndex];
         console.log(
             '[GlyphCanvas]',
             '[v2024-12-01-FIX] exitGlyphEditMode CALLED - selectedGlyphIndex:',
-            this.textRunEditor.selectedGlyphIndex,
+            this.textRunEditor!.selectedGlyphIndex,
             'shapedGlyphs.length:',
-            this.textRunEditor.shapedGlyphs.length,
+            this.textRunEditor!.shapedGlyphs.length,
             'glyph:',
             glyph
         );
@@ -1757,12 +1806,12 @@ class GlyphCanvas {
         // Update cursor position to before the edited glyph
         if (
             savedGlyphIndex >= 0 &&
-            savedGlyphIndex < this.textRunEditor.shapedGlyphs.length
+            savedGlyphIndex < this.textRunEditor!.shapedGlyphs.length
         ) {
             const glyphInfo =
-                this.textRunEditor.isGlyphFromTypedCharacter(savedGlyphIndex);
+                this.textRunEditor!.isGlyphFromTypedCharacter(savedGlyphIndex);
             const clusterStart = glyph.cl || 0;
-            const isRTL = this.textRunEditor.isPositionRTL(clusterStart);
+            const isRTL = this.textRunEditor!.isPositionRTL(clusterStart);
 
             console.log(
                 '[GlyphCanvas]',
@@ -1777,26 +1826,26 @@ class GlyphCanvas {
             if (glyphInfo.isTyped) {
                 // For typed characters, position cursor at the character's logical position
                 // (which is the space before the character, where we entered from)
-                this.textRunEditor.cursorPosition = glyphInfo.logicalPosition;
+                this.textRunEditor!.cursorPosition = glyphInfo.logicalPosition;
                 console.log(
                     '[GlyphCanvas]',
                     'Typed character - set cursor position at logical position:',
-                    this.textRunEditor.cursorPosition
+                    this.textRunEditor!.cursorPosition
                 );
             } else {
                 // For shaped glyphs, position cursor at the cluster start
-                this.textRunEditor.cursorPosition = clusterStart;
+                this.textRunEditor!.cursorPosition = clusterStart;
                 console.log(
                     '[GlyphCanvas]',
                     'Shaped glyph - set cursor position at cluster start:',
-                    this.textRunEditor.cursorPosition
+                    this.textRunEditor!.cursorPosition
                 );
             }
-            this.textRunEditor.updateCursorVisualPosition();
+            this.textRunEditor!.updateCursorVisualPosition();
         }
 
         this.isGlyphEditMode = false;
-        this.textRunEditor.selectedGlyphIndex = -1;
+        this.textRunEditor!.selectedGlyphIndex = -1;
         this.selectedLayerId = null;
 
         // Clear outline editor state
@@ -1814,7 +1863,7 @@ class GlyphCanvas {
         this.render();
     }
 
-    async displayLayersList() {
+    async displayLayersList(): Promise<void> {
         // Fetch and display layers list
         this.fontData = await window.fontManager.fetchGlyphData(
             this.getCurrentGlyphName()
@@ -1842,15 +1891,15 @@ class GlyphCanvas {
         const layersTitle = document.createElement('div');
         layersTitle.className = 'editor-section-title';
         layersTitle.textContent = 'Foreground Layers';
-        this.propertiesSection.appendChild(layersTitle);
+        this.propertiesSection!.appendChild(layersTitle);
 
         // Sort layers by master order (order in which masters are defined in font.masters)
         const sortedLayers = [...this.fontData.layers].sort((a, b) => {
             const masterIndexA = this.fontData.masters.findIndex(
-                (m) => m.id === a._master
+                (m: any) => m.id === a._master
             );
             const masterIndexB = this.fontData.masters.findIndex(
-                (m) => m.id === b._master
+                (m: any) => m.id === b._master
             );
 
             // If master not found, put at end
@@ -1880,7 +1929,7 @@ class GlyphCanvas {
 
             // Find the master for this layer
             const master = this.fontData.masters.find(
-                (m) => m.id === layer._master
+                (m: any) => m.id === layer._master
             );
 
             // Format axis values for display (e.g., "wght:400, wdth:100")
@@ -1892,8 +1941,11 @@ class GlyphCanvas {
                     this.fontData.axesOrder ||
                     Object.keys(master.location).sort();
                 const locationParts = axesOrder
-                    .filter((tag) => tag in master.location)
-                    .map((tag) => `${tag}:${Math.round(master.location[tag])}`)
+                    .filter((tag: string) => tag in master.location)
+                    .map(
+                        (tag: string) =>
+                            `${tag}:${Math.round(master.location[tag])}`
+                    )
                     .join(', ');
                 axisValues = locationParts;
             }
@@ -1908,25 +1960,25 @@ class GlyphCanvas {
             layersList.appendChild(layerItem);
         }
 
-        this.propertiesSection.appendChild(layersList);
+        this.propertiesSection!.appendChild(layersList);
 
         // Auto-select layer if current axis values match a layer's master location
         await this.autoSelectMatchingLayer();
     }
 
-    async autoSelectMatchingLayer() {
+    async autoSelectMatchingLayer(): Promise<void> {
         // Check if current variation settings match any layer's master location
         if (!this.fontData || !this.fontData.layers || !this.fontData.masters) {
             return;
         }
 
         // Get current axis tags and values
-        const currentLocation = { ...this.axesManager.variationSettings };
+        const currentLocation = { ...this.axesManager!.variationSettings };
 
         // Check each layer to find a match
         for (const layer of this.fontData.layers) {
             const master = this.fontData.masters.find(
-                (m) => m.id === layer._master
+                (m: any) => m.id === layer._master
             );
             if (!master || !master.location) {
                 continue;
@@ -2028,7 +2080,7 @@ class GlyphCanvas {
         }
     }
 
-    async selectLayer(layer) {
+    async selectLayer(layer: any): Promise<void> {
         // Select a layer and update axis sliders to match its master location
         // Clear previous state when explicitly selecting a layer
         this.previousSelectedLayerId = null;
@@ -2087,7 +2139,7 @@ class GlyphCanvas {
 
         // Find the master for this layer
         const master = this.fontData.masters.find(
-            (m) => m.id === layer._master
+            (m: any) => m.id === layer._master
         );
         if (!master || !master.location) {
             console.warn(
@@ -2096,7 +2148,7 @@ class GlyphCanvas {
                 {
                     layer_master: layer._master,
                     available_master_ids: this.fontData.masters.map(
-                        (m) => m.id
+                        (m: any) => m.id
                     ),
                     master_found: master
                 }
@@ -2111,17 +2163,17 @@ class GlyphCanvas {
         );
 
         // Set up animation to all axes at once
-        const newSettings = {};
+        const newSettings: Record<string, number> = {};
         for (const [axisTag, value] of Object.entries(master.location)) {
-            newSettings[axisTag] = value;
+            newSettings[axisTag] = value as number;
         }
-        this.axesManager._setupAnimation(newSettings);
+        this.axesManager!._setupAnimation(newSettings);
 
         // Update the visual selection highlight for layers without rebuilding the entire UI
         this.updateLayerSelection();
     }
 
-    updateLayerSelection() {
+    updateLayerSelection(): void {
         // Update the visual selection highlight for layer items without rebuilding
         if (!this.propertiesSection) return;
 
@@ -2138,7 +2190,7 @@ class GlyphCanvas {
         });
     }
 
-    async cycleLayers(moveUp) {
+    async cycleLayers(moveUp: boolean): Promise<void> {
         // Cycle through layers with Cmd+Up (previous) or Cmd+Down (next)
         if (
             !this.fontData ||
@@ -2152,10 +2204,10 @@ class GlyphCanvas {
         // Sort layers by master order (order in which masters are defined in font.masters)
         const sortedLayers = [...this.fontData.layers].sort((a, b) => {
             const masterIndexA = this.fontData.masters.findIndex(
-                (m) => m.id === a._master
+                (m: any) => m.id === a._master
             );
             const masterIndexB = this.fontData.masters.findIndex(
-                (m) => m.id === b._master
+                (m: any) => m.id === b._master
             );
 
             // If master not found, put at end
@@ -2199,7 +2251,7 @@ class GlyphCanvas {
         await this.selectLayer(sortedLayers[nextIndex]);
     }
 
-    async fetchLayerData() {
+    async fetchLayerData(): Promise<void> {
         // If we're editing a component, refresh the component's layer data for the new layer
         if (this.componentStack.length > 0) {
             console.log(
@@ -2218,8 +2270,8 @@ class GlyphCanvas {
 
         try {
             const glyphId =
-                this.textRunEditor.shapedGlyphs[
-                    this.textRunEditor.selectedGlyphIndex
+                this.textRunEditor!.shapedGlyphs[
+                    this.textRunEditor!.selectedGlyphIndex
                 ].g;
             let glyphName = this.getCurrentGlyphName();
             console.log(
@@ -2239,7 +2291,7 @@ class GlyphCanvas {
             this.currentGlyphName = glyphName; // Store for interpolation
 
             // Recursively parse component layer data nodes strings into arrays
-            const parseComponentNodes = (shapes) => {
+            const parseComponentNodes = (shapes: any[]) => {
                 if (!shapes) return;
 
                 shapes.forEach((shape) => {
@@ -2247,7 +2299,7 @@ class GlyphCanvas {
                     if (shape.Path && shape.Path.nodes) {
                         const nodesStr = shape.Path.nodes.trim();
                         const tokens = nodesStr.split(/\s+/);
-                        const nodesArray = [];
+                        const nodesArray: any[] = [];
 
                         for (let i = 0; i + 2 < tokens.length; i += 3) {
                             nodesArray.push([
@@ -2287,7 +2339,7 @@ class GlyphCanvas {
         }
     }
 
-    async interpolateCurrentGlyph(force = false) {
+    async interpolateCurrentGlyph(force: boolean = false): Promise<void> {
         // Interpolate the current glyph at current variation settings
         if (!this.currentGlyphName) {
             console.log('[GlyphCanvas]', 'Skipping interpolation:', {
@@ -2308,7 +2360,7 @@ class GlyphCanvas {
         }
 
         try {
-            const location = this.axesManager.variationSettings;
+            const location = this.axesManager!.variationSettings;
             console.log(
                 '[GlyphCanvas]',
                 `🔄 Interpolating glyph "${this.currentGlyphName}" at location:`,
@@ -2344,7 +2396,7 @@ class GlyphCanvas {
                 '[GlyphCanvas]',
                 `✅ Applied interpolated layer for "${this.currentGlyphName}"`
             );
-        } catch (error) {
+        } catch (error: any) {
             // Silently ignore cancellation errors
             if (error.message && error.message.includes('cancelled')) {
                 console.log(
@@ -2363,9 +2415,12 @@ class GlyphCanvas {
         }
     }
 
-    getCurrentGlyphName() {
+    getCurrentGlyphName(): string {
         // We're editing the main glyph
-        const glyphId = this.textRunEditor.selectedGlyph?.g;
+        const glyphId = this.textRunEditor!.selectedGlyph?.g;
+        if (!glyphId) {
+            return 'undefined';
+        }
         let glyphName = `GID ${glyphId}`;
 
         // Get glyph name from font manager (source font) instead of compiled font
@@ -2381,7 +2436,7 @@ class GlyphCanvas {
         return glyphName;
     }
 
-    async saveLayerData() {
+    async saveLayerData(): Promise<void> {
         // Save layer data back to Python using from_dict()
         if (!window.pyodide || !this.layerData) {
             return;
@@ -2411,7 +2466,7 @@ class GlyphCanvas {
                 const parentState =
                     this.componentStack[this.componentStack.length - 1];
                 const componentShape =
-                    parentState.layerData.shapes[this.editingComponentIndex];
+                    parentState.layerData.shapes[this.editingComponentIndex!];
                 glyphName = componentShape.Component.reference;
             } else {
                 glyphName = this.getCurrentGlyphName();
@@ -2433,7 +2488,10 @@ class GlyphCanvas {
         }
     }
 
-    async enterComponentEditing(componentIndex, skipUIUpdate = false) {
+    async enterComponentEditing(
+        componentIndex: number,
+        skipUIUpdate: boolean = false
+    ): Promise<void> {
         // Enter editing mode for a component
         // skipUIUpdate: if true, skip UI updates (useful when rebuilding component stack)
         if (!this.layerData || !this.layerData.shapes[componentIndex]) {
@@ -2468,7 +2526,7 @@ class GlyphCanvas {
         );
 
         // Recursively parse nodes in component layer data (including nested components)
-        const parseComponentNodes = (shapes) => {
+        const parseComponentNodes = (shapes: any[]) => {
             if (!shapes) return;
 
             shapes.forEach((shape) => {
@@ -2476,7 +2534,7 @@ class GlyphCanvas {
                 if (shape.Path && shape.Path.nodes) {
                     const nodesStr = shape.Path.nodes.trim();
                     const tokens = nodesStr.split(/\s+/);
-                    const nodesArray = [];
+                    const nodesArray: any[] = [];
 
                     for (let i = 0; i + 2 < tokens.length; i += 3) {
                         nodesArray.push([
@@ -2525,7 +2583,7 @@ class GlyphCanvas {
 
         // Get current glyph name (for breadcrumb trail)
         // This is the name of the context we're currently in (before entering the new component)
-        let currentGlyphName;
+        let currentGlyphName: string;
         if (this.componentStack.length > 0) {
             // We're already in a component, so get its reference name
             // Use the componentIndex stored in the parent state (not this.editingComponentIndex)
@@ -2542,15 +2600,18 @@ class GlyphCanvas {
                     parentState.layerData.shapes[parentState.componentIndex];
                 if (currentComponent && currentComponent.Component) {
                     currentGlyphName = currentComponent.Component.reference;
+                } else {
+                    currentGlyphName = 'Unknown';
                 }
-            }
-            // Fallback if we can't get the component name
-            if (!currentGlyphName) {
+            } else {
                 currentGlyphName = 'Unknown';
             }
         } else {
             // We're at the top level - get main glyph name
-            const glyphId = this.textRunEditor.selectedGlyph?.g;
+            const glyphId = this.textRunEditor!.selectedGlyph?.g;
+            if (!glyphId) {
+                return;
+            }
             currentGlyphName = `GID ${glyphId}`;
             if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
                 const glyph = this.opentypeFont.glyphs.get(glyphId);
@@ -2616,7 +2677,7 @@ class GlyphCanvas {
         }
     }
 
-    async refreshComponentStack() {
+    async refreshComponentStack(): Promise<void> {
         // Refresh all component layer data in the stack for the current layer
         // This is called when switching layers while editing a nested component
 
@@ -2631,7 +2692,7 @@ class GlyphCanvas {
         );
 
         // Save the path of component indices from the stack
-        const componentPath = [];
+        const componentPath: number[] = [];
         for (let i = 0; i < this.componentStack.length; i++) {
             componentPath.push(this.componentStack[i].componentIndex);
         }
@@ -2641,7 +2702,7 @@ class GlyphCanvas {
         this.editingComponentIndex = null;
         this.layerData = null;
 
-        const glyphId = this.textRunEditor.selectedGlyph?.g;
+        const glyphId = this.textRunEditor!.selectedGlyph?.g;
         let glyphName = this.getCurrentGlyphName();
 
         // Fetch root layer data (bypassing the component check since stack is now empty)
@@ -2684,14 +2745,14 @@ class GlyphCanvas {
         }
     }
 
-    exitComponentEditing(skipUIUpdate = false) {
+    exitComponentEditing(skipUIUpdate: boolean = false): boolean {
         // Exit current component editing level
         // skipUIUpdate: if true, skip UI updates (useful when exiting multiple levels)
         if (this.componentStack.length === 0) {
             return false; // No component stack to exit from
         }
 
-        const previousState = this.componentStack.pop();
+        const previousState = this.componentStack.pop()!;
 
         // Restore previous state
         this.editingComponentIndex = previousState.componentIndex;
@@ -2726,13 +2787,13 @@ class GlyphCanvas {
         return true;
     }
 
-    updateComponentBreadcrumb() {
+    updateComponentBreadcrumb(): void {
         // This function now just calls updateEditorTitleBar
         // Keeping it for backward compatibility with existing calls
         this.updateEditorTitleBar();
     }
 
-    updateEditorTitleBar() {
+    updateEditorTitleBar(): void {
         // Update the editor title bar with glyph name and breadcrumb
         const editorView = document.getElementById('view-editor');
         if (!editorView) return;
@@ -2744,8 +2805,9 @@ class GlyphCanvas {
         if (!titleLeft) return;
 
         // Find or create the glyph name element
-        /** @type{HTMLSpanElement} */
-        let glyphNameElement = titleBar.querySelector('.editor-glyph-name');
+        let glyphNameElement = titleBar.querySelector(
+            '.editor-glyph-name'
+        ) as HTMLSpanElement;
         if (!glyphNameElement) {
             glyphNameElement = document.createElement('span');
             glyphNameElement.className = 'editor-glyph-name';
@@ -2768,9 +2830,9 @@ class GlyphCanvas {
         // If not in edit mode, hide the glyph name
         if (
             !this.isGlyphEditMode ||
-            this.textRunEditor.selectedGlyphIndex < 0 ||
-            this.textRunEditor.selectedGlyphIndex >=
-                this.textRunEditor.shapedGlyphs.length
+            this.textRunEditor!.selectedGlyphIndex < 0 ||
+            this.textRunEditor!.selectedGlyphIndex >=
+                this.textRunEditor!.shapedGlyphs.length
         ) {
             glyphNameElement.style.display = 'none';
             return;
@@ -2779,7 +2841,10 @@ class GlyphCanvas {
         glyphNameElement.style.display = 'flex';
 
         // Get the main glyph name
-        const glyphId = this.textRunEditor.selectedGlyph?.g;
+        const glyphId = this.textRunEditor!.selectedGlyph?.g;
+        if (!glyphId) {
+            return;
+        }
         let mainGlyphName = `GID ${glyphId}`;
         if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
             const glyph = this.opentypeFont.glyphs.get(glyphId);
@@ -2789,7 +2854,7 @@ class GlyphCanvas {
         }
 
         // Build breadcrumb trail
-        const trail = [];
+        const trail: string[] = [];
 
         if (this.componentStack.length > 0) {
             // Add main glyph name as first item in trail
@@ -2909,7 +2974,7 @@ class GlyphCanvas {
         }
     }
 
-    getAccumulatedTransform() {
+    getAccumulatedTransform(): number[] {
         // Get the accumulated transform matrix from all component levels
         let a = 1,
             b = 0,
@@ -2950,13 +3015,16 @@ class GlyphCanvas {
         return [a, b, c, d, tx, ty];
     }
 
-    transformMouseToComponentSpace(mouseX, mouseY) {
+    transformMouseToComponentSpace(
+        mouseX: number,
+        mouseY: number
+    ): { glyphX: number; glyphY: number } {
         // Transform mouse coordinates from canvas to component local space
-        let { glyphX, glyphY } = this.viewportManager.getGlyphLocalCoordinates(
+        let { glyphX, glyphY } = this.viewportManager!.getGlyphLocalCoordinates(
             mouseX,
             mouseY,
-            this.textRunEditor.shapedGlyphs,
-            this.textRunEditor.selectedGlyphIndex
+            this.textRunEditor!.shapedGlyphs,
+            this.textRunEditor!.selectedGlyphIndex
         );
         // Note: getGlyphLocalCoordinates already subtracts xPosition + xOffset
         // so glyphX and glyphY are already in glyph-local space
@@ -2985,7 +3053,14 @@ class GlyphCanvas {
         return { glyphX, glyphY };
     }
 
-    calculateGlyphBoundingBox() {
+    calculateGlyphBoundingBox(): {
+        minX: number;
+        minY: number;
+        maxX: number;
+        maxY: number;
+        width: number;
+        height: number;
+    } | null {
         // Calculate bounding box for the currently selected glyph in outline editing mode
         // Returns {minX, minY, maxX, maxY, width, height} in glyph-local coordinates
         // Returns null if no glyph is selected or no layer data is available
@@ -3017,7 +3092,7 @@ class GlyphCanvas {
         let hasPoints = false;
 
         // Helper function to expand bounding box with a point
-        const expandBounds = (x, y) => {
+        const expandBounds = (x: number, y: number) => {
             minX = Math.min(minX, x);
             minY = Math.min(minY, y);
             maxX = Math.max(maxX, x);
@@ -3026,7 +3101,10 @@ class GlyphCanvas {
         };
 
         // Helper function to process shapes recursively (for components)
-        const processShapes = (shapes, transform = [1, 0, 0, 1, 0, 0]) => {
+        const processShapes = (
+            shapes: any[],
+            transform: number[] = [1, 0, 0, 1, 0, 0]
+        ) => {
             if (!shapes || !Array.isArray(shapes)) return;
 
             for (const shape of shapes) {
@@ -3131,13 +3209,13 @@ class GlyphCanvas {
         };
     }
 
-    frameCurrentGlyph(margin = null) {
+    frameCurrentGlyph(margin: number | null = null): void {
         // Pan and zoom to show the current glyph with margin around it
         // Delegates to ViewportManager.frameGlyph
 
         if (
             !this.isGlyphEditMode ||
-            this.textRunEditor.selectedGlyphIndex < 0
+            this.textRunEditor!.selectedGlyphIndex < 0
         ) {
             return;
         }
@@ -3147,15 +3225,15 @@ class GlyphCanvas {
             return;
         }
 
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.canvas!.getBoundingClientRect();
 
         // Get glyph position in text run
-        const glyphPosition = this.textRunEditor._getGlyphPosition(
-            this.textRunEditor.selectedGlyphIndex
+        const glyphPosition = this.textRunEditor!._getGlyphPosition(
+            this.textRunEditor!.selectedGlyphIndex
         );
 
         // Delegate to ViewportManager
-        this.viewportManager.frameGlyph(
+        this.viewportManager!.frameGlyph(
             bounds,
             glyphPosition,
             rect,
@@ -3164,14 +3242,14 @@ class GlyphCanvas {
         );
     }
 
-    panToGlyph(glyphIndex) {
+    panToGlyph(glyphIndex: number): void {
         // Pan to show a specific glyph (used when switching glyphs with cmd+left/right)
         // Delegates to ViewportManager.panToGlyph
 
         if (
             !this.isGlyphEditMode ||
             glyphIndex < 0 ||
-            glyphIndex >= this.textRunEditor.shapedGlyphs.length
+            glyphIndex >= this.textRunEditor!.shapedGlyphs.length
         ) {
             console.log(
                 '[GlyphCanvas]',
@@ -3179,7 +3257,7 @@ class GlyphCanvas {
                 {
                     isGlyphEditMode: this.isGlyphEditMode,
                     glyphIndex,
-                    shapedGlyphsLength: this.textRunEditor.shapedGlyphs?.length
+                    shapedGlyphsLength: this.textRunEditor!.shapedGlyphs?.length
                 }
             );
             return;
@@ -3200,13 +3278,13 @@ class GlyphCanvas {
             return;
         }
 
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.canvas!.getBoundingClientRect();
 
         // Get glyph position in text run
-        const glyphPosition = this.textRunEditor._getGlyphPosition(glyphIndex);
+        const glyphPosition = this.textRunEditor!._getGlyphPosition(glyphIndex);
 
         // Delegate to ViewportManager
-        this.viewportManager.panToGlyph(
+        this.viewportManager!.panToGlyph(
             bounds,
             glyphPosition,
             rect,
@@ -3214,7 +3292,7 @@ class GlyphCanvas {
         );
     }
 
-    async updatePropertiesUI() {
+    async updatePropertiesUI(): Promise<void> {
         if (!this.propertiesSection) return;
 
         // Update editor title bar with glyph name
@@ -3223,15 +3301,15 @@ class GlyphCanvas {
         // Don't show properties if not in glyph edit mode
         if (!this.isGlyphEditMode) {
             requestAnimationFrame(() => {
-                this.propertiesSection.innerHTML = '';
+                this.propertiesSection!.innerHTML = '';
             });
             return;
         }
 
         if (
-            this.textRunEditor.selectedGlyphIndex >= 0 &&
-            this.textRunEditor.selectedGlyphIndex <
-                this.textRunEditor.shapedGlyphs.length
+            this.textRunEditor!.selectedGlyphIndex >= 0 &&
+            this.textRunEditor!.selectedGlyphIndex <
+                this.textRunEditor!.shapedGlyphs.length
         ) {
             // Build content off-screen first, then swap in one operation
             const tempContainer = document.createElement('div');
@@ -3251,16 +3329,16 @@ class GlyphCanvas {
         } else {
             // No glyph selected
             requestAnimationFrame(() => {
-                this.propertiesSection.innerHTML = '';
+                this.propertiesSection!.innerHTML = '';
                 const emptyMessage = document.createElement('div');
                 emptyMessage.className = 'editor-empty-message';
                 emptyMessage.textContent = 'No glyph selected';
-                this.propertiesSection.appendChild(emptyMessage);
+                this.propertiesSection!.appendChild(emptyMessage);
             });
         }
     }
 
-    onTextChange() {
+    onTextChange(): void {
         // Debounce font recompilation when text changes
         if (this.textChangeDebounceTimer) {
             clearTimeout(this.textChangeDebounceTimer);
@@ -3273,8 +3351,8 @@ class GlyphCanvas {
                     '🔄 Text changed, recompiling editing font...'
                 );
                 window.fontManager
-                    .compileEditingFont(this.textRunEditor.textBuffer)
-                    .catch((error) => {
+                    .compileEditingFont(this.textRunEditor!.textBuffer)
+                    .catch((error: any) => {
                         console.error(
                             '[GlyphCanvas]',
                             'Failed to recompile editing font:',
@@ -3285,7 +3363,7 @@ class GlyphCanvas {
         }, this.textChangeDebounceDelay);
     }
 
-    startKeyboardZoom(zoomIn) {
+    startKeyboardZoom(zoomIn: boolean): void {
         // Don't start a new animation if one is already in progress
         if (this.zoomAnimation.active) return;
 
@@ -3295,7 +3373,7 @@ class GlyphCanvas {
             : 1 / settings.ZOOM_KEYBOARD_FACTOR;
 
         // Get canvas center for zoom
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.canvas!.getBoundingClientRect();
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
 
@@ -3303,8 +3381,8 @@ class GlyphCanvas {
         this.zoomAnimation.active = true;
         this.zoomAnimation.currentFrame = 0;
         this.zoomAnimation.totalFrames = 10;
-        this.zoomAnimation.startScale = this.viewportManager.scale;
-        this.zoomAnimation.endScale = this.viewportManager.scale * zoomFactor;
+        this.zoomAnimation.startScale = this.viewportManager!.scale;
+        this.zoomAnimation.endScale = this.viewportManager!.scale * zoomFactor;
         this.zoomAnimation.centerX = centerX;
         this.zoomAnimation.centerY = centerY;
 
@@ -3312,7 +3390,7 @@ class GlyphCanvas {
         this.animateKeyboardZoom();
     }
 
-    animateKeyboardZoom() {
+    animateKeyboardZoom(): void {
         if (!this.zoomAnimation.active) return;
 
         this.zoomAnimation.currentFrame++;
@@ -3332,8 +3410,8 @@ class GlyphCanvas {
                 easedProgress;
 
         // Apply zoom
-        const zoomFactor = currentScale / this.viewportManager.scale;
-        this.viewportManager.zoom(
+        const zoomFactor = currentScale / this.viewportManager!.scale;
+        this.viewportManager!.zoom(
             zoomFactor,
             this.zoomAnimation.centerX,
             this.zoomAnimation.centerY
@@ -3350,11 +3428,11 @@ class GlyphCanvas {
         }
     }
 
-    render() {
-        this.renderer.render();
+    render(): void {
+        this.renderer!.render();
     }
 
-    destroy() {
+    destroy(): void {
         // Disconnect resize observer
         if (this.resizeObserver) {
             this.resizeObserver.disconnect();
@@ -3362,7 +3440,7 @@ class GlyphCanvas {
         }
 
         // Clean up HarfBuzz resources
-        this.textRunEditor.destroyHarfbuzz();
+        this.textRunEditor!.destroyHarfbuzz();
 
         // Remove canvas
         if (this.canvas && this.canvas.parentNode) {
@@ -3372,7 +3450,7 @@ class GlyphCanvas {
 
     // ==================== Cursor Methods ====================
 
-    onFocus() {
+    onFocus(): void {
         this.isFocused = true;
         this.cursorVisible = true;
         // Don't render on focus change if in preview mode (no cursor visible)
@@ -3381,7 +3459,7 @@ class GlyphCanvas {
         }
     }
 
-    onBlur() {
+    onBlur(): void {
         this.isFocused = false;
         // Don't render on blur if in preview mode (no cursor visible)
         if (!this.isPreviewMode) {
@@ -3389,7 +3467,7 @@ class GlyphCanvas {
         }
     }
 
-    onKeyUp(e) {
+    onKeyUp(e: KeyboardEvent): void {
         console.log(
             '[GlyphCanvas]',
             'onKeyUp called:',
@@ -3434,7 +3512,7 @@ class GlyphCanvas {
         }
     }
 
-    onKeyDown(e) {
+    onKeyDown(e: KeyboardEvent): void {
         // Handle Cmd+Plus/Minus for zoom in/out
         if (
             (e.metaKey || e.ctrlKey) &&
@@ -3496,12 +3574,12 @@ class GlyphCanvas {
             if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 if (this.isGlyphEditMode && this.componentStack.length == 0) {
-                    this.textRunEditor.navigateToPreviousGlyphLogical();
+                    this.textRunEditor!.navigateToPreviousGlyphLogical();
                 }
                 return;
             } else if (e.key === 'ArrowRight') {
                 e.preventDefault();
-                this.textRunEditor.navigateToNextGlyphLogical();
+                this.textRunEditor!.navigateToNextGlyphLogical();
                 return;
             }
         }
@@ -3577,7 +3655,7 @@ class GlyphCanvas {
             e.preventDefault();
             if (
                 this.isGlyphEditMode &&
-                this.textRunEditor.selectedGlyphIndex >= 0
+                this.textRunEditor!.selectedGlyphIndex >= 0
             ) {
                 // In glyph edit mode: frame the current glyph
                 this.frameCurrentGlyph();
@@ -3595,35 +3673,35 @@ class GlyphCanvas {
         }
 
         // Text run selection and editing shortcuts
-        this.textRunEditor.handleKeyDown(e);
+        this.textRunEditor!.handleKeyDown(e);
     }
 
-    getClickedCursorPosition(e) {
+    getClickedCursorPosition(e: MouseEvent): number | null {
         // Convert click position to cursor position
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.canvas!.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
         // Transform to glyph space
         let { x: glyphX, y: glyphY } =
-            this.viewportManager.getFontSpaceCoordinates(mouseX, mouseY);
+            this.viewportManager!.getFontSpaceCoordinates(mouseX, mouseY);
 
         // Check if clicking within cursor height range (same as cursor drawing)
         // Cursor goes from 1000 (top) to -300 (bottom)
         if (glyphY > 1000 || glyphY < -300) {
             return null; // Clicked outside cursor height - allow panning
         }
-        return this.textRunEditor.getGlyphIndexAtClick(glyphX, glyphY);
+        return this.textRunEditor!.getGlyphIndexAtClick(glyphX, glyphY);
     }
 
-    isCursorVisible() {
+    isCursorVisible(): boolean {
         // Check if cursor is within the visible viewport
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.canvas!.getBoundingClientRect();
 
         // Transform cursor position from font space to screen space
         const screenX =
-            this.textRunEditor.cursorX * this.viewportManager.scale +
-            this.viewportManager.panX;
+            this.textRunEditor!.cursorX * this.viewportManager!.scale +
+            this.viewportManager!.panX;
 
         // Define margin from edges (in screen pixels)
         const margin = 30;
@@ -3632,50 +3710,50 @@ class GlyphCanvas {
         return screenX >= margin && screenX <= rect.width - margin;
     }
 
-    panToCursor() {
+    panToCursor(): void {
         // Pan viewport to show cursor with smooth animation
         if (this.isCursorVisible()) {
             return; // Cursor is already visible
         }
 
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.canvas!.getBoundingClientRect();
         const margin = 30; // Same margin as visibility check
 
         // Calculate target panX to center cursor with margin
         const screenX =
-            this.textRunEditor.cursorX * this.viewportManager.scale +
-            this.viewportManager.panX;
+            this.textRunEditor!.cursorX * this.viewportManager!.scale +
+            this.viewportManager!.panX;
 
         let targetPanX;
         if (screenX < margin) {
             // Cursor is off left edge - position it at left margin
             targetPanX =
                 margin -
-                this.textRunEditor.cursorX * this.viewportManager.scale;
+                this.textRunEditor!.cursorX * this.viewportManager!.scale;
         } else {
             // Cursor is off right edge - position it at right margin
             targetPanX =
                 rect.width -
                 margin -
-                this.textRunEditor.cursorX * this.viewportManager.scale;
+                this.textRunEditor!.cursorX * this.viewportManager!.scale;
         }
 
         // Start animation
-        this.viewportManager.animatePan(
+        this.viewportManager!.animatePan(
             targetPanX,
-            this.viewportManager.panY,
+            this.viewportManager!.panY,
             this.render.bind(this)
         );
     }
 
-    resetZoomAndPosition() {
+    resetZoomAndPosition(): void {
         // Reset zoom to initial scale and position to origin with animation
-        const rect = this.canvas.getBoundingClientRect();
+        const rect = this.canvas!.getBoundingClientRect();
         const targetScale = this.initialScale;
         const targetPanX = rect.width / 4; // Same as initial position
         const targetPanY = rect.height / 2; // Same as initial position
 
-        this.viewportManager.animateZoomAndPan(
+        this.viewportManager!.animateZoomAndPan(
             targetScale,
             targetPanX,
             targetPanY,
@@ -3820,45 +3898,34 @@ function setupFontLoadingListener() {
     console.log('[GlyphCanvas]', '🔧 Setting up font loading listeners...');
 
     // Listen for editing font compiled by font manager (primary)
-    window.addEventListener(
-        'editingFontCompiled',
-        async (/** @type {any} */ e) => {
+    window.addEventListener('editingFontCompiled', async (e: any) => {
+        console.log('[GlyphCanvas]', '✅ Editing font compiled event received');
+        console.log('[GlyphCanvas]', '   Event detail:', e.detail);
+        console.log('[GlyphCanvas]', '   Canvas exists:', !!window.glyphCanvas);
+        if (window.glyphCanvas && e.detail && e.detail.fontBytes) {
             console.log(
                 '[GlyphCanvas]',
-                '✅ Editing font compiled event received'
+                '   Loading editing font into canvas...'
             );
-            console.log('[GlyphCanvas]', '   Event detail:', e.detail);
+            const arrayBuffer = e.detail.fontBytes.buffer.slice(
+                e.detail.fontBytes.byteOffset,
+                e.detail.fontBytes.byteOffset + e.detail.fontBytes.byteLength
+            );
+            window.glyphCanvas.setFont(arrayBuffer);
             console.log(
                 '[GlyphCanvas]',
-                '   Canvas exists:',
-                !!window.glyphCanvas
+                '   ✅ Editing font loaded into canvas'
             );
-            if (window.glyphCanvas && e.detail && e.detail.fontBytes) {
-                console.log(
-                    '[GlyphCanvas]',
-                    '   Loading editing font into canvas...'
-                );
-                const arrayBuffer = e.detail.fontBytes.buffer.slice(
-                    e.detail.fontBytes.byteOffset,
-                    e.detail.fontBytes.byteOffset +
-                        e.detail.fontBytes.byteLength
-                );
-                window.glyphCanvas.setFont(arrayBuffer);
-                console.log(
-                    '[GlyphCanvas]',
-                    '   ✅ Editing font loaded into canvas'
-                );
-            } else {
-                console.warn(
-                    '[GlyphCanvas]',
-                    '   ⚠️ Cannot load font - missing canvas or fontBytes'
-                );
-            }
+        } else {
+            console.warn(
+                '[GlyphCanvas]',
+                '   ⚠️ Cannot load font - missing canvas or fontBytes'
+            );
         }
-    );
+    });
 
     // Legacy: Custom event when font is compiled via compile button
-    window.addEventListener('fontCompiled', async (/** @type {any} */ e) => {
+    window.addEventListener('fontCompiled', async (e: any) => {
         console.log('[GlyphCanvas]', 'Font compiled event received (legacy)');
         if (window.glyphCanvas && e.detail && e.detail.ttfBytes) {
             const arrayBuffer = e.detail.ttfBytes.buffer.slice(
@@ -3870,10 +3937,12 @@ function setupFontLoadingListener() {
     });
 
     // Also check for fonts loaded from file system
-    window.addEventListener('fontLoaded', async (e) =>
+    window.addEventListener('fontLoaded', async (e: any) =>
         window.fontManager
             .onFontLoaded(e)
-            .then((arrayBuffer) => window.glyphCanvas.setFont(arrayBuffer))
+            .then((arrayBuffer: ArrayBuffer) =>
+                window.glyphCanvas.setFont(arrayBuffer)
+            )
     );
 }
 
@@ -3904,7 +3973,7 @@ function setupEditorShortcutsModal() {
             window.glyphCanvas &&
             window.glyphCanvas.canvas
         ) {
-            setTimeout(() => window.glyphCanvas.canvas.focus(), 0);
+            setTimeout(() => window.glyphCanvas.canvas!.focus(), 0);
         }
     };
 
@@ -3927,7 +3996,4 @@ function setupEditorShortcutsModal() {
     });
 }
 
-// Export for module use
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { GlyphCanvas };
-}
+export { GlyphCanvas };
