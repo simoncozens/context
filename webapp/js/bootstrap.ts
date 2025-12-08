@@ -1,3 +1,6 @@
+import './loading-animation.js';
+import './tab-lifecycle.js';
+
 import './ai-assistant.js';
 import './auto-compile-manager.js';
 import './cache-manager.js';
