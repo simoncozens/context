@@ -611,6 +611,21 @@ else:
         return this.babelfontData?.format_specific?.[key];
     }
 
+    /**
+     * Sets a font-level format_specific key in the current font
+     *
+     * @param {string} key
+     * @param {any} value
+     */
+    setFormatSpecific(key, value) {
+        if (this.babelfontData) {
+            if (!this.babelfontData.format_specific) {
+                this.babelfontData.format_specific = {};
+            }
+            this.babelfontData.format_specific[key] = value;
+        }
+    }
+
     async fetchGlyphData(glyphName) {
         // Fetch glyph and font data from Python
         if (!window.pyodide) {

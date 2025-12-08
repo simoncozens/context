@@ -1352,33 +1352,19 @@ class TextRunEditor {
             return; // Python not ready yet
         }
 
-        try {
-            const textToSave = this.textBuffer || '';
-            const appId = window.APP_SETTINGS?.APP_ID;
-            const key = `${appId}.display_string`;
+        const textToSave = this.textBuffer || '';
+        const appId = window.APP_SETTINGS?.APP_ID;
+        const key = `${appId}.display_string`;
 
-            // Escape the text for Python string literal
-            const escapedText = textToSave
-                .replace(/\\/g, '\\\\')
-                .replace(/"/g, '\\"')
-                .replace(/\n/g, '\\n')
-                .replace(/\r/g, '\\r')
-                .replace(/\t/g, '\\t');
+        // Escape the text for Python string literal
+        const escapedText = textToSave
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
 
-            await window.pyodide.runPythonAsync(`
-font = CurrentFont()
-if font:
-    # Save the display string
-    font.format_specific["${key}"] = """${escapedText}"""
-    print("✅ Saved display string to font:", font.format_specific["${key}"])
-`);
-        } catch (e) {
-            console.warn(
-                '[TextRun]',
-                'Failed to save text buffer to font object:',
-                e
-            );
-        }
+        window.fontManager.setFormatSpecific(key, escapedText);
     }
 
     shapeText() {
