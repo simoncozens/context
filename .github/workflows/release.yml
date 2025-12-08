@@ -19,7 +19,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history to get the commit for the tag
+          fetch-depth: 0 # Fetch all history to get the commit for the tag
 
       - name: Get commit SHA for tag
         id: commit
@@ -32,7 +32,7 @@ jobs:
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ steps.commit.outputs.COMMIT_SHA }}
-          check-name: 'build'
+          check-name: "build"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
 
