@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.1a
+
 - **Version Management**: Automatic PWA cache versioning with update notifications
 - **Update Checks**: Every 10 minutes and when window regains focus
 - **Update UI**: Orange notification button with version number and release notes link in title bar
