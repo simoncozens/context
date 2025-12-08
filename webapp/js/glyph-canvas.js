@@ -2022,7 +2022,7 @@ json.dumps(result)
         // If we're in glyph edit mode and not on a layer, interpolate at current position
         if (this.isGlyphEditMode && this.selectedLayerId === null && this.currentGlyphName) {
             console.log('[GlyphCanvas]', 'Interpolating at current position after entering edit mode');
-            await this.interpolateCurrentGlyph();
+            await this.interpolateCurrentGlyph(true); // force=true to bypass guard
         }
     }
 
@@ -2371,7 +2371,7 @@ json.dumps(result)
         }
     }
 
-    async interpolateCurrentGlyph() {
+    async interpolateCurrentGlyph(force = false) {
         // Interpolate the current glyph at current variation settings
         if (!this.currentGlyphName || !window.fontInterpolation) {
             console.log('[GlyphCanvas]', 'Skipping interpolation:', {
@@ -2383,7 +2383,8 @@ json.dumps(result)
         
         // Don't interpolate if we just finished a layer switch animation
         // The target layer data has already been restored
-        if (!this.isInterpolating && !this.isLayerSwitchAnimating) {
+        // Unless force=true (e.g., entering edit mode at interpolated position)
+        if (!force && !this.isInterpolating && !this.isLayerSwitchAnimating) {
             console.log('[GlyphCanvas]', 'Skipping interpolation - not in active interpolation state');
             return;
         }
@@ -4225,8 +4226,9 @@ json.dumps(result)
 
         // Only draw shapes if they exist (empty glyphs like space won't have shapes)
         if (this.layerData.shapes && Array.isArray(this.layerData.shapes)) {
-            // Check if layer data is interpolated (for visual feedback)
-            const isInterpolated = this.layerData && this.layerData.isInterpolated;
+            // Apply monochrome during manual slider interpolation OR when not on an exact layer
+            // Don't apply monochrome during layer switch animations
+            const isInterpolated = this.isInterpolating || (this.selectedLayerId === null && this.layerData?.isInterpolated);
             
             this.layerData.shapes.forEach((shape, contourIndex) => {
                 console.log(
@@ -4450,7 +4452,7 @@ json.dumps(result)
 
                 shape.nodes.forEach((node, nodeIndex) => {
                     const [x, y, type] = node;
-                    const isInterpolated = this.layerData && this.layerData.isInterpolated;
+                    const isInterpolated = this.isInterpolating || (this.selectedLayerId === null && this.layerData?.isInterpolated);
                     const isHovered =
                         !isInterpolated &&
                         this.hoveredPointIndex &&
@@ -4569,7 +4571,7 @@ json.dumps(result)
                 );
 
                 // Disable selection/hover highlighting for interpolated data
-                const isInterpolated = this.layerData && this.layerData.isInterpolated;
+                const isInterpolated = this.isInterpolating || (this.selectedLayerId === null && this.layerData?.isInterpolated);
                 const isHovered = !isInterpolated && (this.hoveredComponentIndex === index);
                 const isSelected = !isInterpolated && this.selectedComponents.includes(index);
 
@@ -4894,7 +4896,7 @@ json.dumps(result)
 
             this.layerData.anchors.forEach((anchor, index) => {
                 const { x, y, name } = anchor;
-                const isInterpolated = this.layerData && this.layerData.isInterpolated;
+                const isInterpolated = this.isInterpolating || (this.selectedLayerId === null && this.layerData?.isInterpolated);
                 const isHovered = !isInterpolated && this.hoveredAnchorIndex === index;
                 const isSelected = !isInterpolated && this.selectedAnchors.includes(index);
 
