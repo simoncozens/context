@@ -141,13 +141,7 @@ export class LayerDataNormalizer {
                     prev: null
                 });
             }
-            // Create circular double linked list connections
-            for (let i = 0; i < nodesArray.length; i++) {
-                let nextIx = (i + 1) % nodesArray.length;
-                let prevIx = (i - 1 + nodesArray.length) % nodesArray.length;
-                nodesArray[i].next = nodesArray[nextIx];
-                nodesArray[i].prev = nodesArray[prevIx];
-            }
+            this.relinkNodesArray(nodesArray);
 
             return nodesArray;
         }
@@ -278,13 +272,17 @@ export class LayerDataNormalizer {
         for (const shape of layerData.shapes) {
             if ('nodes' in shape) {
                 const nodes = shape.nodes;
-                for (let i = 0; i < nodes.length; i++) {
-                    let nextIx = (i + 1) % nodes.length;
-                    let prevIx = (i - 1 + nodes.length) % nodes.length;
-                    nodes[i].next = nodes[nextIx];
-                    nodes[i].prev = nodes[prevIx];
-                }
+                this.relinkNodesArray(nodes);
             }
+        }
+    }
+
+    static relinkNodesArray(nodes: PythonBabelfont.Node[]) {
+        for (let i = 0; i < nodes.length; i++) {
+            let nextIx = (i + 1) % nodes.length;
+            let prevIx = (i - 1 + nodes.length) % nodes.length;
+            nodes[i].next = nodes[nextIx];
+            nodes[i].prev = nodes[prevIx];
         }
     }
 }
