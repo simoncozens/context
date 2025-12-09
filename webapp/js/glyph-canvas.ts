@@ -809,11 +809,11 @@ class GlyphCanvas {
 
         // Store glyph name for interpolation (needed even when not on a layer)
         if (this.fontData.glyphName) {
-            this.currentGlyphName = this.fontData.glyphName;
+            this.outlineEditor.currentGlyphName = this.fontData.glyphName;
             console.log(
                 '[GlyphCanvas]',
                 'Set currentGlyphName from fontData:',
-                this.currentGlyphName
+                this.outlineEditor.currentGlyphName
             );
         }
 
