@@ -61,14 +61,14 @@ describe('GlyphCanvas initialization', () => {
 
     test('should set initial state correctly', () => {
         canvas = new GlyphCanvas('test-container');
-        expect(canvas.isGlyphEditMode).toBe(false);
+        expect(canvas.outlineEditor.active).toBe(false);
         expect(canvas.isDraggingCanvas).toBe(false);
-        expect(canvas.isDraggingPoint).toBe(false);
-        expect(canvas.isDraggingAnchor).toBe(false);
-        expect(canvas.isDraggingComponent).toBe(false);
-        expect(canvas.selectedPoints).toEqual([]);
-        expect(canvas.selectedAnchors).toEqual([]);
-        expect(canvas.selectedComponents).toEqual([]);
+        expect(canvas.outlineEditor.isDraggingPoint).toBe(false);
+        expect(canvas.outlineEditor.isDraggingAnchor).toBe(false);
+        expect(canvas.outlineEditor.isDraggingComponent).toBe(false);
+        expect(canvas.outlineEditor.selectedPoints).toEqual([]);
+        expect(canvas.outlineEditor.selectedAnchors).toEqual([]);
+        expect(canvas.outlineEditor.selectedComponents).toEqual([]);
     });
 });
 
@@ -83,16 +83,18 @@ describe('GlyphCanvas onMouseMove', () => {
         // Set up mock state
         canvas.textRunEditor.selectedGlyphIndex = 0;
         canvas.textRunEditor.shapedGlyphs = [{ ax: 1000, dx: 0, dy: 0, g: 0 }];
-        canvas.layerData = {
+        canvas.outlineEditor.layerData = {
             shapes: [
                 { Component: { transform: [1, 0, 0, 1, 0, 0] } },
                 { nodes: [[0, 0, 'l']] }
             ],
             anchors: [{ x: 0, y: 0 }]
         };
-        canvas.selectedComponents = [0];
-        canvas.selectedPoints = [{ contourIndex: 1, nodeIndex: 0 }];
-        canvas.selectedAnchors = [0];
+        canvas.outlineEditor.selectedComponents = [0];
+        canvas.outlineEditor.selectedPoints = [
+            { contourIndex: 1, nodeIndex: 0 }
+        ];
+        canvas.outlineEditor.selectedAnchors = [0];
         canvas.viewportManager = new ViewportManager(1, 0, 0);
         canvas.lastGlyphX = null;
         canvas.lastGlyphY = null;
@@ -103,34 +105,42 @@ describe('GlyphCanvas onMouseMove', () => {
     });
 
     test('handles component dragging correctly', () => {
-        canvas.isDraggingComponent = true;
+        canvas.outlineEditor.isDraggingComponent = true;
         // First move sets the initial position, delta is 0
         canvas.onMouseMove({ clientX: 10, clientY: 20 });
-        expect(canvas.layerData.shapes[0].Component.transform[4]).toBe(0);
-        expect(canvas.layerData.shapes[0].Component.transform[5]).toBe(0);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[4]
+        ).toBe(0);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[5]
+        ).toBe(0);
 
         // Second move performs the drag
         canvas.onMouseMove({ clientX: 25, clientY: 15 });
         // deltaX = 25 - 10 = 15
         // deltaY = -15 - (-20) = 5
-        expect(canvas.layerData.shapes[0].Component.transform[4]).toBe(15);
-        expect(canvas.layerData.shapes[0].Component.transform[5]).toBe(5);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[4]
+        ).toBe(15);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[5]
+        ).toBe(5);
     });
 
     test('handles anchor dragging correctly', () => {
-        canvas.isDraggingAnchor = true;
+        canvas.outlineEditor.isDraggingAnchor = true;
         canvas.onMouseMove({ clientX: 10, clientY: 20 });
         canvas.onMouseMove({ clientX: 25, clientY: 15 });
-        expect(canvas.layerData.anchors[0].x).toBe(15);
-        expect(canvas.layerData.anchors[0].y).toBe(5);
+        expect(canvas.outlineEditor.layerData.anchors[0].x).toBe(15);
+        expect(canvas.outlineEditor.layerData.anchors[0].y).toBe(5);
     });
 
     test('handles point dragging correctly', () => {
-        canvas.isDraggingPoint = true;
+        canvas.outlineEditor.isDraggingPoint = true;
         canvas.onMouseMove({ clientX: 10, clientY: 20 });
         canvas.onMouseMove({ clientX: 25, clientY: 15 });
-        expect(canvas.layerData.shapes[1].nodes[0][0]).toBe(15);
-        expect(canvas.layerData.shapes[1].nodes[0][1]).toBe(5);
+        expect(canvas.outlineEditor.layerData.shapes[1].nodes[0][0]).toBe(15);
+        expect(canvas.outlineEditor.layerData.shapes[1].nodes[0][1]).toBe(5);
     });
 
     test('handles canvas panning when dragging', () => {
@@ -147,19 +157,19 @@ describe('GlyphCanvas onMouseMove', () => {
     });
 
     test('does not drag when no drag state is active', () => {
-        canvas.isDraggingComponent = false;
-        canvas.isDraggingAnchor = false;
-        canvas.isDraggingPoint = false;
+        canvas.outlineEditor.isDraggingComponent = false;
+        canvas.outlineEditor.isDraggingAnchor = false;
+        canvas.outlineEditor.isDraggingPoint = false;
         canvas.isDraggingCanvas = false;
 
         const initialTransform = [
-            ...canvas.layerData.shapes[0].Component.transform
+            ...canvas.outlineEditor.layerData.shapes[0].Component.transform
         ];
         canvas.onMouseMove({ clientX: 10, clientY: 20 });
 
-        expect(canvas.layerData.shapes[0].Component.transform).toEqual(
-            initialTransform
-        );
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform
+        ).toEqual(initialTransform);
     });
 });
 
@@ -203,16 +213,16 @@ describe('GlyphCanvas onMouseUp', () => {
     });
 
     test('should clear all dragging states', () => {
-        canvas.isDraggingPoint = true;
-        canvas.isDraggingAnchor = true;
-        canvas.isDraggingComponent = true;
+        canvas.outlineEditor.isDraggingPoint = true;
+        canvas.outlineEditor.isDraggingAnchor = true;
+        canvas.outlineEditor.isDraggingComponent = true;
         canvas.isDraggingCanvas = true;
 
         canvas.onMouseUp({ clientX: 10, clientY: 20 });
 
-        expect(canvas.isDraggingPoint).toBe(false);
-        expect(canvas.isDraggingAnchor).toBe(false);
-        expect(canvas.isDraggingComponent).toBe(false);
+        expect(canvas.outlineEditor.isDraggingPoint).toBe(false);
+        expect(canvas.outlineEditor.isDraggingAnchor).toBe(false);
+        expect(canvas.outlineEditor.isDraggingComponent).toBe(false);
         expect(canvas.isDraggingCanvas).toBe(false);
     });
 });
@@ -227,7 +237,7 @@ describe('GlyphCanvas hit testing', () => {
         canvas = new GlyphCanvas('test-container');
         canvas.textRunEditor.selectedGlyphIndex = 0;
         canvas.textRunEditor.shapedGlyphs = [{ ax: 1000, dx: 0, dy: 0, g: 0 }];
-        canvas.layerData = {
+        canvas.outlineEditor.layerData = {
             shapes: [
                 { Component: { transform: [1, 0, 0, 1, 100, 100] } },
                 { nodes: [[200, 200, 'l']] }
@@ -244,22 +254,22 @@ describe('GlyphCanvas hit testing', () => {
     test('should correctly identify hovered component', () => {
         canvas.mouseX = 100;
         canvas.mouseY = -100;
-        canvas.updateHoveredComponent();
-        expect(canvas.hoveredComponentIndex).toBe(0);
+        canvas.outlineEditor.updateHoveredComponent();
+        expect(canvas.outlineEditor.hoveredComponentIndex).toBe(0);
     });
 
     test('should correctly identify hovered anchor', () => {
         canvas.mouseX = 300;
         canvas.mouseY = -300;
-        canvas.updateHoveredAnchor();
-        expect(canvas.hoveredAnchorIndex).toBe(0);
+        canvas.outlineEditor.updateHoveredAnchor();
+        expect(canvas.outlineEditor.hoveredAnchorIndex).toBe(0);
     });
 
     test('should correctly identify hovered point', () => {
         canvas.mouseX = 200;
         canvas.mouseY = -200;
-        canvas.updateHoveredPoint();
-        expect(canvas.hoveredPointIndex).toEqual({
+        canvas.outlineEditor.updateHoveredPoint();
+        expect(canvas.outlineEditor.hoveredPointIndex).toEqual({
             contourIndex: 1,
             nodeIndex: 0
         });
@@ -268,40 +278,40 @@ describe('GlyphCanvas hit testing', () => {
     test('should clear hovered component when mouse moves away', () => {
         canvas.mouseX = 100;
         canvas.mouseY = -100;
-        canvas.updateHoveredComponent();
-        expect(canvas.hoveredComponentIndex).toBe(0);
+        canvas.outlineEditor.updateHoveredComponent();
+        expect(canvas.outlineEditor.hoveredComponentIndex).toBe(0);
 
         canvas.mouseX = 1000;
         canvas.mouseY = -1000;
-        canvas.updateHoveredComponent();
-        expect(canvas.hoveredComponentIndex).toBe(null);
+        canvas.outlineEditor.updateHoveredComponent();
+        expect(canvas.outlineEditor.hoveredComponentIndex).toBe(null);
     });
 
     test('should clear hovered anchor when mouse moves away', () => {
         canvas.mouseX = 300;
         canvas.mouseY = -300;
-        canvas.updateHoveredAnchor();
-        expect(canvas.hoveredAnchorIndex).toBe(0);
+        canvas.outlineEditor.updateHoveredAnchor();
+        expect(canvas.outlineEditor.hoveredAnchorIndex).toBe(0);
 
         canvas.mouseX = 1000;
         canvas.mouseY = -1000;
-        canvas.updateHoveredAnchor();
-        expect(canvas.hoveredAnchorIndex).toBe(null);
+        canvas.outlineEditor.updateHoveredAnchor();
+        expect(canvas.outlineEditor.hoveredAnchorIndex).toBe(null);
     });
 
     test('should clear hovered point when mouse moves away', () => {
         canvas.mouseX = 200;
         canvas.mouseY = -200;
-        canvas.updateHoveredPoint();
-        expect(canvas.hoveredPointIndex).toEqual({
+        canvas.outlineEditor.updateHoveredPoint();
+        expect(canvas.outlineEditor.hoveredPointIndex).toEqual({
             contourIndex: 1,
             nodeIndex: 0
         });
 
         canvas.mouseX = 1000;
         canvas.mouseY = -1000;
-        canvas.updateHoveredPoint();
-        expect(canvas.hoveredPointIndex).toBe(null);
+        canvas.outlineEditor.updateHoveredPoint();
+        expect(canvas.outlineEditor.hoveredPointIndex).toBe(null);
     });
 });
 
@@ -313,8 +323,8 @@ describe('GlyphCanvas selection handling', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.isGlyphEditMode = true;
-        canvas.layerData = {
+        canvas.outlineEditor.active = true;
+        canvas.outlineEditor.layerData = {
             shapes: [
                 { Component: { transform: [1, 0, 0, 1, 100, 100] } },
                 {
@@ -336,37 +346,39 @@ describe('GlyphCanvas selection handling', () => {
     });
 
     test('should allow selecting a single point', () => {
-        canvas.selectedPoints = [{ contourIndex: 1, nodeIndex: 0 }];
-        expect(canvas.selectedPoints.length).toBe(1);
-        expect(canvas.selectedPoints[0]).toEqual({
+        canvas.outlineEditor.selectedPoints = [
+            { contourIndex: 1, nodeIndex: 0 }
+        ];
+        expect(canvas.outlineEditor.selectedPoints.length).toBe(1);
+        expect(canvas.outlineEditor.selectedPoints[0]).toEqual({
             contourIndex: 1,
             nodeIndex: 0
         });
     });
 
     test('should allow selecting multiple points', () => {
-        canvas.selectedPoints = [
+        canvas.outlineEditor.selectedPoints = [
             { contourIndex: 1, nodeIndex: 0 },
             { contourIndex: 1, nodeIndex: 1 }
         ];
-        expect(canvas.selectedPoints.length).toBe(2);
+        expect(canvas.outlineEditor.selectedPoints.length).toBe(2);
     });
 
     test('should allow selecting a single anchor', () => {
-        canvas.selectedAnchors = [0];
-        expect(canvas.selectedAnchors.length).toBe(1);
-        expect(canvas.selectedAnchors[0]).toBe(0);
+        canvas.outlineEditor.selectedAnchors = [0];
+        expect(canvas.outlineEditor.selectedAnchors.length).toBe(1);
+        expect(canvas.outlineEditor.selectedAnchors[0]).toBe(0);
     });
 
     test('should allow selecting multiple anchors', () => {
-        canvas.selectedAnchors = [0, 1];
-        expect(canvas.selectedAnchors.length).toBe(2);
+        canvas.outlineEditor.selectedAnchors = [0, 1];
+        expect(canvas.outlineEditor.selectedAnchors.length).toBe(2);
     });
 
     test('should allow selecting a single component', () => {
-        canvas.selectedComponents = [0];
-        expect(canvas.selectedComponents.length).toBe(1);
-        expect(canvas.selectedComponents[0]).toBe(0);
+        canvas.outlineEditor.selectedComponents = [0];
+        expect(canvas.outlineEditor.selectedComponents.length).toBe(1);
+        expect(canvas.outlineEditor.selectedComponents[0]).toBe(0);
     });
 });
 
@@ -378,8 +390,8 @@ describe('GlyphCanvas point movement', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.isGlyphEditMode = true;
-        canvas.layerData = {
+        canvas.outlineEditor.active = true;
+        canvas.outlineEditor.layerData = {
             shapes: [
                 {
                     nodes: [
@@ -390,9 +402,11 @@ describe('GlyphCanvas point movement', () => {
             ],
             anchors: []
         };
-        canvas.selectedPoints = [{ contourIndex: 0, nodeIndex: 0 }];
+        canvas.outlineEditor.selectedPoints = [
+            { contourIndex: 0, nodeIndex: 0 }
+        ];
         // Mock saveLayerData to prevent errors
-        canvas.saveLayerData = jest.fn();
+        canvas.outlineEditor.saveLayerData = jest.fn();
     });
 
     afterEach(() => {
@@ -400,28 +414,28 @@ describe('GlyphCanvas point movement', () => {
     });
 
     test('should move selected points by delta', () => {
-        canvas.moveSelectedPoints(10, 20);
-        expect(canvas.layerData.shapes[0].nodes[0][0]).toBe(110);
-        expect(canvas.layerData.shapes[0].nodes[0][1]).toBe(120);
+        canvas.outlineEditor.moveSelectedPoints(10, 20);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][0]).toBe(110);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][1]).toBe(120);
     });
 
     test('should move multiple selected points', () => {
-        canvas.selectedPoints = [
+        canvas.outlineEditor.selectedPoints = [
             { contourIndex: 0, nodeIndex: 0 },
             { contourIndex: 0, nodeIndex: 1 }
         ];
-        canvas.moveSelectedPoints(10, 20);
-        expect(canvas.layerData.shapes[0].nodes[0][0]).toBe(110);
-        expect(canvas.layerData.shapes[0].nodes[0][1]).toBe(120);
-        expect(canvas.layerData.shapes[0].nodes[1][0]).toBe(210);
-        expect(canvas.layerData.shapes[0].nodes[1][1]).toBe(220);
+        canvas.outlineEditor.moveSelectedPoints(10, 20);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][0]).toBe(110);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][1]).toBe(120);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1][0]).toBe(210);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1][1]).toBe(220);
     });
 
     test('should not move points when none are selected', () => {
-        canvas.selectedPoints = [];
-        canvas.moveSelectedPoints(10, 20);
-        expect(canvas.layerData.shapes[0].nodes[0][0]).toBe(100);
-        expect(canvas.layerData.shapes[0].nodes[0][1]).toBe(100);
+        canvas.outlineEditor.selectedPoints = [];
+        canvas.outlineEditor.moveSelectedPoints(10, 20);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][0]).toBe(100);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][1]).toBe(100);
     });
 });
 
@@ -431,16 +445,16 @@ describe('GlyphCanvas anchor movement', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.isGlyphEditMode = true;
-        canvas.layerData = {
+        canvas.outlineEditor.active = true;
+        canvas.outlineEditor.layerData = {
             shapes: [],
             anchors: [
                 { x: 100, y: 100 },
                 { x: 200, y: 200 }
             ]
         };
-        canvas.selectedAnchors = [0];
-        canvas.saveLayerData = jest.fn();
+        canvas.outlineEditor.selectedAnchors = [0];
+        canvas.outlineEditor.saveLayerData = jest.fn();
     });
 
     afterEach(() => {
@@ -448,25 +462,25 @@ describe('GlyphCanvas anchor movement', () => {
     });
 
     test('should move selected anchors by delta', () => {
-        canvas.moveSelectedAnchors(10, 20);
-        expect(canvas.layerData.anchors[0].x).toBe(110);
-        expect(canvas.layerData.anchors[0].y).toBe(120);
+        canvas.outlineEditor.moveSelectedAnchors(10, 20);
+        expect(canvas.outlineEditor.layerData.anchors[0].x).toBe(110);
+        expect(canvas.outlineEditor.layerData.anchors[0].y).toBe(120);
     });
 
     test('should move multiple selected anchors', () => {
-        canvas.selectedAnchors = [0, 1];
-        canvas.moveSelectedAnchors(10, 20);
-        expect(canvas.layerData.anchors[0].x).toBe(110);
-        expect(canvas.layerData.anchors[0].y).toBe(120);
-        expect(canvas.layerData.anchors[1].x).toBe(210);
-        expect(canvas.layerData.anchors[1].y).toBe(220);
+        canvas.outlineEditor.selectedAnchors = [0, 1];
+        canvas.outlineEditor.moveSelectedAnchors(10, 20);
+        expect(canvas.outlineEditor.layerData.anchors[0].x).toBe(110);
+        expect(canvas.outlineEditor.layerData.anchors[0].y).toBe(120);
+        expect(canvas.outlineEditor.layerData.anchors[1].x).toBe(210);
+        expect(canvas.outlineEditor.layerData.anchors[1].y).toBe(220);
     });
 
     test('should not move anchors when none are selected', () => {
-        canvas.selectedAnchors = [];
-        canvas.moveSelectedAnchors(10, 20);
-        expect(canvas.layerData.anchors[0].x).toBe(100);
-        expect(canvas.layerData.anchors[0].y).toBe(100);
+        canvas.outlineEditor.selectedAnchors = [];
+        canvas.outlineEditor.moveSelectedAnchors(10, 20);
+        expect(canvas.outlineEditor.layerData.anchors[0].x).toBe(100);
+        expect(canvas.outlineEditor.layerData.anchors[0].y).toBe(100);
     });
 });
 
@@ -476,16 +490,16 @@ describe('GlyphCanvas component movement', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.isGlyphEditMode = true;
-        canvas.layerData = {
+        canvas.outlineEditor.active = true;
+        canvas.outlineEditor.layerData = {
             shapes: [
                 { Component: { transform: [1, 0, 0, 1, 100, 100] } },
                 { Component: { transform: [1, 0, 0, 1, 200, 200] } }
             ],
             anchors: []
         };
-        canvas.selectedComponents = [0];
-        canvas.saveLayerData = jest.fn();
+        canvas.outlineEditor.selectedComponents = [0];
+        canvas.outlineEditor.saveLayerData = jest.fn();
     });
 
     afterEach(() => {
@@ -493,25 +507,41 @@ describe('GlyphCanvas component movement', () => {
     });
 
     test('should move selected components by delta', () => {
-        canvas.moveSelectedComponents(10, 20);
-        expect(canvas.layerData.shapes[0].Component.transform[4]).toBe(110);
-        expect(canvas.layerData.shapes[0].Component.transform[5]).toBe(120);
+        canvas.outlineEditor.moveSelectedComponents(10, 20);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[4]
+        ).toBe(110);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[5]
+        ).toBe(120);
     });
 
     test('should move multiple selected components', () => {
-        canvas.selectedComponents = [0, 1];
-        canvas.moveSelectedComponents(10, 20);
-        expect(canvas.layerData.shapes[0].Component.transform[4]).toBe(110);
-        expect(canvas.layerData.shapes[0].Component.transform[5]).toBe(120);
-        expect(canvas.layerData.shapes[1].Component.transform[4]).toBe(210);
-        expect(canvas.layerData.shapes[1].Component.transform[5]).toBe(220);
+        canvas.outlineEditor.selectedComponents = [0, 1];
+        canvas.outlineEditor.moveSelectedComponents(10, 20);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[4]
+        ).toBe(110);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[5]
+        ).toBe(120);
+        expect(
+            canvas.outlineEditor.layerData.shapes[1].Component.transform[4]
+        ).toBe(210);
+        expect(
+            canvas.outlineEditor.layerData.shapes[1].Component.transform[5]
+        ).toBe(220);
     });
 
     test('should not move components when none are selected', () => {
-        canvas.selectedComponents = [];
-        canvas.moveSelectedComponents(10, 20);
-        expect(canvas.layerData.shapes[0].Component.transform[4]).toBe(100);
-        expect(canvas.layerData.shapes[0].Component.transform[5]).toBe(100);
+        canvas.outlineEditor.selectedComponents = [];
+        canvas.outlineEditor.moveSelectedComponents(10, 20);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[4]
+        ).toBe(100);
+        expect(
+            canvas.outlineEditor.layerData.shapes[0].Component.transform[5]
+        ).toBe(100);
     });
 });
 
@@ -523,8 +553,8 @@ describe('GlyphCanvas point type toggling', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.isGlyphEditMode = true;
-        canvas.layerData = {
+        canvas.outlineEditor.active = true;
+        canvas.outlineEditor.layerData = {
             shapes: [
                 {
                     nodes: [
@@ -536,7 +566,7 @@ describe('GlyphCanvas point type toggling', () => {
             ],
             anchors: []
         };
-        canvas.saveLayerData = jest.fn();
+        canvas.outlineEditor.saveLayerData = jest.fn();
     });
 
     afterEach(() => {
@@ -544,36 +574,54 @@ describe('GlyphCanvas point type toggling', () => {
     });
 
     test('should toggle curve point to smooth curve', () => {
-        canvas.togglePointSmooth({ contourIndex: 0, nodeIndex: 0 });
-        expect(canvas.layerData.shapes[0].nodes[0][2]).toBe('cs');
+        canvas.outlineEditor.togglePointSmooth({
+            contourIndex: 0,
+            nodeIndex: 0
+        });
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][2]).toBe('cs');
     });
 
     test('should toggle smooth curve point back to curve', () => {
-        canvas.layerData.shapes[0].nodes[0][2] = 'cs';
-        canvas.togglePointSmooth({ contourIndex: 0, nodeIndex: 0 });
-        expect(canvas.layerData.shapes[0].nodes[0][2]).toBe('c');
+        canvas.outlineEditor.layerData.shapes[0].nodes[0][2] = 'cs';
+        canvas.outlineEditor.togglePointSmooth({
+            contourIndex: 0,
+            nodeIndex: 0
+        });
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][2]).toBe('c');
     });
 
     test('should toggle line point to smooth line', () => {
-        canvas.togglePointSmooth({ contourIndex: 0, nodeIndex: 1 });
-        expect(canvas.layerData.shapes[0].nodes[1][2]).toBe('ls');
+        canvas.outlineEditor.togglePointSmooth({
+            contourIndex: 0,
+            nodeIndex: 1
+        });
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1][2]).toBe('ls');
     });
 
     test('should toggle smooth line point back to line', () => {
-        canvas.layerData.shapes[0].nodes[1][2] = 'ls';
-        canvas.togglePointSmooth({ contourIndex: 0, nodeIndex: 1 });
-        expect(canvas.layerData.shapes[0].nodes[1][2]).toBe('l');
+        canvas.outlineEditor.layerData.shapes[0].nodes[1][2] = 'ls';
+        canvas.outlineEditor.togglePointSmooth({
+            contourIndex: 0,
+            nodeIndex: 1
+        });
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1][2]).toBe('l');
     });
 
     test('should toggle offcurve point to smooth offcurve', () => {
-        canvas.togglePointSmooth({ contourIndex: 0, nodeIndex: 2 });
-        expect(canvas.layerData.shapes[0].nodes[2][2]).toBe('os');
+        canvas.outlineEditor.togglePointSmooth({
+            contourIndex: 0,
+            nodeIndex: 2
+        });
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[2][2]).toBe('os');
     });
 
     test('should toggle smooth offcurve point back to offcurve', () => {
-        canvas.layerData.shapes[0].nodes[2][2] = 'os';
-        canvas.togglePointSmooth({ contourIndex: 0, nodeIndex: 2 });
-        expect(canvas.layerData.shapes[0].nodes[2][2]).toBe('o');
+        canvas.outlineEditor.layerData.shapes[0].nodes[2][2] = 'os';
+        canvas.outlineEditor.togglePointSmooth({
+            contourIndex: 0,
+            nodeIndex: 2
+        });
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[2][2]).toBe('o');
     });
 });
 
@@ -603,43 +651,48 @@ describe('GlyphCanvas mode switching', () => {
     });
 
     test('should start in text edit mode', () => {
-        expect(canvas.isGlyphEditMode).toBe(false);
+        expect(canvas.outlineEditor.active).toBe(false);
     });
 
     test('should exit glyph edit mode correctly', () => {
-        canvas.isGlyphEditMode = true;
+        canvas.outlineEditor.active = true;
         canvas.textRunEditor.selectedGlyphIndex = 0;
-        canvas.selectedLayerId = 'layer1';
-        canvas.layerData = { shapes: [], anchors: [] };
-        canvas.selectedPoints = [{ contourIndex: 0, nodeIndex: 0 }];
+        canvas.outlineEditor.selectedLayerId = 'layer1';
+        canvas.outlineEditor.layerData = { shapes: [], anchors: [] };
+        canvas.outlineEditor.selectedPoints = [
+            { contourIndex: 0, nodeIndex: 0 }
+        ];
 
         canvas.exitGlyphEditMode();
 
-        expect(canvas.isGlyphEditMode).toBe(false);
+        expect(canvas.outlineEditor.active).toBe(false);
         expect(canvas.textRunEditor.selectedGlyphIndex).toBe(-1);
-        expect(canvas.selectedLayerId).toBe(null);
-        expect(canvas.layerData).toBe(null);
-        expect(canvas.selectedPoints).toEqual([]);
+        expect(canvas.outlineEditor.selectedLayerId).toBe(null);
+        expect(canvas.outlineEditor.layerData).toBe(null);
+        expect(canvas.outlineEditor.selectedPoints).toEqual([]);
     });
 
     test('should clear hover state when exiting glyph edit mode', () => {
-        canvas.isGlyphEditMode = true;
-        canvas.hoveredPointIndex = { contourIndex: 0, nodeIndex: 0 };
-        canvas.layerData = { shapes: [], anchors: [] };
+        canvas.outlineEditor.active = true;
+        canvas.outlineEditor.hoveredPointIndex = {
+            contourIndex: 0,
+            nodeIndex: 0
+        };
+        canvas.outlineEditor.layerData = { shapes: [], anchors: [] };
 
         canvas.exitGlyphEditMode();
 
-        expect(canvas.hoveredPointIndex).toBe(null);
+        expect(canvas.outlineEditor.hoveredPointIndex).toBe(null);
     });
 
     test('should clear drag state when exiting glyph edit mode', () => {
-        canvas.isGlyphEditMode = true;
-        canvas.isDraggingPoint = true;
-        canvas.layerData = { shapes: [], anchors: [] };
+        canvas.outlineEditor.active = true;
+        canvas.outlineEditor.isDraggingPoint = true;
+        canvas.outlineEditor.layerData = { shapes: [], anchors: [] };
 
         canvas.exitGlyphEditMode();
 
-        expect(canvas.isDraggingPoint).toBe(false);
+        expect(canvas.outlineEditor.isDraggingPoint).toBe(false);
     });
 });
 
@@ -703,13 +756,13 @@ describe('GlyphCanvas component editing stack', () => {
     });
 
     test('should initialize with empty component stack', () => {
-        expect(canvas.componentStack).toEqual([]);
+        expect(canvas.outlineEditor.componentStack).toEqual([]);
     });
 
     test('should exit component editing when stack is empty', () => {
-        const result = canvas.exitComponentEditing();
+        const result = canvas.outlineEditor.exitComponentEditing();
         expect(result).toBe(false);
-        expect(canvas.componentStack).toEqual([]);
+        expect(canvas.outlineEditor.componentStack).toEqual([]);
     });
 });
 
@@ -760,13 +813,13 @@ describe('GlyphCanvas keyboard handling', () => {
     });
 
     test('should handle space key for preview mode in glyph edit mode', () => {
-        canvas.isGlyphEditMode = true;
+        canvas.outlineEditor.active = true;
         canvas.spaceKeyPressed = false;
 
         const downEvent = new KeyboardEvent('keydown', { code: 'Space' });
         canvas.onKeyDown(downEvent);
 
-        expect(canvas.isPreviewMode).toBe(true);
+        expect(canvas.outlineEditor.isPreviewMode).toBe(true);
     });
 });
 
@@ -883,7 +936,7 @@ describe('GlyphCanvas bounding box calculation', () => {
     beforeEach(() => {
         document.body.innerHTML = '<div id="test-container"></div>';
         canvas = new GlyphCanvas('test-container');
-        canvas.isGlyphEditMode = true;
+        canvas.outlineEditor.active = true;
     });
 
     afterEach(() => {
@@ -891,13 +944,13 @@ describe('GlyphCanvas bounding box calculation', () => {
     });
 
     test('should return null when no layer data', () => {
-        canvas.layerData = null;
-        const bbox = canvas.calculateGlyphBoundingBox();
+        canvas.outlineEditor.layerData = null;
+        const bbox = canvas.outlineEditor.calculateGlyphBoundingBox();
         expect(bbox).toBe(null);
     });
 
     test('should calculate bounding box for points', () => {
-        canvas.layerData = {
+        canvas.outlineEditor.layerData = {
             shapes: [
                 {
                     nodes: [
@@ -908,8 +961,7 @@ describe('GlyphCanvas bounding box calculation', () => {
             ],
             anchors: []
         };
-
-        const bbox = canvas.calculateGlyphBoundingBox();
+        const bbox = canvas.outlineEditor.calculateGlyphBoundingBox();
         expect(bbox).toBeTruthy();
         expect(bbox.minX).toBeLessThanOrEqual(0);
         expect(bbox.maxX).toBeGreaterThanOrEqual(100);
@@ -933,35 +985,19 @@ describe('GlyphCanvas state management', () => {
     });
 
     test('should track layer data dirty state', () => {
-        expect(canvas.layerDataDirty).toBe(false);
+        expect(canvas.outlineEditor.layerDataDirty).toBe(false);
 
-        canvas.isGlyphEditMode = true;
-        canvas.layerData = { shapes: [], anchors: [] };
-        canvas.selectedPoints = [{ contourIndex: 0, nodeIndex: 0 }];
-        canvas.saveLayerData = jest.fn();
+        canvas.outlineEditor.active = true;
+        canvas.outlineEditor.layerData = { shapes: [], anchors: [] };
+        canvas.outlineEditor.selectedPoints = [
+            { contourIndex: 0, nodeIndex: 0 }
+        ];
+        canvas.outlineEditor.saveLayerData = jest.fn();
 
-        canvas.moveSelectedPoints(10, 20);
+        canvas.outlineEditor.moveSelectedPoints(10, 20);
 
         // layerDataDirty should be managed by saveLayerData
-        expect(canvas.saveLayerData).toHaveBeenCalled();
-    });
-
-    test('should track preview mode state', () => {
-        expect(canvas.isPreviewMode).toBe(false);
-        canvas.isPreviewMode = true;
-        expect(canvas.isPreviewMode).toBe(true);
-    });
-
-    test('should track slider active state', () => {
-        expect(canvas.isSliderActive).toBe(false);
-        canvas.isSliderActive = true;
-        expect(canvas.isSliderActive).toBe(true);
-    });
-
-    test('should track interpolating state', () => {
-        expect(canvas.isInterpolating).toBe(false);
-        canvas.isInterpolating = true;
-        expect(canvas.isInterpolating).toBe(true);
+        expect(canvas.outlineEditor.saveLayerData).toHaveBeenCalled();
     });
 });
 

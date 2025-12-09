@@ -3,11 +3,12 @@ import APP_SETTINGS from '../settings';
 
 import type { ViewportManager } from './viewport';
 import type { TextRunEditor } from './textrun';
+import { GlyphCanvas } from '../glyph-canvas';
 
 export class GlyphCanvasRenderer {
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D;
-    glyphCanvas: any;
+    glyphCanvas: GlyphCanvas;
     viewportManager: ViewportManager;
     textRunEditor: TextRunEditor;
     /**
@@ -188,7 +189,8 @@ export class GlyphCanvasRenderer {
 
                 // Set color based on hover, selection state, and edit mode
                 const isHovered =
-                    glyphIndex === this.glyphCanvas.hoveredGlyphIndex;
+                    glyphIndex ===
+                    this.glyphCanvas.outlineEditor.hoveredGlyphIndex;
                 const isSelected =
                     glyphIndex === this.textRunEditor.selectedGlyphIndex;
 
@@ -197,14 +199,14 @@ export class GlyphCanvasRenderer {
                 // In preview mode, always use HarfBuzz (shows final rendered font)
                 const skipHarfBuzz =
                     isSelected &&
-                    this.glyphCanvas.isGlyphEditMode &&
-                    !this.glyphCanvas.isPreviewMode;
+                    this.glyphCanvas.outlineEditor.active &&
+                    !this.glyphCanvas.outlineEditor.isPreviewMode;
 
                 if (!skipHarfBuzz) {
                     // Set color based on mode and state
                     if (
-                        this.glyphCanvas.isGlyphEditMode &&
-                        !this.glyphCanvas.isPreviewMode
+                        this.glyphCanvas.outlineEditor.active &&
+                        !this.glyphCanvas.outlineEditor.isPreviewMode
                     ) {
                         // Glyph edit mode (not preview): active glyph in solid color, others dimmed
                         if (isSelected) {
@@ -218,8 +220,8 @@ export class GlyphCanvasRenderer {
                                 colors.GLYPH_INACTIVE_IN_EDITOR;
                         }
                     } else if (
-                        this.glyphCanvas.isGlyphEditMode &&
-                        this.glyphCanvas.isPreviewMode
+                        this.glyphCanvas.outlineEditor.active &&
+                        this.glyphCanvas.outlineEditor.isPreviewMode
                     ) {
                         // Preview mode: all glyphs in normal color
                         this.ctx.fillStyle = colors.GLYPH_NORMAL;
@@ -264,14 +266,14 @@ export class GlyphCanvasRenderer {
         // Draw glyph name tooltip on hover (in font coordinate space)
         // Don't show tooltip for the selected glyph in glyph edit mode
         if (
-            this.glyphCanvas.hoveredGlyphIndex >= 0 &&
-            this.glyphCanvas.hoveredGlyphIndex <
+            this.glyphCanvas.outlineEditor.hoveredGlyphIndex >= 0 &&
+            this.glyphCanvas.outlineEditor.hoveredGlyphIndex <
                 this.textRunEditor.shapedGlyphs.length
         ) {
             // Skip tooltip for selected glyph in glyph edit mode
             if (
-                this.glyphCanvas.isGlyphEditMode &&
-                this.glyphCanvas.hoveredGlyphIndex ===
+                this.glyphCanvas.outlineEditor.active &&
+                this.glyphCanvas.outlineEditor.hoveredGlyphIndex ===
                     this.textRunEditor.selectedGlyphIndex
             ) {
                 return;
@@ -279,7 +281,7 @@ export class GlyphCanvasRenderer {
 
             const glyphId =
                 this.textRunEditor.shapedGlyphs[
-                    this.glyphCanvas.hoveredGlyphIndex
+                    this.glyphCanvas.outlineEditor.hoveredGlyphIndex
                 ].g;
             let glyphName = `GID ${glyphId}`;
 
@@ -297,11 +299,11 @@ export class GlyphCanvasRenderer {
             // Get glyph position and advance from shaped data
             const shapedGlyph =
                 this.textRunEditor.shapedGlyphs[
-                    this.glyphCanvas.hoveredGlyphIndex
+                    this.glyphCanvas.outlineEditor.hoveredGlyphIndex
                 ];
             const glyphBounds =
                 this.glyphCanvas.glyphBounds[
-                    this.glyphCanvas.hoveredGlyphIndex
+                    this.glyphCanvas.outlineEditor.hoveredGlyphIndex
                 ];
             const glyphWidth = shapedGlyph.ax || 0;
             const glyphYOffset = shapedGlyph.dy || 0; // Y offset from HarfBuzz shaping
@@ -386,15 +388,18 @@ export class GlyphCanvasRenderer {
 
         // Draw outline editor when a layer is selected (skip in preview mode)
         // During interpolation without preview mode, layerData exists without selectedLayerId
-        if (!this.glyphCanvas.layerData || this.glyphCanvas.isPreviewMode) {
+        if (
+            !this.glyphCanvas.outlineEditor.layerData ||
+            this.glyphCanvas.outlineEditor.isPreviewMode
+        ) {
             return;
         }
 
         // Skip rendering if layer data is invalid (empty shapes array)
         // This prevents flicker when interpolation hasn't completed yet
         if (
-            !this.glyphCanvas.layerData.shapes ||
-            this.glyphCanvas.layerData.shapes.length === 0
+            !this.glyphCanvas.outlineEditor.layerData.shapes ||
+            this.glyphCanvas.outlineEditor.layerData.shapes.length === 0
         ) {
             console.log(
                 '[GlyphCanvas]',
@@ -435,11 +440,12 @@ export class GlyphCanvasRenderer {
 
         // Apply accumulated component transform if editing a component
         // This positions the editor at the component's location in the parent
-        const transform = this.glyphCanvas.getAccumulatedTransform();
-        if (this.glyphCanvas.componentStack.length > 0) {
+        const transform =
+            this.glyphCanvas.outlineEditor.getAccumulatedTransform();
+        if (this.glyphCanvas.outlineEditor.componentStack.length > 0) {
             console.log(
                 '[GlyphCanvas]',
-                `drawOutlineEditor: componentStack.length=${this.glyphCanvas.componentStack.length}, accumulated transform=[${transform}]`
+                `drawOutlineEditor: componentStack.length=${this.glyphCanvas.outlineEditor.componentStack.length}, accumulated transform=[${transform}]`
             );
             this.ctx.transform(
                 transform[0],
@@ -456,7 +462,7 @@ export class GlyphCanvasRenderer {
             document.documentElement.getAttribute('data-theme') !== 'light';
 
         // Draw parent glyph outlines in background if editing a component
-        if (this.glyphCanvas.componentStack.length > 0) {
+        if (this.glyphCanvas.outlineEditor.componentStack.length > 0) {
             this.ctx.save();
 
             // Apply inverse transform to draw parent in original (untransformed) position
@@ -522,20 +528,22 @@ export class GlyphCanvasRenderer {
                 maxY = 1000; // Default bounds
 
             if (
-                this.glyphCanvas.layerData &&
-                this.glyphCanvas.layerData.shapes
+                this.glyphCanvas.outlineEditor.layerData &&
+                this.glyphCanvas.outlineEditor.layerData.shapes
             ) {
                 // Calculate bounds from all contours
-                this.glyphCanvas.layerData.shapes.forEach((shape: any) => {
-                    if (shape.nodes && shape.nodes.length > 0) {
-                        shape.nodes.forEach(([x, y]: [number, number]) => {
-                            minX = Math.min(minX, x);
-                            maxX = Math.max(maxX, x);
-                            minY = Math.min(minY, y);
-                            maxY = Math.max(maxY, y);
-                        });
+                this.glyphCanvas.outlineEditor.layerData.shapes.forEach(
+                    (shape: any) => {
+                        if (shape.nodes && shape.nodes.length > 0) {
+                            shape.nodes.forEach(([x, y]: [number, number]) => {
+                                minX = Math.min(minX, x);
+                                maxX = Math.max(maxX, x);
+                                minY = Math.min(minY, y);
+                                maxY = Math.max(maxY, y);
+                            });
+                        }
                     }
-                });
+                );
                 // Add padding
                 minX = Math.floor(minX - 50);
                 maxX = Math.ceil(maxX + 50);
@@ -567,24 +575,24 @@ export class GlyphCanvasRenderer {
         console.log(
             '[GlyphCanvas]',
             'Drawing shapes. Component stack depth:',
-            this.glyphCanvas.componentStack.length,
+            this.glyphCanvas.outlineEditor.componentStack.length,
             'layerData.shapes.length:',
-            this.glyphCanvas.layerData?.shapes?.length
+            this.glyphCanvas.outlineEditor.layerData?.shapes?.length
         );
 
         // Only draw shapes if they exist (empty glyphs like space won't have shapes)
         if (
-            this.glyphCanvas.layerData.shapes &&
-            Array.isArray(this.glyphCanvas.layerData.shapes)
+            this.glyphCanvas.outlineEditor.layerData.shapes &&
+            Array.isArray(this.glyphCanvas.outlineEditor.layerData.shapes)
         ) {
             // Apply monochrome during manual slider interpolation OR when not on an exact layer
             // Don't apply monochrome during layer switch animations
             const isInterpolated =
-                this.glyphCanvas.isInterpolating ||
-                (this.glyphCanvas.selectedLayerId === null &&
-                    this.glyphCanvas.layerData?.isInterpolated);
+                this.glyphCanvas.outlineEditor.isInterpolating ||
+                (this.glyphCanvas.outlineEditor.selectedLayerId === null &&
+                    this.glyphCanvas.outlineEditor.layerData?.isInterpolated);
 
-            this.glyphCanvas.layerData.shapes.forEach(
+            this.glyphCanvas.outlineEditor.layerData.shapes.forEach(
                 (shape: any, contourIndex: number) => {
                     console.log(
                         '[GlyphCanvas]',
@@ -815,19 +823,23 @@ export class GlyphCanvasRenderer {
                         (node: [number, number, string], nodeIndex: number) => {
                             const [x, y, type] = node;
                             const isInterpolated =
-                                this.glyphCanvas.isInterpolating ||
-                                (this.glyphCanvas.selectedLayerId === null &&
-                                    this.glyphCanvas.layerData?.isInterpolated);
+                                this.glyphCanvas.outlineEditor
+                                    .isInterpolating ||
+                                (this.glyphCanvas.outlineEditor
+                                    .selectedLayerId === null &&
+                                    this.glyphCanvas.outlineEditor.layerData
+                                        ?.isInterpolated);
                             const isHovered =
                                 !isInterpolated &&
-                                this.glyphCanvas.hoveredPointIndex &&
-                                this.glyphCanvas.hoveredPointIndex
+                                this.glyphCanvas.outlineEditor
+                                    .hoveredPointIndex &&
+                                this.glyphCanvas.outlineEditor.hoveredPointIndex
                                     .contourIndex === contourIndex &&
-                                this.glyphCanvas.hoveredPointIndex.nodeIndex ===
-                                    nodeIndex;
+                                this.glyphCanvas.outlineEditor.hoveredPointIndex
+                                    .nodeIndex === nodeIndex;
                             const isSelected =
                                 !isInterpolated &&
-                                this.glyphCanvas.selectedPoints.some(
+                                this.glyphCanvas.outlineEditor.selectedPoints.some(
                                     (p: any) =>
                                         p.contourIndex === contourIndex &&
                                         p.nodeIndex === nodeIndex
@@ -950,7 +962,7 @@ export class GlyphCanvasRenderer {
             );
 
             // Draw components
-            this.glyphCanvas.layerData.shapes.forEach(
+            this.glyphCanvas.outlineEditor.layerData.shapes.forEach(
                 (shape: any, index: number) => {
                     if (!shape.Component) {
                         return; // Not a component
@@ -963,15 +975,20 @@ export class GlyphCanvasRenderer {
 
                     // Disable selection/hover highlighting for interpolated data
                     const isInterpolated =
-                        this.glyphCanvas.isInterpolating ||
-                        (this.glyphCanvas.selectedLayerId === null &&
-                            this.glyphCanvas.layerData?.isInterpolated);
+                        this.glyphCanvas.outlineEditor.isInterpolating ||
+                        (this.glyphCanvas.outlineEditor.selectedLayerId ===
+                            null &&
+                            this.glyphCanvas.outlineEditor.layerData
+                                ?.isInterpolated);
                     const isHovered =
                         !isInterpolated &&
-                        this.glyphCanvas.hoveredComponentIndex === index;
+                        this.glyphCanvas.outlineEditor.hoveredComponentIndex ===
+                            index;
                     const isSelected =
                         !isInterpolated &&
-                        this.glyphCanvas.selectedComponents.includes(index);
+                        this.glyphCanvas.outlineEditor.selectedComponents.includes(
+                            index
+                        );
 
                     // Get full transform matrix [a, b, c, d, tx, ty]
                     let a = 1,
@@ -1259,7 +1276,7 @@ export class GlyphCanvasRenderer {
                     this.ctx.restore();
                 }
             );
-        } // End if (this.glyphCanvas.layerData.shapes)
+        } // End if (this.glyphCanvas.outlineEditor.layerData.shapes)
 
         // Draw anchors
         // Skip drawing anchors if zoom is under minimum threshold
@@ -1271,8 +1288,8 @@ export class GlyphCanvasRenderer {
 
         if (
             this.viewportManager.scale >= minZoomForHandles &&
-            this.glyphCanvas.layerData.anchors &&
-            this.glyphCanvas.layerData.anchors.length > 0
+            this.glyphCanvas.outlineEditor.layerData.anchors &&
+            this.glyphCanvas.outlineEditor.layerData.anchors.length > 0
         ) {
             // Calculate anchor size based on zoom level
             const anchorSizeMax =
@@ -1299,19 +1316,24 @@ export class GlyphCanvasRenderer {
             }
             const fontSize = 12 * invScale;
 
-            this.glyphCanvas.layerData.anchors.forEach(
+            this.glyphCanvas.outlineEditor.layerData.anchors.forEach(
                 (anchor: any, index: number) => {
                     const { x, y, name } = anchor;
                     const isInterpolated =
-                        this.glyphCanvas.isInterpolating ||
-                        (this.glyphCanvas.selectedLayerId === null &&
-                            this.glyphCanvas.layerData?.isInterpolated);
+                        this.glyphCanvas.outlineEditor.isInterpolating ||
+                        (this.glyphCanvas.outlineEditor.selectedLayerId ===
+                            null &&
+                            this.glyphCanvas.outlineEditor.layerData
+                                ?.isInterpolated);
                     const isHovered =
                         !isInterpolated &&
-                        this.glyphCanvas.hoveredAnchorIndex === index;
+                        this.glyphCanvas.outlineEditor.hoveredAnchorIndex ===
+                            index;
                     const isSelected =
                         !isInterpolated &&
-                        this.glyphCanvas.selectedAnchors.includes(index);
+                        this.glyphCanvas.outlineEditor.selectedAnchors.includes(
+                            index
+                        );
 
                     // Draw anchor as diamond
                     this.ctx.save();
@@ -1367,7 +1389,10 @@ export class GlyphCanvasRenderer {
 
     drawBoundingBox() {
         // Draw the calculated bounding box in outline editing mode
-        if (!this.glyphCanvas.isGlyphEditMode || !this.glyphCanvas.layerData) {
+        if (
+            !this.glyphCanvas.outlineEditor.active ||
+            !this.glyphCanvas.outlineEditor.layerData
+        ) {
             return;
         }
 
@@ -1376,7 +1401,7 @@ export class GlyphCanvasRenderer {
             return;
         }
 
-        const bbox = this.glyphCanvas.calculateGlyphBoundingBox();
+        const bbox = this.glyphCanvas.outlineEditor.calculateGlyphBoundingBox();
         if (!bbox) {
             return;
         }
@@ -1565,7 +1590,7 @@ export class GlyphCanvasRenderer {
         // Don't draw cursor in glyph edit mode
         if (
             !this.glyphCanvas.cursorVisible ||
-            this.glyphCanvas.isGlyphEditMode
+            this.glyphCanvas.outlineEditor.active
         ) {
             return;
         }
