@@ -7,6 +7,14 @@ import { ParsedNode } from './basictypes';
 import APP_SETTINGS from './settings';
 import { fontCompilation } from './font-compilation';
 import * as opentype from 'opentype.js';
+
+export type GlyphData = {
+    glyphName: string;
+    layers: any[];
+    masters: any[];
+    axesOrder: string[];
+};
+
 class FontManager {
     babelfontJson: string | null;
     babelfontData: any;
@@ -646,7 +654,7 @@ else:
         }
     }
 
-    async fetchGlyphData(glyphName: string): Promise<any> {
+    async fetchGlyphData(glyphName: string): Promise<GlyphData | null> {
         // Fetch glyph and font data from Python
         if (!window.pyodide) {
             return null;

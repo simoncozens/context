@@ -1,9 +1,9 @@
 // File Browser for in-browser memfs
 // Shows the Pyodide file system in view 3
 
-let fileSystemCache = {};
+let fileSystemCache = { currentPath: '/' };
 
-function formatFileSize(bytes) {
+function formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -11,10 +11,10 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-function getFileIcon(filename, isDir) {
+function getFileIcon(filename: string, isDir: boolean): string {
     if (isDir) return '📁';
 
-    const ext = filename.split('.').pop().toLowerCase();
+    const ext = filename.split('.').pop()?.toLowerCase();
     switch (ext) {
         case 'py':
             return '🐍';
@@ -54,15 +54,15 @@ function getFileIcon(filename, isDir) {
     }
 }
 
-function getFileClass(filename, isDir) {
+function getFileClass(filename: string, isDir: boolean): string {
     if (isDir) return 'directory';
 
-    const ext = filename.split('.').pop().toLowerCase();
+    const ext = filename.split('.').pop()?.toLowerCase();
     if (ext === 'py') return 'python-file';
     return 'file';
 }
 
-function isSupportedFontFormat(name, isDir) {
+function isSupportedFontFormat(name: string, isDir: boolean): boolean {
     // Check if it's a .babelfont file (JSON format, not a folder)
     if (!isDir && name.endsWith('.babelfont')) {
         return true;
@@ -70,7 +70,7 @@ function isSupportedFontFormat(name, isDir) {
     return false;
 }
 
-async function openFont(path) {
+async function openFont(path: string) {
     if (!window.pyodide) {
         alert('Python not ready yet. Please wait a moment and try again.');
         return;
@@ -127,7 +127,7 @@ json.dumps(result)
                     `Error initializing tracking: ${result.error}`
                 );
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error(
                 '[FileBrowser]',
                 'Error initializing tracking:',
@@ -170,13 +170,22 @@ json.dumps(result)
         if (window.playSound) {
             window.playSound('done');
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('[FileBrowser]', 'Error opening font:', error);
         alert(`Error opening font: ${error.message}`);
     }
 }
 
-async function scanDirectory(path = '/') {
+interface FileInfo {
+    path: string;
+    is_dir: boolean;
+    size: number;
+    mtime: number;
+}
+
+async function scanDirectory(
+    path: string = '/'
+): Promise<Record<string, FileInfo>> {
     if (!window.pyodide) {
         console.error('[FileBrowser]', 'Pyodide not available');
         return {};
@@ -217,7 +226,7 @@ json.dumps(scan_directory('${path}'))
         `);
 
         return JSON.parse(result);
-    } catch (error) {
+    } catch (error: any) {
         console.error('[FileBrowser]', 'Error scanning directory:', error);
         return {};
     }
@@ -248,13 +257,13 @@ os.makedirs(path, exist_ok=True)
         );
 
         await refreshFileSystem();
-    } catch (error) {
+    } catch (error: any) {
         console.error('[FileBrowser]', 'Error creating folder:', error);
         alert(`Error creating folder: ${error.message}`);
     }
 }
 
-async function downloadFile(filePath, fileName) {
+async function downloadFile(filePath: string, fileName: string) {
     try {
         // Read file from Pyodide filesystem
         const fileData = window.pyodide.FS.readFile(filePath);
@@ -273,13 +282,13 @@ async function downloadFile(filePath, fileName) {
         if (window.term) {
             window.term.echo(`[[;lime;]📥 Downloaded: ${fileName}]`);
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('[FileBrowser]', 'Error downloading file:', error);
         alert(`Error downloading file: ${error.message}`);
     }
 }
 
-async function deleteItem(itemPath, itemName, isDir) {
+async function deleteItem(itemPath: string, itemName: string, isDir: boolean) {
     const confirmMsg = isDir
         ? `Delete folder "${itemName}" and all its contents?`
         : `Delete file "${itemName}"?`;
@@ -301,13 +310,13 @@ else:
         console.log('[FileBrowser]', `Deleted: ${itemPath}`);
 
         await refreshFileSystem();
-    } catch (error) {
+    } catch (error: any) {
         console.error('[FileBrowser]', 'Error deleting item:', error);
         alert(`Error deleting item: ${error.message}`);
     }
 }
 
-async function uploadFiles(files) {
+async function uploadFiles(files: File[] | FileList) {
     const startTime = performance.now();
     const currentPath = fileSystemCache.currentPath || '/';
     let uploadedCount = 0;
@@ -341,7 +350,7 @@ if parent_dir:
             if (pathParts.length > 1) {
                 folderCount = Math.max(folderCount, pathParts.length - 1);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error(
                 '[FileBrowser]',
                 `Error uploading ${file.name}:`,
@@ -443,22 +452,22 @@ async function buildFileTree(rootPath = '/') {
     return html;
 }
 
-function handleFileUpload(event) {
-    const files = Array.from(event.target.files);
+function handleFileUpload(event: Event) {
+    const files: FileList = (event.target as HTMLInputElement).files!;
     if (files.length > 0) {
         uploadFiles(files);
     }
     // Reset input so same file can be uploaded again
-    event.target.value = '';
+    (event.target as HTMLInputElement).value = '';
 }
 
-async function navigateToPath(path) {
+async function navigateToPath(path: string) {
     try {
         const fileTree = document.getElementById('file-tree');
-        fileTree.innerHTML = '<div style="color: #888;">Loading...</div>';
+        fileTree!.innerHTML = '<div style="color: #888;">Loading...</div>';
 
         const html = await buildFileTree(path);
-        fileTree.innerHTML = `
+        fileTree!.innerHTML = `
             <div class="file-path">Current path: ${path}</div>
             ${html}
         `;
@@ -468,16 +477,16 @@ async function navigateToPath(path) {
 
         // Setup drag & drop on the file tree
         setupDragAndDrop();
-    } catch (error) {
+    } catch (error: any) {
         console.error('[FileBrowser]', 'Error navigating to path:', error);
-        document.getElementById('file-tree').innerHTML = `
+        document.getElementById('file-tree')!.innerHTML = `
             <div style="color: #ff3300;">Error loading directory: ${error.message}</div>
         `;
     }
 }
 
 function setupDragAndDrop() {
-    const fileTree = document.getElementById('file-tree');
+    const fileTree = document.getElementById('file-tree')!;
 
     fileTree.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -496,14 +505,14 @@ function setupDragAndDrop() {
         e.stopPropagation();
         fileTree.classList.remove('drag-over');
 
-        const files = Array.from(e.dataTransfer.files);
+        const files = Array.from(e.dataTransfer!.files);
         if (files.length > 0) {
             await uploadFiles(files);
         }
     });
 }
 
-function selectFile(filePath) {
+function selectFile(filePath: string) {
     console.log('[FileBrowser]', 'Selected file:', filePath);
     // TODO: Add file selection handling (e.g., show content, download, etc.)
 }
@@ -541,7 +550,7 @@ if not os.path.exists('/user'):
         // Navigate to /user folder
         await navigateToPath('/user');
         console.log('[FileBrowser]', 'File browser initialized');
-    } catch (error) {
+    } catch (error: any) {
         console.error(
             '[FileBrowser]',
             'Error initializing file browser:',

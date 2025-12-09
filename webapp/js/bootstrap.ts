@@ -6,7 +6,7 @@ import './auto-compile-manager.js';
 import './cache-manager.js';
 import './compile-button.js';
 import './example-loader.js';
-import './file-browser.js';
+import './file-browser';
 import './font-compilation';
 import './font-dropdown.js';
 import './font-manager';
