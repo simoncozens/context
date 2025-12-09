@@ -4,6 +4,8 @@ import APP_SETTINGS from '../settings';
 import type { ViewportManager } from './viewport';
 import type { TextRunEditor } from './textrun';
 import { GlyphCanvas } from '../glyph-canvas';
+import { LayerDataNormalizer } from '../layer-data-normalizer';
+import { PythonBabelfont } from '../pythonbabelfont';
 
 export class GlyphCanvasRenderer {
     canvas: HTMLCanvasElement;
@@ -380,7 +382,7 @@ export class GlyphCanvasRenderer {
             !APP_SETTINGS.OUTLINE_EDITOR
         ) {
             console.error(
-                '[GlyphCanvas]',
+                '[Renderer]',
                 'APP_SETTINGS not available in drawOutlineEditor!'
             );
             return;
@@ -401,10 +403,7 @@ export class GlyphCanvasRenderer {
             !this.glyphCanvas.outlineEditor.layerData.shapes ||
             this.glyphCanvas.outlineEditor.layerData.shapes.length === 0
         ) {
-            console.log(
-                '[GlyphCanvas]',
-                'Skipping drawOutlineEditor: no shapes'
-            );
+            console.log('[Renderer]', 'Skipping drawOutlineEditor: no shapes');
             return;
         }
 
@@ -415,7 +414,7 @@ export class GlyphCanvasRenderer {
                 this.textRunEditor.shapedGlyphs.length
         ) {
             console.log(
-                '[GlyphCanvas]',
+                '[Renderer]',
                 'Skipping drawOutlineEditor: invalid selectedGlyphIndex'
             );
             return;
@@ -444,7 +443,7 @@ export class GlyphCanvasRenderer {
             this.glyphCanvas.outlineEditor.getAccumulatedTransform();
         if (this.glyphCanvas.outlineEditor.componentStack.length > 0) {
             console.log(
-                '[GlyphCanvas]',
+                '[Renderer]',
                 `drawOutlineEditor: componentStack.length=${this.glyphCanvas.outlineEditor.componentStack.length}, accumulated transform=[${transform}]`
             );
             this.ctx.transform(
@@ -506,7 +505,7 @@ export class GlyphCanvasRenderer {
                     }
                 } catch (error) {
                     console.error(
-                        '[GlyphCanvas]',
+                        '[Renderer]',
                         'Failed to draw parent glyph:',
                         error
                     );
@@ -533,14 +532,16 @@ export class GlyphCanvasRenderer {
             ) {
                 // Calculate bounds from all contours
                 this.glyphCanvas.outlineEditor.layerData.shapes.forEach(
-                    (shape: any) => {
-                        if (shape.nodes && shape.nodes.length > 0) {
-                            shape.nodes.forEach(([x, y]: [number, number]) => {
-                                minX = Math.min(minX, x);
-                                maxX = Math.max(maxX, x);
-                                minY = Math.min(minY, y);
-                                maxY = Math.max(maxY, y);
-                            });
+                    (shape) => {
+                        if ('nodes' in shape && shape.nodes.length > 0) {
+                            shape.nodes.forEach(
+                                ({ x, y }: { x: number; y: number }) => {
+                                    minX = Math.min(minX, x);
+                                    maxX = Math.max(maxX, x);
+                                    minY = Math.min(minY, y);
+                                    maxY = Math.max(maxY, y);
+                                }
+                            );
                         }
                     }
                 );
@@ -573,7 +574,7 @@ export class GlyphCanvasRenderer {
 
         // Draw each shape (contour or component)
         console.log(
-            '[GlyphCanvas]',
+            '[Renderer]',
             'Drawing shapes. Component stack depth:',
             this.glyphCanvas.outlineEditor.componentStack.length,
             'layerData.shapes.length:',
@@ -593,383 +594,19 @@ export class GlyphCanvasRenderer {
                     this.glyphCanvas.outlineEditor.layerData?.isInterpolated);
 
             this.glyphCanvas.outlineEditor.layerData.shapes.forEach(
-                (shape: any, contourIndex: number) => {
-                    console.log(
-                        '[GlyphCanvas]',
-                        'Drawing shape',
-                        contourIndex,
-                        ':',
-                        shape.Component ? 'Component' : 'Path',
-                        shape.Component
-                            ? `ref=${shape.Component.reference}`
-                            : `nodes=${shape.nodes?.length || 0}`
-                    );
-                    if (shape.ref) {
-                        // Component - will be drawn separately as markers
-                        return;
-                    }
-
-                    // Handle Path object from to_dict() - nodes might be in shape.Path.nodes
-                    let nodes = shape.nodes;
-                    if (!nodes && shape.Path && shape.Path.nodes) {
-                        // Nodes are in a string format from to_dict() - parse them
-                        const nodesString = shape.Path.nodes;
-
-                        // Parse string format: "x y type x y type ..."
-                        const parts = nodesString.trim().split(/\s+/);
-                        nodes = [];
-                        for (let i = 0; i < parts.length; i += 3) {
-                            if (i + 2 < parts.length) {
-                                const x = parseFloat(parts[i]);
-                                const y = parseFloat(parts[i + 1]);
-                                const type = parts[i + 2];
-                                nodes.push([x, y, type]);
-                            }
-                        }
-
-                        // Cache parsed nodes back to shape for reuse
-                        shape.nodes = nodes;
-                    }
-
-                    if (!nodes || nodes.length === 0) {
-                        return;
-                    }
-
-                    // Draw the outline path
-                    this.ctx.beginPath();
-                    this.ctx.strokeStyle = isDarkTheme ? '#ffffff' : '#000000';
-                    this.ctx.lineWidth =
-                        APP_SETTINGS.OUTLINE_EDITOR.OUTLINE_STROKE_WIDTH *
-                        invScale;
-
-                    // Build the path using the helper method
-                    const startIdx = this.buildPathFromNodes(nodes);
-
-                    this.ctx.closePath();
-                    this.ctx.stroke();
-
-                    // Skip drawing direction arrow and handles if zoom is under minimum threshold
-                    const minZoomForHandles =
-                        APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_HANDLES;
-                    if (this.viewportManager.scale >= minZoomForHandles) {
-                        // Draw direction arrow from the first node
-                        if (nodes.length > 1) {
-                            const [firstX, firstY] = nodes[startIdx];
-                            const nextIdx = (startIdx + 1) % nodes.length;
-                            const [nextX, nextY] = nodes[nextIdx];
-
-                            // Calculate direction vector from first node to next
-                            const dx = nextX - firstX;
-                            const dy = nextY - firstY;
-                            const distance = Math.sqrt(dx * dx + dy * dy);
-
-                            if (distance > 0) {
-                                // Normalize direction
-                                const ndx = dx / distance;
-                                const ndy = dy / distance;
-
-                                // Calculate arrow size based on node size (same scaling as nodes, but slightly bigger)
-                                const nodeSizeMax =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .NODE_SIZE_AT_MAX_ZOOM;
-                                const nodeSizeMin =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .NODE_SIZE_AT_MIN_ZOOM;
-                                const nodeInterpolationMin =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .NODE_SIZE_INTERPOLATION_MIN;
-                                const nodeInterpolationMax =
-                                    APP_SETTINGS.OUTLINE_EDITOR
-                                        .NODE_SIZE_INTERPOLATION_MAX;
-
-                                let baseSize;
-                                if (
-                                    this.viewportManager.scale >=
-                                    nodeInterpolationMax
-                                ) {
-                                    baseSize = nodeSizeMax * invScale;
-                                } else {
-                                    const zoomFactor =
-                                        (this.viewportManager.scale -
-                                            nodeInterpolationMin) /
-                                        (nodeInterpolationMax -
-                                            nodeInterpolationMin);
-                                    baseSize =
-                                        (nodeSizeMin +
-                                            (nodeSizeMax - nodeSizeMin) *
-                                                zoomFactor) *
-                                        invScale;
-                                }
-
-                                // Arrow is slightly bigger than nodes
-                                const arrowLength = baseSize * 4.5;
-                                const arrowWidth = baseSize * 2.5;
-
-                                // Arrow tip position starts at the first node and extends outward
-                                const tipX = firstX + ndx * arrowLength;
-                                const tipY = firstY + ndy * arrowLength;
-
-                                // Arrow base is at the first node
-                                const baseX = firstX;
-                                const baseY = firstY;
-
-                                // Arrow wings (perpendicular offsets)
-                                const perpX = -ndy * arrowWidth;
-                                const perpY = ndx * arrowWidth;
-
-                                // Draw arrow
-                                this.ctx.beginPath();
-                                this.ctx.moveTo(tipX, tipY);
-                                this.ctx.lineTo(baseX + perpX, baseY + perpY);
-                                this.ctx.lineTo(baseX - perpX, baseY - perpY);
-                                this.ctx.closePath();
-
-                                let fillColor = isDarkTheme
-                                    ? 'rgba(0, 255, 255, 0.8)'
-                                    : 'rgba(0, 150, 150, 0.8)';
-
-                                // Apply monochrome for interpolated data
-                                if (isInterpolated) {
-                                    fillColor = desaturateColor(fillColor);
-                                }
-
-                                this.ctx.fillStyle = fillColor;
-                                this.ctx.fill();
-                            }
-                        }
-
-                        // Draw control point handle lines (from off-curve to adjacent on-curve points)
-                        this.ctx.strokeStyle = isDarkTheme
-                            ? 'rgba(255, 255, 255, 0.5)'
-                            : 'rgba(0, 0, 0, 0.5)';
-                        this.ctx.lineWidth = 1 * invScale;
-
-                        nodes.forEach(
-                            (
-                                node: [number, number, string],
-                                nodeIndex: number
-                            ) => {
-                                const [x, y, type] = node;
-
-                                // Only draw lines from off-curve points
-                                if (type === 'o' || type === 'os') {
-                                    // Check if this is the first or second control point in a cubic bezier pair
-                                    let prevIdx = nodeIndex - 1;
-                                    if (prevIdx < 0) prevIdx = nodes.length - 1;
-                                    const [, , prevType] = nodes[prevIdx];
-
-                                    let nextIdx = nodeIndex + 1;
-                                    if (nextIdx >= nodes.length) nextIdx = 0;
-                                    const [, , nextType] = nodes[nextIdx];
-
-                                    const isPrevOffCurve =
-                                        prevType === 'o' || prevType === 'os';
-                                    const isNextOffCurve =
-                                        nextType === 'o' || nextType === 'os';
-
-                                    if (isPrevOffCurve) {
-                                        // This is the second control point - connect to NEXT on-curve point
-                                        let targetIdx = nextIdx;
-                                        // Skip the other off-curve point if needed
-                                        if (isNextOffCurve) {
-                                            targetIdx++;
-                                            if (targetIdx >= nodes.length)
-                                                targetIdx = 0;
-                                        }
-
-                                        const [targetX, targetY, targetType] =
-                                            nodes[targetIdx];
-                                        if (
-                                            targetType === 'c' ||
-                                            targetType === 'cs' ||
-                                            targetType === 'l' ||
-                                            targetType === 'ls'
-                                        ) {
-                                            this.ctx.beginPath();
-                                            this.ctx.moveTo(x, y);
-                                            this.ctx.lineTo(targetX, targetY);
-                                            this.ctx.stroke();
-                                        }
-                                    } else {
-                                        // This is the first control point - connect to PREVIOUS on-curve point
-                                        let targetIdx = prevIdx;
-
-                                        const [targetX, targetY, targetType] =
-                                            nodes[targetIdx];
-                                        if (
-                                            targetType === 'c' ||
-                                            targetType === 'cs' ||
-                                            targetType === 'l' ||
-                                            targetType === 'ls'
-                                        ) {
-                                            this.ctx.beginPath();
-                                            this.ctx.moveTo(x, y);
-                                            this.ctx.lineTo(targetX, targetY);
-                                            this.ctx.stroke();
-                                        }
-                                    }
-                                }
-                            }
-                        );
-                    }
-
-                    // Draw nodes (points)
-                    // Nodes are drawn at the same zoom threshold as handles
-                    if (this.viewportManager.scale < minZoomForHandles) {
-                        return;
-                    }
-
-                    shape.nodes.forEach(
-                        (node: [number, number, string], nodeIndex: number) => {
-                            const [x, y, type] = node;
-                            const isInterpolated =
-                                this.glyphCanvas.outlineEditor
-                                    .isInterpolating ||
-                                (this.glyphCanvas.outlineEditor
-                                    .selectedLayerId === null &&
-                                    this.glyphCanvas.outlineEditor.layerData
-                                        ?.isInterpolated);
-                            const isHovered =
-                                !isInterpolated &&
-                                this.glyphCanvas.outlineEditor
-                                    .hoveredPointIndex &&
-                                this.glyphCanvas.outlineEditor.hoveredPointIndex
-                                    .contourIndex === contourIndex &&
-                                this.glyphCanvas.outlineEditor.hoveredPointIndex
-                                    .nodeIndex === nodeIndex;
-                            const isSelected =
-                                !isInterpolated &&
-                                this.glyphCanvas.outlineEditor.selectedPoints.some(
-                                    (p: any) =>
-                                        p.contourIndex === contourIndex &&
-                                        p.nodeIndex === nodeIndex
-                                );
-
-                            // Skip quadratic bezier points for now
-                            if (type === 'q' || type === 'qs') {
-                                return;
-                            }
-
-                            // Calculate point size based on zoom level
-                            const nodeSizeMax =
-                                APP_SETTINGS.OUTLINE_EDITOR
-                                    .NODE_SIZE_AT_MAX_ZOOM;
-                            const nodeSizeMin =
-                                APP_SETTINGS.OUTLINE_EDITOR
-                                    .NODE_SIZE_AT_MIN_ZOOM;
-                            const nodeInterpolationMin =
-                                APP_SETTINGS.OUTLINE_EDITOR
-                                    .NODE_SIZE_INTERPOLATION_MIN;
-                            const nodeInterpolationMax =
-                                APP_SETTINGS.OUTLINE_EDITOR
-                                    .NODE_SIZE_INTERPOLATION_MAX;
-
-                            let pointSize;
-                            if (
-                                this.viewportManager.scale >=
-                                nodeInterpolationMax
-                            ) {
-                                pointSize = nodeSizeMax * invScale;
-                            } else {
-                                // Interpolate between min and max size
-                                const zoomFactor =
-                                    (this.viewportManager.scale -
-                                        nodeInterpolationMin) /
-                                    (nodeInterpolationMax -
-                                        nodeInterpolationMin);
-                                pointSize =
-                                    (nodeSizeMin +
-                                        (nodeSizeMax - nodeSizeMin) *
-                                            zoomFactor) *
-                                    invScale;
-                            }
-                            if (type === 'o' || type === 'os') {
-                                // Off-curve point (cubic bezier control point) - draw as circle
-                                const colors = isDarkTheme
-                                    ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
-                                    : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
-                                this.ctx.beginPath();
-                                this.ctx.arc(x, y, pointSize, 0, Math.PI * 2);
-                                let fillColor = isSelected
-                                    ? colors.CONTROL_POINT_SELECTED
-                                    : isHovered
-                                      ? colors.CONTROL_POINT_HOVERED
-                                      : colors.CONTROL_POINT_NORMAL;
-
-                                // Apply monochrome for interpolated data
-                                if (isInterpolated) {
-                                    fillColor = desaturateColor(fillColor);
-                                }
-
-                                this.ctx.fillStyle = fillColor;
-                                this.ctx.fill();
-                                // Stroke permanently removed
-                            } else {
-                                // On-curve point - draw as square
-                                const colors = isDarkTheme
-                                    ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
-                                    : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
-                                let fillColor = isSelected
-                                    ? colors.NODE_SELECTED
-                                    : isHovered
-                                      ? colors.NODE_HOVERED
-                                      : colors.NODE_NORMAL;
-
-                                // Apply monochrome for interpolated data
-                                if (isInterpolated) {
-                                    fillColor = desaturateColor(fillColor);
-                                }
-
-                                this.ctx.fillStyle = fillColor;
-                                this.ctx.fillRect(
-                                    x - pointSize,
-                                    y - pointSize,
-                                    pointSize * 2,
-                                    pointSize * 2
-                                );
-                                // Stroke permanently removed
-                            }
-
-                            // Draw smooth indicator for smooth nodes
-                            if (
-                                type === 'cs' ||
-                                type === 'os' ||
-                                type === 'ls'
-                            ) {
-                                let smoothColor = isDarkTheme
-                                    ? '#ffffff'
-                                    : '#000000';
-
-                                // Apply monochrome for interpolated data
-                                if (isInterpolated) {
-                                    smoothColor = desaturateColor(smoothColor);
-                                }
-
-                                this.ctx.beginPath();
-                                this.ctx.arc(
-                                    x,
-                                    y,
-                                    pointSize * 0.4,
-                                    0,
-                                    Math.PI * 2
-                                );
-                                this.ctx.fillStyle = smoothColor;
-                                this.ctx.fill();
-                            }
-                        }
-                    );
-                }
+                (shape, contourIndex: number) =>
+                    this.drawShape(shape, contourIndex, isInterpolated)
             );
 
             // Draw components
             this.glyphCanvas.outlineEditor.layerData.shapes.forEach(
-                (shape: any, index: number) => {
-                    if (!shape.Component) {
+                (shape, index: number) => {
+                    if (!('Component' in shape)) {
                         return; // Not a component
                     }
 
                     console.log(
-                        '[GlyphCanvas]',
+                        '[Renderer]',
                         `Component ${index}: reference="${shape.Component.reference}", has layerData=${!!shape.Component.layerData}, shapes=${shape.Component.layerData?.shapes?.length || 0}`
                     );
 
@@ -998,7 +635,7 @@ export class GlyphCanvasRenderer {
                         tx = 0,
                         ty = 0;
                     if (
-                        shape.Component.transform &&
+                        'Component' in shape &&
                         Array.isArray(shape.Component.transform)
                     ) {
                         a = shape.Component.transform[0] || 1;
@@ -1016,6 +653,7 @@ export class GlyphCanvasRenderer {
 
                     // Draw the component's outline shapes if they were fetched
                     if (
+                        'Component' in shape &&
                         shape.Component.layerData &&
                         shape.Component.layerData.shapes
                     ) {
@@ -1024,7 +662,7 @@ export class GlyphCanvasRenderer {
                             shapes: any[],
                             transform = [1, 0, 0, 1, 0, 0]
                         ) => {
-                            shapes.forEach((componentShape: any) => {
+                            shapes.forEach((componentShape) => {
                                 // Handle nested components
                                 if (componentShape.Component) {
                                     // Save context for nested component transform
@@ -1267,7 +905,8 @@ export class GlyphCanvasRenderer {
                         ? 'rgba(255, 255, 255, 0.8)'
                         : 'rgba(0, 0, 0, 0.8)';
                     this.ctx.fillText(
-                        shape.Component.reference || 'component',
+                        ('Component' in shape && shape.Component.reference) ||
+                            'component',
                         markerSize * 1.5,
                         markerSize
                     );
@@ -1387,6 +1026,332 @@ export class GlyphCanvasRenderer {
         this.ctx.restore();
     }
 
+    drawShape(
+        shape: PythonBabelfont.Shape,
+        contourIndex: number,
+        isInterpolated: boolean
+    ) {
+        const invScale = 1 / this.viewportManager.scale;
+        const isDarkTheme =
+            document.documentElement.getAttribute('data-theme') !== 'light';
+        console.log(
+            '[Renderer]',
+            'Drawing shape',
+            contourIndex,
+            ':',
+            'Component' in shape ? 'Component' : 'Path',
+            'Component' in shape
+                ? `ref=${shape.Component.reference}`
+                : `nodes=${'nodes' in shape ? shape.nodes?.length : 0}`
+        );
+        if ('Component' in shape) {
+            // Component - will be drawn separately as markers
+            return;
+        }
+
+        // Handle Path object from to_dict() - nodes might be in shape.Path.nodes
+        let nodes = 'nodes' in shape ? shape.nodes : undefined;
+        if (!nodes && 'Path' in shape && shape.Path.nodes) {
+            // Nodes are in a string format from to_dict() - parse them
+            (shape as any).nodes = LayerDataNormalizer.parseNodes(
+                shape.Path.nodes
+            );
+            delete (shape as any).Path; // Remove Path wrapper after parsing
+            nodes = (shape as any).nodes;
+        }
+
+        if (!nodes || nodes.length === 0) {
+            return;
+        }
+
+        console.log('Drawing nodes', nodes);
+
+        // Draw the outline path
+        this.ctx.beginPath();
+        this.ctx.strokeStyle = isDarkTheme ? '#ffffff' : '#000000';
+        this.ctx.lineWidth =
+            APP_SETTINGS.OUTLINE_EDITOR.OUTLINE_STROKE_WIDTH * invScale;
+
+        // Build the path using the helper method
+        const startIdx = this.buildPathFromNodes(nodes);
+
+        this.ctx.closePath();
+        this.ctx.stroke();
+
+        // Skip drawing direction arrow and handles if zoom is under minimum threshold
+        const minZoomForHandles =
+            APP_SETTINGS.OUTLINE_EDITOR.MIN_ZOOM_FOR_HANDLES;
+        if (this.viewportManager.scale >= minZoomForHandles) {
+            // Draw direction arrow from the first node
+            if (nodes.length > 1) {
+                const { x: firstX, y: firstY } = nodes[startIdx];
+                const nextIdx = (startIdx + 1) % nodes.length;
+                const { x: nextX, y: nextY } = nodes[nextIdx];
+
+                // Calculate direction vector from first node to next
+                const dx = nextX - firstX;
+                const dy = nextY - firstY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance > 0) {
+                    // Normalize direction
+                    const ndx = dx / distance;
+                    const ndy = dy / distance;
+
+                    // Calculate arrow size based on node size (same scaling as nodes, but slightly bigger)
+                    const nodeSizeMax =
+                        APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MAX_ZOOM;
+                    const nodeSizeMin =
+                        APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MIN_ZOOM;
+                    const nodeInterpolationMin =
+                        APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MIN;
+                    const nodeInterpolationMax =
+                        APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MAX;
+
+                    let baseSize;
+                    if (this.viewportManager.scale >= nodeInterpolationMax) {
+                        baseSize = nodeSizeMax * invScale;
+                    } else {
+                        const zoomFactor =
+                            (this.viewportManager.scale -
+                                nodeInterpolationMin) /
+                            (nodeInterpolationMax - nodeInterpolationMin);
+                        baseSize =
+                            (nodeSizeMin +
+                                (nodeSizeMax - nodeSizeMin) * zoomFactor) *
+                            invScale;
+                    }
+
+                    // Arrow is slightly bigger than nodes
+                    const arrowLength = baseSize * 4.5;
+                    const arrowWidth = baseSize * 2.5;
+
+                    // Arrow tip position starts at the first node and extends outward
+                    const tipX = firstX + ndx * arrowLength;
+                    const tipY = firstY + ndy * arrowLength;
+
+                    // Arrow base is at the first node
+                    const baseX = firstX;
+                    const baseY = firstY;
+
+                    // Arrow wings (perpendicular offsets)
+                    const perpX = -ndy * arrowWidth;
+                    const perpY = ndx * arrowWidth;
+
+                    // Draw arrow
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(tipX, tipY);
+                    this.ctx.lineTo(baseX + perpX, baseY + perpY);
+                    this.ctx.lineTo(baseX - perpX, baseY - perpY);
+                    this.ctx.closePath();
+
+                    let fillColor = isDarkTheme
+                        ? 'rgba(0, 255, 255, 0.8)'
+                        : 'rgba(0, 150, 150, 0.8)';
+
+                    // Apply monochrome for interpolated data
+                    if (isInterpolated) {
+                        fillColor = desaturateColor(fillColor);
+                    }
+
+                    this.ctx.fillStyle = fillColor;
+                    this.ctx.fill();
+                }
+            }
+
+            // Draw control point handle lines (from off-curve to adjacent on-curve points)
+            this.ctx.strokeStyle = isDarkTheme
+                ? 'rgba(255, 255, 255, 0.5)'
+                : 'rgba(0, 0, 0, 0.5)';
+            this.ctx.lineWidth = 1 * invScale;
+
+            nodes.forEach((node: PythonBabelfont.Node, nodeIndex: number) => {
+                const { x, y, type } = node;
+
+                // Only draw lines from off-curve points
+                if (type === 'o') {
+                    // Check if this is the first or second control point in a cubic bezier pair
+                    let prevIdx = nodeIndex - 1;
+                    if (prevIdx < 0) prevIdx = nodes.length - 1;
+                    const prevType = nodes[prevIdx].type;
+
+                    let nextIdx = nodeIndex + 1;
+                    if (nextIdx >= nodes.length) nextIdx = 0;
+                    const nextType = nodes[nextIdx].type;
+                    const isPrevOffCurve = prevType === 'o';
+                    const isNextOffCurve = nextType === 'o';
+
+                    if (isPrevOffCurve) {
+                        // This is the second control point - connect to NEXT on-curve point
+                        let targetIdx = nextIdx;
+                        // Skip the other off-curve point if needed
+                        if (isNextOffCurve) {
+                            targetIdx++;
+                            if (targetIdx >= nodes.length) targetIdx = 0;
+                        }
+
+                        const {
+                            x: targetX,
+                            y: targetY,
+                            type: targetType
+                        } = nodes[targetIdx];
+                        if (
+                            targetType === 'c' ||
+                            targetType === 'cs' ||
+                            targetType === 'l' ||
+                            targetType === 'ls'
+                        ) {
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(x, y);
+                            this.ctx.lineTo(targetX, targetY);
+                            this.ctx.stroke();
+                        }
+                    } else {
+                        // This is the first control point - connect to PREVIOUS on-curve point
+                        let targetIdx = prevIdx;
+
+                        const {
+                            x: targetX,
+                            y: targetY,
+                            type: targetType
+                        } = nodes[targetIdx];
+                        if (
+                            targetType === 'c' ||
+                            targetType === 'cs' ||
+                            targetType === 'l'
+                        ) {
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(x, y);
+                            this.ctx.lineTo(targetX, targetY);
+                            this.ctx.stroke();
+                        }
+                    }
+                }
+            });
+        }
+
+        // Draw nodes (points)
+        // Nodes are drawn at the same zoom threshold as handles
+        if (this.viewportManager.scale < minZoomForHandles) {
+            return;
+        }
+
+        (shape as any).nodes.forEach(
+            (node: PythonBabelfont.Node, nodeIndex: number) => {
+                const { x, y, type } = node;
+                const isInterpolated =
+                    this.glyphCanvas.outlineEditor.isInterpolating ||
+                    (this.glyphCanvas.outlineEditor.selectedLayerId === null &&
+                        this.glyphCanvas.outlineEditor.layerData
+                            ?.isInterpolated);
+                const isHovered =
+                    !isInterpolated &&
+                    this.glyphCanvas.outlineEditor.hoveredPointIndex &&
+                    this.glyphCanvas.outlineEditor.hoveredPointIndex
+                        .contourIndex === contourIndex &&
+                    this.glyphCanvas.outlineEditor.hoveredPointIndex
+                        .nodeIndex === nodeIndex;
+                const isSelected =
+                    !isInterpolated &&
+                    this.glyphCanvas.outlineEditor.selectedPoints.some(
+                        (p: any) =>
+                            p.contourIndex === contourIndex &&
+                            p.nodeIndex === nodeIndex
+                    );
+
+                // Skip quadratic bezier points for now
+                if (type === 'q' || type === 'qs') {
+                    return;
+                }
+
+                // Calculate point size based on zoom level
+                const nodeSizeMax =
+                    APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MAX_ZOOM;
+                const nodeSizeMin =
+                    APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_AT_MIN_ZOOM;
+                const nodeInterpolationMin =
+                    APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MIN;
+                const nodeInterpolationMax =
+                    APP_SETTINGS.OUTLINE_EDITOR.NODE_SIZE_INTERPOLATION_MAX;
+
+                let pointSize;
+                if (this.viewportManager.scale >= nodeInterpolationMax) {
+                    pointSize = nodeSizeMax * invScale;
+                } else {
+                    // Interpolate between min and max size
+                    const zoomFactor =
+                        (this.viewportManager.scale - nodeInterpolationMin) /
+                        (nodeInterpolationMax - nodeInterpolationMin);
+                    pointSize =
+                        (nodeSizeMin +
+                            (nodeSizeMax - nodeSizeMin) * zoomFactor) *
+                        invScale;
+                }
+                if (type === 'o') {
+                    // Off-curve point (cubic bezier control point) - draw as circle
+                    const colors = isDarkTheme
+                        ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+                        : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, pointSize, 0, Math.PI * 2);
+                    let fillColor = isSelected
+                        ? colors.CONTROL_POINT_SELECTED
+                        : isHovered
+                          ? colors.CONTROL_POINT_HOVERED
+                          : colors.CONTROL_POINT_NORMAL;
+
+                    // Apply monochrome for interpolated data
+                    if (isInterpolated) {
+                        fillColor = desaturateColor(fillColor);
+                    }
+
+                    this.ctx.fillStyle = fillColor;
+                    this.ctx.fill();
+                    // Stroke permanently removed
+                } else {
+                    // On-curve point - draw as square
+                    const colors = isDarkTheme
+                        ? APP_SETTINGS.OUTLINE_EDITOR.COLORS_DARK
+                        : APP_SETTINGS.OUTLINE_EDITOR.COLORS_LIGHT;
+                    let fillColor = isSelected
+                        ? colors.NODE_SELECTED
+                        : isHovered
+                          ? colors.NODE_HOVERED
+                          : colors.NODE_NORMAL;
+
+                    // Apply monochrome for interpolated data
+                    if (isInterpolated) {
+                        fillColor = desaturateColor(fillColor);
+                    }
+
+                    this.ctx.fillStyle = fillColor;
+                    this.ctx.fillRect(
+                        x - pointSize,
+                        y - pointSize,
+                        pointSize * 2,
+                        pointSize * 2
+                    );
+                    // Stroke permanently removed
+                }
+
+                // Draw smooth indicator for smooth nodes
+                if (type === 'cs') {
+                    let smoothColor = isDarkTheme ? '#ffffff' : '#000000';
+
+                    // Apply monochrome for interpolated data
+                    if (isInterpolated) {
+                        smoothColor = desaturateColor(smoothColor);
+                    }
+
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, pointSize * 0.4, 0, Math.PI * 2);
+                    this.ctx.fillStyle = smoothColor;
+                    this.ctx.fill();
+                }
+            }
+        );
+    }
+
     drawBoundingBox() {
         // Draw the calculated bounding box in outline editing mode
         if (
@@ -1495,7 +1460,7 @@ export class GlyphCanvasRenderer {
         this.ctx.restore();
     }
 
-    buildPathFromNodes(nodes: any[], pathTarget?: Path2D) {
+    buildPathFromNodes(nodes: PythonBabelfont.Node[], pathTarget?: Path2D) {
         // Build a canvas path from a nodes array
         // pathTarget: if provided (Path2D object), draws to it; otherwise draws to this.ctx
         // Returns the startIdx for use in drawing direction arrows
@@ -1509,19 +1474,14 @@ export class GlyphCanvasRenderer {
         // Find first on-curve point to start
         let startIdx = 0;
         for (let i = 0; i < nodes.length; i++) {
-            const [, , type] = nodes[i];
-            if (
-                type === 'c' ||
-                type === 'cs' ||
-                type === 'l' ||
-                type === 'ls'
-            ) {
+            const { x, y, type } = nodes[i];
+            if (type === 'c' || type === 'cs' || type === 'l') {
                 startIdx = i;
                 break;
             }
         }
 
-        const [startX, startY] = nodes[startIdx];
+        const { x: startX, y: startY } = nodes[startIdx];
         target.moveTo(startX, startY);
 
         // Draw contour by looking ahead for control points
@@ -1532,22 +1492,26 @@ export class GlyphCanvasRenderer {
             const next2Idx = (startIdx + i + 2) % nodes.length;
             const next3Idx = (startIdx + i + 3) % nodes.length;
 
-            const [, , type] = nodes[idx];
-            const [next1X, next1Y, next1Type] = nodes[nextIdx];
+            const { x, y, type } = nodes[idx];
+            const { x: next1X, y: next1Y, type: next1Type } = nodes[nextIdx];
 
             if (
                 type === 'l' ||
-                type === 'ls' ||
                 type === 'c' ||
-                type === 'cs'
+                type === 'cs' ||
+                type === 'ls'
             ) {
                 // We're at an on-curve point, look ahead for next segment
-                if (next1Type === 'o' || next1Type === 'os') {
+                if (next1Type === 'o') {
                     // Next is off-curve - check if cubic (two consecutive off-curve)
-                    const [next2X, next2Y, next2Type] = nodes[next2Idx];
-                    const [next3X, next3Y] = nodes[next3Idx];
+                    const {
+                        x: next2X,
+                        y: next2Y,
+                        type: next2Type
+                    } = nodes[next2Idx];
+                    const { x: next3X, y: next3Y } = nodes[next3Idx];
 
-                    if (next2Type === 'o' || next2Type === 'os') {
+                    if (next2Type === 'o') {
                         // Cubic bezier: two off-curve control points + on-curve endpoint
                         target.bezierCurveTo(
                             next1X,
@@ -1598,7 +1562,7 @@ export class GlyphCanvasRenderer {
         const invScale = 1 / this.viewportManager.scale;
 
         console.log(
-            '[GlyphCanvas]',
+            '[Renderer]',
             `Drawing cursor at x=${this.textRunEditor.cursorX.toFixed(
                 0
             )} for logical position ${this.textRunEditor.cursorPosition}`
@@ -1635,10 +1599,10 @@ export class GlyphCanvasRenderer {
         const range = this.textRunEditor.getSelectionRange();
         const invScale = 1 / this.viewportManager.scale;
 
-        console.log('[GlyphCanvas]', '=== Drawing Selection ===');
-        console.log('[GlyphCanvas]', 'Selection range:', range);
+        console.log('[Renderer]', '=== Drawing Selection ===');
+        console.log('[Renderer]', 'Selection range:', range);
         console.log(
-            '[GlyphCanvas]',
+            '[Renderer]',
             'Text:',
             `"${this.textRunEditor.textBuffer.slice(range.start, range.end)}"`
         );
@@ -1657,7 +1621,7 @@ export class GlyphCanvasRenderer {
             }
 
             console.log(
-                '[GlyphCanvas]',
+                '[Renderer]',
                 `Drawing selection for cluster [${clusterStart}-${clusterEnd}), RTL=${cluster.isRTL}, x=${cluster.x.toFixed(0)}, width=${cluster.width.toFixed(0)}`
             );
 
@@ -1667,7 +1631,7 @@ export class GlyphCanvasRenderer {
             const selEnd = Math.min(range.end, clusterEnd);
 
             console.log(
-                '[GlyphCanvas]',
+                '[Renderer]',
                 `  Selection overlap: [${selStart}-${selEnd})`
             );
 
@@ -1684,7 +1648,7 @@ export class GlyphCanvasRenderer {
                 highlightX = cluster.x;
                 highlightWidth = cluster.width;
                 console.log(
-                    '[GlyphCanvas]',
+                    '[Renderer]',
                     `  Full cluster selected: x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
                 );
             } else if (cluster.isRTL) {
@@ -1705,7 +1669,7 @@ export class GlyphCanvasRenderer {
                     highlightX = Math.min(startX, endX);
                     highlightWidth = Math.abs(startX - endX);
                     console.log(
-                        '[GlyphCanvas]',
+                        '[Renderer]',
                         `  RTL partial (multi-char): progress ${startProgress.toFixed(2)}-${endProgress.toFixed(2)}, x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
                     );
                 } else {
@@ -1713,7 +1677,7 @@ export class GlyphCanvasRenderer {
                     highlightX = cluster.x;
                     highlightWidth = cluster.width;
                     console.log(
-                        '[GlyphCanvas]',
+                        '[Renderer]',
                         `  RTL partial (single-char): x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
                     );
                 }
@@ -1731,7 +1695,7 @@ export class GlyphCanvasRenderer {
                     highlightWidth =
                         cluster.width * (endProgress - startProgress);
                     console.log(
-                        '[GlyphCanvas]',
+                        '[Renderer]',
                         `  LTR partial (multi-char): progress ${startProgress.toFixed(2)}-${endProgress.toFixed(2)}, x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
                     );
                 } else {
@@ -1739,7 +1703,7 @@ export class GlyphCanvasRenderer {
                     highlightX = cluster.x;
                     highlightWidth = cluster.width;
                     console.log(
-                        '[GlyphCanvas]',
+                        '[Renderer]',
                         `  LTR partial (single-char): x=${highlightX.toFixed(0)}, width=${highlightWidth.toFixed(0)}`
                     );
                 }
@@ -1749,6 +1713,6 @@ export class GlyphCanvasRenderer {
             this.ctx.fillRect(highlightX, -300, highlightWidth, 1300);
         }
 
-        console.log('[GlyphCanvas]', '========================');
+        console.log('[Renderer]', '========================');
     }
 }

@@ -1,21 +1,46 @@
 import { LayerDataNormalizer } from '../layer-data-normalizer';
-import { FontInterpolationManager } from '../font-interpolation';
+import { fontInterpolation } from '../font-interpolation';
 import { GlyphCanvas } from '../glyph-canvas';
 import fontManager from '../font-manager';
+import { PythonBabelfont } from '../pythonbabelfont';
+import { Transform } from '../basictypes';
+import { Logger } from '../logger';
 
-// Create singleton instance
-const fontInterpolation = new FontInterpolationManager();
+let console: Logger = new Logger('OutlineEditor', true);
 
 type Point = { contourIndex: number; nodeIndex: number };
 
 export type ComponentStackItem = {
     componentIndex: number;
     transform: number[];
-    layerData: any;
+    layerData: PythonBabelfont.Layer | null;
     selectedPoints: Point[];
     selectedAnchors: number[];
     selectedComponents: number[];
     glyphName: string;
+};
+
+// Recursively parse nodes in component layer data (including nested components)
+const parseComponentNodes = (shapes: PythonBabelfont.Shape[]) => {
+    if (!shapes) return;
+
+    shapes.forEach((shape) => {
+        // Parse nodes in Path shapes
+        if ('Path' in shape && shape.Path.nodes) {
+            let nodesArray = LayerDataNormalizer.parseNodes(shape.Path.nodes);
+            shape = { nodes: nodesArray };
+            console.log('Parsed shape nodes:', nodesArray.length, 'nodes');
+        }
+
+        // Recursively parse nested component data
+        if (
+            'Component' in shape &&
+            shape.Component.layerData &&
+            shape.Component.layerData.shapes
+        ) {
+            parseComponentNodes(shape.Component.layerData.shapes);
+        }
+    });
 };
 
 export class OutlineEditor {
@@ -43,8 +68,8 @@ export class OutlineEditor {
     componentStack: ComponentStackItem[] = [];
     previousSelectedLayerId: string | null = null;
     previousVariationSettings: Record<string, number> | null = null;
-    layerData: any = null;
-    targetLayerData: any = null;
+    layerData: PythonBabelfont.Layer | null = null;
+    targetLayerData: PythonBabelfont.Layer | null = null;
     selectedLayerId: string | null = null;
     isInterpolating: boolean = false;
     isLayerSwitchAnimating: boolean = false;
@@ -103,10 +128,7 @@ export class OutlineEditor {
         // This handles the case where Space keyup doesn't fire due to browser/OS issues
 
         if (!this.active) return;
-        console.log(
-            '[GlyphCanvas]',
-            '  -> Exiting preview mode on Cmd release'
-        );
+        console.log('  -> Exiting preview mode on Cmd release');
         this.isPreviewMode = false;
         this.spaceKeyPressed = false; // Also reset Space state since keyup might not fire
         this.glyphCanvas.render();
@@ -125,7 +147,7 @@ export class OutlineEditor {
 
         e.preventDefault();
 
-        console.log('[GlyphCanvas]', 'Escape pressed. Previous state:', {
+        console.log('Escape pressed. Previous state:', {
             layerId: this.previousSelectedLayerId,
             settings: this.previousVariationSettings,
             componentStackDepth: this.componentStack.length
@@ -141,14 +163,13 @@ export class OutlineEditor {
             // Check if we're already on the previous layer
             if (this.previousSelectedLayerId === this.selectedLayerId) {
                 console.log(
-                    '[GlyphCanvas]',
                     'Already on previous layer, clearing state and continuing to exit'
                 );
                 this.previousSelectedLayerId = null;
                 this.previousVariationSettings = null;
                 // Don't return - fall through to exit component or edit mode
             } else {
-                console.log('[GlyphCanvas]', 'Restoring previous layer state');
+                console.log('Restoring previous layer state');
                 // Restore previous layer selection and axis values
                 this.selectedLayerId = this.previousSelectedLayerId;
 
@@ -236,14 +257,10 @@ export class OutlineEditor {
                 this.previousVariationSettings = {
                     ...this.glyphCanvas.axesManager!.variationSettings
                 };
-                console.log(
-                    '[GlyphCanvas]',
-                    'Updated previous state to new layer:',
-                    {
-                        layerId: this.previousSelectedLayerId,
-                        settings: this.previousVariationSettings
-                    }
-                );
+                console.log('Updated previous state to new layer:', {
+                    layerId: this.previousSelectedLayerId,
+                    settings: this.previousVariationSettings
+                });
                 await this.fetchLayerData();
             } else if (this.layerData && this.layerData.isInterpolated) {
                 // No exact layer match - keep interpolated data
@@ -274,14 +291,10 @@ export class OutlineEditor {
                 this.previousVariationSettings = {
                     ...this.glyphCanvas.axesManager!.variationSettings
                 };
-                console.log(
-                    '[GlyphCanvas]',
-                    'Updated previous state to new layer:',
-                    {
-                        layerId: this.previousSelectedLayerId,
-                        settings: this.previousVariationSettings
-                    }
-                );
+                console.log('Updated previous state to new layer:', {
+                    layerId: this.previousSelectedLayerId,
+                    settings: this.previousVariationSettings
+                });
                 await this.fetchLayerData();
             }
 
@@ -305,7 +318,7 @@ export class OutlineEditor {
             this.previousVariationSettings = {
                 ...this.glyphCanvas.axesManager!.variationSettings
             };
-            console.log('[GlyphCanvas]', 'Saved previous state for Escape:', {
+            console.log('Saved previous state for Escape:', {
                 layerId: this.previousSelectedLayerId,
                 settings: this.previousVariationSettings
             });
@@ -342,7 +355,6 @@ export class OutlineEditor {
 
     onDoubleClick(e: MouseEvent) {
         console.log(
-            '[GlyphCanvas]',
             'Double-click detected. isGlyphEditMode:',
             this.active,
             'selectedLayerId:',
@@ -354,7 +366,6 @@ export class OutlineEditor {
         // Double-click on component - enter component editing (without selecting it)
         if (this.hoveredComponentIndex !== null) {
             console.log(
-                '[GlyphCanvas]',
                 'Entering component editing for index:',
                 this.hoveredComponentIndex
             );
@@ -562,23 +573,25 @@ export class OutlineEditor {
     }
 
     _updateDraggedPoints(deltaX: number, deltaY: number): void {
+        if (!this.layerData) return;
         for (const point of this.selectedPoints) {
             const { contourIndex, nodeIndex } = point;
+            let thisContour = this.layerData.shapes[contourIndex];
             if (
-                this.layerData.shapes[contourIndex] &&
-                this.layerData.shapes[contourIndex].nodes[nodeIndex]
+                thisContour &&
+                'nodes' in thisContour &&
+                thisContour.nodes[nodeIndex]
             ) {
-                this.layerData.shapes[contourIndex].nodes[nodeIndex][0] +=
-                    deltaX;
-                this.layerData.shapes[contourIndex].nodes[nodeIndex][1] +=
-                    deltaY;
+                thisContour.nodes[nodeIndex].x += deltaX;
+                thisContour.nodes[nodeIndex].y += deltaY;
             }
         }
     }
 
     _updateDraggedAnchors(deltaX: number, deltaY: number): void {
+        let anchors = this.layerData!.anchors || [];
         for (const anchorIndex of this.selectedAnchors) {
-            const anchor = this.layerData.anchors[anchorIndex];
+            const anchor = anchors[anchorIndex];
             if (anchor) {
                 anchor.x += deltaX;
                 anchor.y += deltaY;
@@ -588,8 +601,8 @@ export class OutlineEditor {
 
     _updateDraggedComponents(deltaX: number, deltaY: number): void {
         for (const compIndex of this.selectedComponents) {
-            const shape = this.layerData.shapes[compIndex];
-            if (shape && shape.Component) {
+            const shape = this.layerData!.shapes[compIndex];
+            if (shape && 'Component' in shape) {
                 if (!shape.Component.transform) {
                     // Initialize transform if it doesn't exist
                     shape.Component.transform = [1, 0, 0, 1, 0, 0];
@@ -689,13 +702,21 @@ export class OutlineEditor {
 
         // First, check for hovering near component origins, which take priority.
         const components = this.layerData.shapes
-            .map((shape: any, index: number) => ({ shape, index }))
-            .filter((item: any) => item.shape.Component);
+            .map((shape: PythonBabelfont.Shape, index: number) => ({
+                shape,
+                index
+            }))
+            .filter(
+                (item: { shape: PythonBabelfont.Shape; index: number }) =>
+                    'Component' in item.shape
+            );
 
-        const getComponentOrigin = (item: any) => {
-            const transform = item.shape.Component.transform || [
-                1, 0, 0, 1, 0, 0
-            ];
+        const getComponentOrigin = (item: {
+            shape: PythonBabelfont.Shape;
+            index: number;
+        }) => {
+            const transform = ('Component' in item.shape &&
+                item.shape.Component.transform) || [1, 0, 0, 1, 0, 0];
             return { x: transform[4] || 0, y: transform[5] || 0 };
         };
 
@@ -713,7 +734,7 @@ export class OutlineEditor {
             for (let index = 0; index < this.layerData.shapes.length; index++) {
                 const shape = this.layerData.shapes[index];
                 if (
-                    shape.Component &&
+                    'Component' in shape &&
                     shape.Component.layerData &&
                     shape.Component.layerData.shapes
                 ) {
@@ -730,18 +751,25 @@ export class OutlineEditor {
         }
     }
 
-    _isPointInComponent(shape: any, glyphX: number, glyphY: number): boolean {
-        const transform = shape.Component.transform || [1, 0, 0, 1, 0, 0];
+    _isPointInComponent(
+        shape: PythonBabelfont.Shape,
+        glyphX: number,
+        glyphY: number
+    ): boolean {
+        const transform =
+            'Component' in shape
+                ? shape.Component.transform
+                : [1, 0, 0, 1, 0, 0];
 
         const checkShapesRecursive = (
-            shapes: any[],
-            parentTransform: number[] = [1, 0, 0, 1, 0, 0]
+            shapes: PythonBabelfont.Shape[],
+            parentTransform: Transform = [1, 0, 0, 1, 0, 0]
         ): boolean => {
             for (const componentShape of shapes) {
-                if (componentShape.Component) {
+                if ('Component' in componentShape) {
                     const nestedTransform = componentShape.Component
                         .transform || [1, 0, 0, 1, 0, 0];
-                    const combinedTransform = [
+                    const combinedTransform: Transform = [
                         parentTransform[0] * nestedTransform[0] +
                             parentTransform[2] * nestedTransform[1],
                         parentTransform[1] * nestedTransform[0] +
@@ -771,7 +799,10 @@ export class OutlineEditor {
                     continue;
                 }
 
-                if (componentShape.nodes && componentShape.nodes.length > 0) {
+                if (
+                    'nodes' in componentShape &&
+                    componentShape.nodes.length > 0
+                ) {
                     const isInPath = this.glyphCanvas.isPointInComponent(
                         componentShape,
                         transform,
@@ -785,7 +816,11 @@ export class OutlineEditor {
             return false;
         };
 
-        return checkShapesRecursive(shape.Component.layerData.shapes);
+        if (!('Component' in shape)) {
+            return false;
+        }
+
+        return checkShapesRecursive(shape.Component.layerData!.shapes);
     }
 
     updateHoveredAnchor(): void {
@@ -794,12 +829,14 @@ export class OutlineEditor {
         }
 
         const foundAnchorIndex = this._findHoveredItem(
-            this.layerData.anchors.map((anchor: any, index: number) => ({
-                ...anchor,
-                index
-            })),
-            (item: any) => ({ x: item.x, y: item.y }),
-            (item: any) => item.index
+            this.layerData.anchors.map(
+                (anchor: PythonBabelfont.Anchor, index: number) => ({
+                    ...anchor,
+                    index
+                })
+            ),
+            (item) => ({ x: item.x, y: item.y }),
+            (item) => item.index
         );
 
         if (foundAnchorIndex !== this.hoveredAnchorIndex) {
@@ -814,20 +851,22 @@ export class OutlineEditor {
         }
 
         const points = this.layerData.shapes.flatMap(
-            (shape: any, contourIndex: number) => {
-                if (shape.ref || !shape.nodes) return [];
-                return shape.nodes.map((node: any, nodeIndex: number) => ({
-                    node,
-                    contourIndex,
-                    nodeIndex
-                }));
+            (shape: PythonBabelfont.Shape, contourIndex: number) => {
+                if (!('nodes' in shape)) return [];
+                return shape.nodes.map(
+                    (node: PythonBabelfont.Node, nodeIndex: number) => ({
+                        node,
+                        contourIndex,
+                        nodeIndex
+                    })
+                );
             }
         );
 
         const foundPoint = this._findHoveredItem(
             points,
-            (item: any) => ({ x: item.node[0], y: item.node[1] }),
-            (item: any) => ({
+            (item) => ({ x: item.node.x, y: item.node.y }),
+            (item) => ({
                 contourIndex: item.contourIndex,
                 nodeIndex: item.nodeIndex
             })
@@ -864,9 +903,9 @@ export class OutlineEditor {
         for (const point of this.selectedPoints) {
             const { contourIndex, nodeIndex } = point;
             const shape = this.layerData.shapes[contourIndex];
-            if (shape && shape.nodes && shape.nodes[nodeIndex]) {
-                shape.nodes[nodeIndex][0] += deltaX;
-                shape.nodes[nodeIndex][1] += deltaY;
+            if (shape && 'nodes' in shape && shape.nodes[nodeIndex]) {
+                shape.nodes[nodeIndex].x += deltaX;
+                shape.nodes[nodeIndex].y += deltaY;
             }
         }
 
@@ -910,7 +949,7 @@ export class OutlineEditor {
 
         for (const compIndex of this.selectedComponents) {
             const shape = this.layerData.shapes[compIndex];
-            if (shape && shape.Component) {
+            if (shape && 'Component' in shape) {
                 if (!shape.Component.transform) {
                     // Initialize transform if it doesn't exist
                     shape.Component.transform = [1, 0, 0, 1, 0, 0];
@@ -936,40 +975,31 @@ export class OutlineEditor {
         const { contourIndex, nodeIndex } = pointIndex;
         const shape = this.layerData.shapes[contourIndex];
 
-        if (!shape || !shape.nodes || !shape.nodes[nodeIndex]) {
+        if (!shape || !('nodes' in shape) || !shape.nodes[nodeIndex]) {
             return;
         }
 
         const node = shape.nodes[nodeIndex];
-        const [x, y, type] = node;
+        const { type } = node;
 
         // Toggle smooth state based on current type
-        let newType = type;
+        let newType = {
+            c: 'cs',
+            cs: 'c',
+            q: 'qs',
+            qs: 'q',
+            l: 'ls',
+            ls: 'l',
+            o: 'o'
+        }[type] as PythonBabelfont.NodeType;
 
-        if (type === 'c') {
-            newType = 'cs'; // on-curve -> smooth on-curve
-        } else if (type === 'cs') {
-            newType = 'c'; // smooth on-curve -> on-curve
-        } else if (type === 'l') {
-            newType = 'ls'; // line -> smooth line
-        } else if (type === 'ls') {
-            newType = 'l'; // smooth line -> line
-        } else if (type === 'o') {
-            newType = 'os'; // off-curve -> smooth off-curve
-        } else if (type === 'os') {
-            newType = 'o'; // smooth off-curve -> off-curve
-        }
+        node.type = newType;
 
-        node[2] = newType;
-
-        // Save to Python (non-blocking)
+        // Save (non-blocking)
         this.saveLayerData();
         this.glyphCanvas.render();
 
-        console.log(
-            '[GlyphCanvas]',
-            `Toggled point smooth: ${type} -> ${newType}`
-        );
+        console.log(`Toggled point smooth: ${type} -> ${newType}`);
     }
 
     setupLayerSwitchAnimation() {
@@ -977,33 +1007,23 @@ export class OutlineEditor {
             return;
         }
         console.log(
-            '[GlyphCanvas]',
             'Before copy - layerData.isInterpolated:',
             this.layerData.isInterpolated
         );
         // Make a deep copy of the target layer data so it doesn't get overwritten during animation
         this.targetLayerData = JSON.parse(JSON.stringify(this.layerData));
-        // Also store the layer ID for validation
-        this.targetLayerData.layerId = this.layerData.layerId;
         console.log(
-            '[GlyphCanvas]',
             'After copy - targetLayerData.isInterpolated:',
-            this.targetLayerData.isInterpolated
+            this.targetLayerData!.isInterpolated
         );
         this.isLayerSwitchAnimating = true;
-        console.log(
-            '[GlyphCanvas]',
-            'Starting layer switch animation with stored target layer'
-        );
+        console.log('Starting layer switch animation with stored target layer');
     }
 
     onSpaceKeyReleased() {
         if (!this.active || !this.isPreviewMode) return;
         this.spaceKeyPressed = false;
-        console.log(
-            '[GlyphCanvas]',
-            '  -> Exiting preview mode from Space release'
-        );
+        console.log('  -> Exiting preview mode from Space release');
         this.isPreviewMode = false;
 
         // Check if current axis position matches an exact layer
@@ -1038,7 +1058,7 @@ export class OutlineEditor {
     async interpolateCurrentGlyph(force: boolean = false): Promise<void> {
         // Interpolate the current glyph at current variation settings
         if (!this.currentGlyphName) {
-            console.log('[GlyphCanvas]', 'Skipping interpolation:', {
+            console.log('Skipping interpolation:', {
                 hasGlyphName: !!this.currentGlyphName
             });
             return;
@@ -1049,7 +1069,6 @@ export class OutlineEditor {
         // Unless force=true (e.g., entering edit mode at interpolated position)
         if (!force && !this.isInterpolating && !this.isLayerSwitchAnimating) {
             console.log(
-                '[GlyphCanvas]',
                 'Skipping interpolation - not in active interpolation state'
             );
             return;
@@ -1058,7 +1077,6 @@ export class OutlineEditor {
         try {
             const location = this.glyphCanvas.axesManager!.variationSettings;
             console.log(
-                '[GlyphCanvas]',
                 `🔄 Interpolating glyph "${this.currentGlyphName}" at location:`,
                 JSON.stringify(location)
             );
@@ -1068,15 +1086,10 @@ export class OutlineEditor {
                 location
             );
 
-            console.log(
-                '[GlyphCanvas]',
-                `📦 Received interpolated layer:`,
-                interpolatedLayer
-            );
+            console.log(`📦 Received interpolated layer:`, interpolatedLayer);
 
             // Apply interpolated data using normalizer
             console.log(
-                '[GlyphCanvas]',
                 'Calling LayerDataNormalizer.applyInterpolatedLayer...'
             );
             LayerDataNormalizer.applyInterpolatedLayer(
@@ -1089,21 +1102,18 @@ export class OutlineEditor {
             this.glyphCanvas.render();
 
             console.log(
-                '[GlyphCanvas]',
                 `✅ Applied interpolated layer for "${this.currentGlyphName}"`
             );
         } catch (error: any) {
             // Silently ignore cancellation errors
             if (error.message && error.message.includes('cancelled')) {
                 console.log(
-                    '[GlyphCanvas]',
                     '🚫 Interpolation cancelled (newer request pending)'
                 );
                 return;
             }
 
             console.warn(
-                '[GlyphCanvas]',
                 `⚠️ Interpolation failed for "${this.currentGlyphName}":`,
                 error
             );
@@ -1250,26 +1260,24 @@ export class OutlineEditor {
         await this.selectLayer(sortedLayers[nextIndex]);
     }
 
-    async selectLayer(layer: any): Promise<void> {
+    async selectLayer(layer: PythonBabelfont.Layer): Promise<void> {
         // Select a layer and update axis sliders to match its master location
         // Clear previous state when explicitly selecting a layer
         this.previousSelectedLayerId = null;
         this.previousVariationSettings = null;
 
-        this.selectedLayerId = layer.id;
+        this.selectedLayerId = layer.id!;
 
         // Immediately clear interpolated flag on existing data
         // to prevent rendering with monochrome colors
         if (this.layerData) {
             this.layerData.isInterpolated = false;
         }
-        let masters = this.glyphCanvas.fontData.masters;
-        console.log(
-            '[GlyphCanvas]',
-            `Selected layer: ${layer.name} (ID: ${layer.id})`
-        );
-        console.log('[GlyphCanvas]', 'Layer data:', layer);
-        console.log('[GlyphCanvas]', 'Available masters:', masters);
+        let masters: PythonBabelfont.Master[] =
+            this.glyphCanvas.fontData.masters;
+        console.log(`Selected layer: ${layer.name} (ID: ${layer.id})`);
+        console.log('Layer data:', layer);
+        console.log('Available masters:', masters);
 
         // Fetch layer data now and store as target for animation
         // This ensures new outlines are ready before animation starts
@@ -1281,25 +1289,17 @@ export class OutlineEditor {
         this.performHitDetection(null);
 
         // Find the master for this layer
-        const master = masters.find((m: any) => m.id === layer._master);
+        const master = masters.find((m) => m.id === layer._master);
         if (!master || !master.location) {
-            console.warn(
-                '[GlyphCanvas]',
-                'No master location found for layer',
-                {
-                    layer_master: layer._master,
-                    available_master_ids: masters.map((m: any) => m.id),
-                    master_found: master
-                }
-            );
+            console.warn('No master location found for layer', {
+                layer_master: layer._master,
+                available_master_ids: masters.map((m) => m.id),
+                master_found: master
+            });
             return;
         }
 
-        console.log(
-            '[GlyphCanvas]',
-            `Setting axis values to master location:`,
-            master.location
-        );
+        console.log(`Setting axis values to master location:`, master.location);
 
         // Set up animation to all axes at once
         const newSettings: Record<string, number> = {};
@@ -1324,10 +1324,7 @@ export class OutlineEditor {
                 this.layerData.isInterpolated
             ) {
                 // Keep showing interpolated data
-                console.log(
-                    '[GlyphCanvas]',
-                    'Animation complete: showing interpolated glyph'
-                );
+                console.log('Animation complete: showing interpolated glyph');
             }
         }
     }
@@ -1335,7 +1332,8 @@ export class OutlineEditor {
     async autoSelectMatchingLayer(): Promise<void> {
         // Check if current variation settings match any layer's master location
         let layers = this.glyphCanvas.fontData?.layers;
-        let masters = this.glyphCanvas.fontData?.masters;
+        let masters: PythonBabelfont.Master[] =
+            this.glyphCanvas.fontData?.masters;
         if (!layers || !masters) {
             return;
         }
@@ -1347,7 +1345,7 @@ export class OutlineEditor {
 
         // Check each layer to find a match
         for (const layer of layers) {
-            const master = masters.find((m: any) => m.id === layer._master);
+            const master = masters.find((m) => m.id === layer._master);
             if (!master || !master.location) {
                 continue;
             }
@@ -1373,14 +1371,10 @@ export class OutlineEditor {
                     // Clear previous state to allow Escape to exit components instead
                     this.previousVariationSettings = null;
                     console.log(
-                        '[GlyphCanvas]',
                         'Cleared previous state (not during slider use)'
                     );
                 } else {
-                    console.log(
-                        '[GlyphCanvas]',
-                        'Keeping previous state (during slider use)'
-                    );
+                    console.log('Keeping previous state (during slider use)');
                 }
 
                 // Only fetch layer data if we're not currently interpolating
@@ -1412,7 +1406,6 @@ export class OutlineEditor {
                 }
                 this.updateLayerSelection();
                 console.log(
-                    '[GlyphCanvas]',
                     `Auto-selected layer: ${layer.name || 'Default'} (${layer.id})`
                 );
                 return;
@@ -1429,7 +1422,7 @@ export class OutlineEditor {
             this.selectedPointIndex = null;
             this.hoveredPointIndex = null;
             this.updateLayerSelection();
-            console.log('[GlyphCanvas]', 'No matching layer - deselected');
+            console.log('No matching layer - deselected');
         }
 
         // If we're in glyph edit mode and not on a layer, interpolate at current position
@@ -1439,7 +1432,6 @@ export class OutlineEditor {
             this.currentGlyphName
         ) {
             console.log(
-                '[GlyphCanvas]',
                 'Interpolating at current position after entering edit mode'
             );
             await this.interpolateCurrentGlyph(true); // force=true to bypass guard
@@ -1449,10 +1441,7 @@ export class OutlineEditor {
     async fetchLayerData(): Promise<void> {
         // If we're editing a component, refresh the component's layer data for the new layer
         if (this.componentStack.length > 0) {
-            console.log(
-                '[GlyphCanvas]',
-                'Refreshing component layer data for new layer'
-            );
+            console.log('Refreshing component layer data for new layer');
             await this.refreshComponentStack();
             return;
         }
@@ -1470,11 +1459,10 @@ export class OutlineEditor {
             //     ].g;
             let glyphName = this.glyphCanvas.getCurrentGlyphName();
             console.log(
-                '[GlyphCanvas]',
                 `🔍 Fetching layer data for glyph: "${glyphName}" ( production name), layer: ${this.selectedLayerId}`
             );
 
-            this.layerData = await fontManager.fetchLayerData(
+            this.layerData = await fontManager!.fetchLayerData(
                 glyphName,
                 this.selectedLayerId
             );
@@ -1485,51 +1473,14 @@ export class OutlineEditor {
             }
             this.currentGlyphName = glyphName; // Store for interpolation
 
-            // Recursively parse component layer data nodes strings into arrays
-            const parseComponentNodes = (shapes: any[]) => {
-                if (!shapes) return;
-
-                shapes.forEach((shape) => {
-                    // Parse nodes in Path shapes
-                    if (shape.Path && shape.Path.nodes) {
-                        const nodesStr = shape.Path.nodes.trim();
-                        const tokens = nodesStr.split(/\s+/);
-                        const nodesArray: any[] = [];
-
-                        for (let i = 0; i + 2 < tokens.length; i += 3) {
-                            nodesArray.push([
-                                parseFloat(tokens[i]),
-                                parseFloat(tokens[i + 1]),
-                                tokens[i + 2]
-                            ]);
-                        }
-
-                        shape.nodes = nodesArray;
-                    }
-
-                    // Recursively parse nested component data
-                    if (
-                        shape.Component &&
-                        shape.Component.layerData &&
-                        shape.Component.layerData.shapes
-                    ) {
-                        parseComponentNodes(shape.Component.layerData.shapes);
-                    }
-                });
-            };
-
             if (this.layerData && this.layerData.shapes) {
                 parseComponentNodes(this.layerData.shapes);
             }
 
-            console.log('[GlyphCanvas]', 'Fetched layer data:', this.layerData);
+            console.log('Fetched layer data:', this.layerData);
             this.glyphCanvas.render();
         } catch (error) {
-            console.error(
-                '[GlyphCanvas]',
-                'Error fetching layer data from Python:',
-                error
-            );
+            console.error('Error fetching layer data from Python:', error);
             this.layerData = null;
         }
     }
@@ -1543,14 +1494,13 @@ export class OutlineEditor {
         // Don't save interpolated data - it's not editable and has no layer ID
         if (this.layerData.isInterpolated) {
             console.warn(
-                '[GlyphCanvas]',
                 'Cannot save interpolated layer data - not on an exact layer location'
             );
             return;
         }
 
         if (!this.selectedLayerId) {
-            console.warn('[GlyphCanvas]', 'No layer selected - cannot save');
+            console.warn('No layer selected - cannot save');
             return;
         }
 
@@ -1564,25 +1514,24 @@ export class OutlineEditor {
                 const parentState =
                     this.componentStack[this.componentStack.length - 1];
                 const componentShape =
-                    parentState.layerData.shapes[this.editingComponentIndex!];
+                    parentState.layerData!.shapes[this.editingComponentIndex!];
+                if (!('Component' in componentShape)) {
+                    throw new Error('Current editing shape is not a component');
+                }
                 glyphName = componentShape.Component.reference;
             } else {
                 glyphName = this.glyphCanvas.getCurrentGlyphName();
             }
 
-            await fontManager.saveLayerData(
+            await fontManager!.saveLayerData(
                 glyphName,
                 this.selectedLayerId,
                 this.layerData
             );
 
-            console.log('[GlyphCanvas]', 'Layer data saved successfully');
+            console.log('Layer data saved successfully');
         } catch (error) {
-            console.error(
-                '[GlyphCanvas]',
-                'Error saving layer data to Python:',
-                error
-            );
+            console.error('Error saving layer data to Python:', error);
         }
     }
 
@@ -1614,7 +1563,6 @@ export class OutlineEditor {
         }
 
         console.log(
-            '[GlyphCanvas]',
             'Refreshing component stack for new layer, stack depth:',
             this.componentStack.length
         );
@@ -1634,7 +1582,7 @@ export class OutlineEditor {
 
         // Fetch root layer data (bypassing the component check since stack is now empty)
         try {
-            this.layerData = await fontManager.fetchRootLayerData(
+            this.layerData = await fontManager!.fetchLayerData(
                 glyphName,
                 this.selectedLayerId
             );
@@ -1643,7 +1591,6 @@ export class OutlineEditor {
             for (const componentIndex of componentPath) {
                 if (!this.layerData || !this.layerData.shapes[componentIndex]) {
                     console.error(
-                        '[GlyphCanvas]',
                         'Failed to refresh component stack - component not found at index',
                         componentIndex
                     );
@@ -1654,7 +1601,6 @@ export class OutlineEditor {
             }
 
             console.log(
-                '[GlyphCanvas]',
                 'Component stack refreshed, new depth:',
                 this.componentStack.length
             );
@@ -1664,11 +1610,7 @@ export class OutlineEditor {
             await this.glyphCanvas.updatePropertiesUI();
             this.glyphCanvas.render();
         } catch (error) {
-            console.error(
-                '[GlyphCanvas]',
-                'Error refreshing component stack:',
-                error
-            );
+            console.error('Error refreshing component stack:', error);
         }
     }
 
@@ -1687,76 +1629,34 @@ export class OutlineEditor {
         }
 
         const componentShape = this.layerData.shapes[componentIndex];
-        if (!componentShape.Component || !componentShape.Component.reference) {
-            console.log('[GlyphCanvas]', 'Component has no reference');
+        if (
+            !('Component' in componentShape) ||
+            !componentShape.Component.reference
+        ) {
+            console.log('Component has no reference');
             return;
         }
 
         // Fetch the component's layer data
-        const componentLayerData = await fontManager.fetchComponentLayerData(
+        const componentLayerData = fontManager!.fetchLayerData(
             componentShape.Component.reference,
             this.selectedLayerId
         );
         if (!componentLayerData) {
             console.error(
-                '[GlyphCanvas]',
                 'Failed to fetch component layer data for:',
                 componentShape.Component.reference
             );
             return;
         }
 
-        console.log(
-            '[GlyphCanvas]',
-            'Fetched component layer data:',
-            componentLayerData
-        );
-
-        // Recursively parse nodes in component layer data (including nested components)
-        const parseComponentNodes = (shapes: any[]) => {
-            if (!shapes) return;
-
-            shapes.forEach((shape) => {
-                // Parse nodes in Path shapes
-                if (shape.Path && shape.Path.nodes) {
-                    const nodesStr = shape.Path.nodes.trim();
-                    const tokens = nodesStr.split(/\s+/);
-                    const nodesArray: any[] = [];
-
-                    for (let i = 0; i + 2 < tokens.length; i += 3) {
-                        nodesArray.push([
-                            parseFloat(tokens[i]),
-                            parseFloat(tokens[i + 1]),
-                            tokens[i + 2]
-                        ]);
-                    }
-
-                    shape.nodes = nodesArray;
-                    console.log(
-                        '[GlyphCanvas]',
-                        'Parsed shape nodes:',
-                        nodesArray.length,
-                        'nodes'
-                    );
-                }
-
-                // Recursively parse nested component data
-                if (
-                    shape.Component &&
-                    shape.Component.layerData &&
-                    shape.Component.layerData.shapes
-                ) {
-                    parseComponentNodes(shape.Component.layerData.shapes);
-                }
-            });
-        };
+        console.log('Fetched component layer data:', componentLayerData);
 
         if (componentLayerData.shapes) {
             parseComponentNodes(componentLayerData.shapes);
         }
 
         console.log(
-            '[GlyphCanvas]',
             'About to set layerData to component data. Current shapes:',
             this.layerData?.shapes?.length,
             '-> New shapes:',
@@ -1785,7 +1685,7 @@ export class OutlineEditor {
             ) {
                 const currentComponent =
                     parentState.layerData.shapes[parentState.componentIndex];
-                if (currentComponent && currentComponent.Component) {
+                if (currentComponent && 'Component' in currentComponent) {
                     currentGlyphName = currentComponent.Component.reference;
                 } else {
                     currentGlyphName = 'Unknown';
@@ -1808,7 +1708,6 @@ export class OutlineEditor {
         );
 
         console.log(
-            '[GlyphCanvas]',
             `Pushed to stack. Stack depth: ${this.componentStack.length}, storing glyphName: ${currentGlyphName}`
         );
 
@@ -1821,7 +1720,6 @@ export class OutlineEditor {
         }
 
         console.log(
-            '[GlyphCanvas]',
             'Set layerData to component. this.layerData.shapes.length:',
             this.layerData?.shapes?.length
         );
@@ -1830,7 +1728,6 @@ export class OutlineEditor {
         this.clearAllSelections();
 
         console.log(
-            '[GlyphCanvas]',
             `Entered component editing: ${componentShape.Component.reference}, stack depth: ${this.componentStack.length}`
         );
 
@@ -1858,7 +1755,6 @@ export class OutlineEditor {
         this.popState(previousState);
 
         console.log(
-            '[GlyphCanvas]',
             `Exited component editing, stack depth: ${this.componentStack.length}`
         );
 
@@ -1958,7 +1854,7 @@ export class OutlineEditor {
                         currentState.layerData.shapes[
                             currentState.componentIndex
                         ];
-                    if (currentComponent && currentComponent.Component) {
+                    if (currentComponent && 'Component' in currentComponent) {
                         trail.push(currentComponent.Component.reference);
                     }
                 }
@@ -2062,8 +1958,12 @@ export class OutlineEditor {
                 level.layerData &&
                 level.layerData.shapes[level.componentIndex]
             ) {
-                const comp =
-                    level.layerData.shapes[level.componentIndex].Component;
+                let currentShape = level.layerData.shapes[level.componentIndex];
+                if (!('Component' in currentShape)) {
+                    continue; // Not a component shape
+                }
+
+                const comp = currentShape.Component;
                 if (comp && comp.transform) {
                     const t = comp.transform;
                     // Multiply transforms: new = current * level
@@ -2109,7 +2009,6 @@ export class OutlineEditor {
                 glyphY = (a * localY - b * localX) / det;
             }
             console.log(
-                '[GlyphCanvas]',
                 `transformMouseToComponentSpace: before inverse=(${glyphXBeforeInverse}, ${glyphYBeforeInverse}), after inverse=(${glyphX}, ${glyphY}), accumulated transform=[${compTransform}]`
             );
         }
@@ -2130,7 +2029,6 @@ export class OutlineEditor {
         // Returns null if no glyph is selected or no layer data is available
 
         console.log(
-            '[GlyphCanvas]',
             'calculateGlyphBoundingBox: isGlyphEditMode=',
             this.active,
             'layerData=',
@@ -2142,7 +2040,6 @@ export class OutlineEditor {
         }
 
         console.log(
-            '[GlyphCanvas]',
             'calculateGlyphBoundingBox: layerData.shapes=',
             this.layerData.shapes,
             'layerData.width=',
@@ -2166,13 +2063,13 @@ export class OutlineEditor {
 
         // Helper function to process shapes recursively (for components)
         const processShapes = (
-            shapes: any[],
+            shapes: PythonBabelfont.Shape[],
             transform: number[] = [1, 0, 0, 1, 0, 0]
         ) => {
             if (!shapes || !Array.isArray(shapes)) return;
 
             for (const shape of shapes) {
-                if (shape.Component) {
+                if ('Component' in shape) {
                     // Component - recursively process its outline shapes with accumulated transform
                     const compTransform = shape.Component.transform || [
                         1, 0, 0, 1, 0, 0
@@ -2201,13 +2098,13 @@ export class OutlineEditor {
                         );
                     }
                 } else if (
-                    shape.nodes &&
+                    'nodes' in shape &&
                     Array.isArray(shape.nodes) &&
                     shape.nodes.length > 0
                 ) {
                     // Path - process all nodes with the accumulated transform
                     for (const node of shape.nodes) {
-                        const [x, y] = node;
+                        const { x, y } = node;
 
                         // Apply accumulated transform
                         const [a, b, c, d, tx, ty] = transform;
@@ -2237,7 +2134,6 @@ export class OutlineEditor {
             const height = 10;
 
             console.log(
-                '[GlyphCanvas]',
                 'calculateGlyphBoundingBox: No points found, creating bbox for empty glyph. width=',
                 glyphWidth
             );
@@ -2252,16 +2148,12 @@ export class OutlineEditor {
             };
         }
 
-        console.log(
-            '[GlyphCanvas]',
-            'calculateGlyphBoundingBox: Found points, bbox=',
-            {
-                minX,
-                minY,
-                maxX,
-                maxY
-            }
-        );
+        console.log('calculateGlyphBoundingBox: Found points, bbox=', {
+            minX,
+            minY,
+            maxX,
+            maxY
+        });
 
         return {
             minX,
@@ -2276,12 +2168,10 @@ export class OutlineEditor {
     async restoreTargetLayerDataAfterAnimating(): Promise<void> {
         if (this.targetLayerData) {
             console.log(
-                '[GlyphCanvas]',
                 'Before restore - layerData.isInterpolated:',
                 this.layerData?.isInterpolated
             );
             console.log(
-                '[GlyphCanvas]',
                 'Before restore - targetLayerData.isInterpolated:',
                 this.targetLayerData?.isInterpolated
             );
@@ -2300,12 +2190,10 @@ export class OutlineEditor {
                 }
             }
             console.log(
-                '[GlyphCanvas]',
                 'After restore - layerData.isInterpolated:',
                 this.layerData?.isInterpolated
             );
             console.log(
-                '[GlyphCanvas]',
                 'Layer switch animation complete, restored target layer for editing'
             );
 

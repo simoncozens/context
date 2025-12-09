@@ -15,8 +15,4 @@ export interface RectWithWidthHeight extends Rect {
     height: number;
 }
 
-export type ParsedNode = [number, number, string];
-
-export type DesignspaceLocation = Record<string, number>;
-
 export type Transform = [number, number, number, number, number, number];

@@ -1,16 +1,15 @@
 {
-  "compilerOptions": {
-    "target": "es6",
-    "module": "esnext",
-    "moduleResolution": "node",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "allowJs": true,
-    "outDir": "./build"
-  },
-  "include": [
-    "js/**/*.ts"
-  ]
+    "compilerOptions": {
+        "target": "es6",
+        "module": "esnext",
+        "moduleResolution": "node",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "allowJs": true,
+        "outDir": "./build",
+        "lib": ["es6", "dom", "DOM.AsyncIterable"]
+    },
+    "include": ["js/**/*.ts"]
 }

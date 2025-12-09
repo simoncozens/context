@@ -47,7 +47,20 @@ declare global {
         };
 
         // From file-browser.js
-        _trackingInitPromise: Promise<void>;
+        _trackingInitPromise: Promise<void> | null;
+        navigateToPath: (path: string) => Promise<void>;
+        selectFile: (filePath: string) => void;
+        initFileBrowser: () => Promise<void>;
+        uploadFiles: (files: File[], targetPath?: string) => Promise<void>;
+        createFolder: () => Promise<void>;
+        deleteItem: (
+            itemPath: string,
+            itemName: string,
+            isDir: boolean
+        ) => Promise<void>;
+        handleFileUpload: (e: Event) => void;
+        openFont: (path: string) => Promise<void>;
+        downloadFile: (filePath: string, fileName: string) => Promise<void>;
 
         // From font-compilation.js
         fontCompilation: FontCompilation;

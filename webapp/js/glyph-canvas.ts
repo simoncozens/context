@@ -9,6 +9,9 @@ import { GlyphCanvasRenderer } from './glyph-canvas/renderer';
 import * as opentype from 'opentype.js';
 import fontManager from './font-manager';
 import { OutlineEditor } from './glyph-canvas/outline-editor';
+import { Logger } from './logger';
+
+let console: Logger = new Logger('GlyphCanvas', true);
 
 class GlyphCanvas {
     container: HTMLElement;
@@ -81,10 +84,7 @@ class GlyphCanvas {
     constructor(containerId: string) {
         this.container = document.getElementById(containerId)!;
         if (!this.container) {
-            console.error(
-                '[GlyphCanvas]',
-                `Container ${containerId} not found`
-            );
+            console.error(`Container ${containerId} not found`);
             return;
         }
 
@@ -177,7 +177,6 @@ class GlyphCanvas {
         // Keyboard events for cursor and text input
         this.canvas!.addEventListener('keydown', (e) => {
             console.log(
-                '[GlyphCanvas]',
                 'keydown:',
                 e.key,
                 e.code,
@@ -197,7 +196,6 @@ class GlyphCanvas {
         });
         this.canvas!.addEventListener('keyup', (e) => {
             console.log(
-                '[GlyphCanvas]',
                 'keyup:',
                 e.key,
                 e.code,
@@ -211,7 +209,7 @@ class GlyphCanvas {
 
             // Track Cmd key release
             if (e.key === 'Meta') {
-                console.log('[GlyphCanvas]', '  -> Releasing Cmd key');
+                console.log('  -> Releasing Cmd key');
                 this.cmdKeyPressed = false;
                 // Stop panning if it was active
                 if (this.isDraggingCanvas) {
@@ -223,7 +221,7 @@ class GlyphCanvas {
 
             // Track Space key release
             if (e.code === 'Space') {
-                console.log('[GlyphCanvas]', '  -> Releasing Space key');
+                console.log('  -> Releasing Space key');
                 this.outlineEditor.onSpaceKeyReleased();
             }
         });
@@ -415,7 +413,6 @@ class GlyphCanvas {
                                     );
                             }
                             console.log(
-                                '[GlyphCanvas]',
                                 'Saved previous glyph vertical bounds:',
                                 {
                                     fontSpaceMinY,
@@ -425,7 +422,6 @@ class GlyphCanvas {
                         }
                     } catch (error) {
                         console.warn(
-                            '[GlyphCanvas]',
                             'Could not save previous glyph bounds:',
                             error
                         );
@@ -444,7 +440,6 @@ class GlyphCanvas {
                 // Check if this selection is still current (not superseded by a newer one)
                 if (currentSequence !== this.glyphSelectionSequence) {
                     console.log(
-                        '[GlyphCanvas]',
                         'Glyph selection superseded, skipping render/pan for sequence',
                         currentSequence
                     );
@@ -525,7 +520,6 @@ class GlyphCanvas {
         // Start canvas panning when Cmd key is pressed
         if (this.cmdKeyPressed) {
             console.log(
-                '[GlyphCanvas]',
                 'Starting canvas panning, cmdKeyPressed:',
                 this.cmdKeyPressed
             );
@@ -535,7 +529,6 @@ class GlyphCanvas {
             this.canvas!.style.cursor = 'grabbing';
         } else {
             console.log(
-                '[GlyphCanvas]',
                 'Not starting panning, cmdKeyPressed:',
                 this.cmdKeyPressed
             );
@@ -673,7 +666,7 @@ class GlyphCanvas {
 
     setFont(fontArrayBuffer: ArrayBuffer): void {
         if (!fontArrayBuffer) {
-            console.error('[GlyphCanvas]', 'No font data provided');
+            console.error('No font data provided');
             return;
         }
 
@@ -689,7 +682,6 @@ class GlyphCanvas {
             this.featuresManager!.opentypeFont = this.opentypeFont;
             this.textRunEditor!.opentypeFont = this.opentypeFont;
             console.log(
-                '[GlyphCanvas]',
                 'Font parsed with opentype.js:',
                 this.opentypeFont!.names.fontFamily.en
             );
@@ -704,10 +696,7 @@ class GlyphCanvas {
 
                     // Update axes UI (will restore slider positions from variationSettings)
                     this.axesManager!.updateAxesUI();
-                    console.log(
-                        '[GlyphCanvas]',
-                        'Updated axes UI after font load'
-                    );
+                    console.log('Updated axes UI after font load');
 
                     // Update features UI (async, then shape text)
                     this.featuresManager!.updateFeaturesUI().then(() => {
@@ -717,7 +706,7 @@ class GlyphCanvas {
                 }
             );
         } catch (error) {
-            console.error('[GlyphCanvas]', 'Error setting font:', error);
+            console.error('Error setting font:', error);
         }
     }
 
@@ -728,13 +717,11 @@ class GlyphCanvas {
 
         if (glyphIndex && glyphIndex >= 0) {
             console.log(
-                '[GlyphCanvas]',
                 `Entering glyph edit mode at cursor position ${this.textRunEditor!.cursorPosition}, glyph index ${glyphIndex}`
             );
             await this.textRunEditor!.selectGlyphByIndex(glyphIndex);
         } else {
             console.log(
-                '[GlyphCanvas]',
                 `No glyph found at cursor position ${this.textRunEditor!.cursorPosition}`
             );
         }
@@ -748,7 +735,6 @@ class GlyphCanvas {
 
         const glyph = this.textRunEditor!.shapedGlyphs[savedGlyphIndex];
         console.log(
-            '[GlyphCanvas]',
             '[v2024-12-01-FIX] exitGlyphEditMode CALLED - selectedGlyphIndex:',
             this.textRunEditor!.selectedGlyphIndex,
             'shapedGlyphs.length:',
@@ -768,7 +754,6 @@ class GlyphCanvas {
             const isRTL = this.textRunEditor!.isPositionRTL(clusterStart);
 
             console.log(
-                '[GlyphCanvas]',
                 'Exit glyph edit mode [v2024-12-01-FIX] - glyphInfo:',
                 glyphInfo,
                 'clusterStart:',
@@ -782,7 +767,6 @@ class GlyphCanvas {
                 // (which is the space before the character, where we entered from)
                 this.textRunEditor!.cursorPosition = glyphInfo.logicalPosition;
                 console.log(
-                    '[GlyphCanvas]',
                     'Typed character - set cursor position at logical position:',
                     this.textRunEditor!.cursorPosition
                 );
@@ -790,7 +774,6 @@ class GlyphCanvas {
                 // For shaped glyphs, position cursor at the cluster start
                 this.textRunEditor!.cursorPosition = clusterStart;
                 console.log(
-                    '[GlyphCanvas]',
                     'Shaped glyph - set cursor position at cluster start:',
                     this.textRunEditor!.cursorPosition
                 );
@@ -805,10 +788,7 @@ class GlyphCanvas {
         // Clear outline editor state
         this.outlineEditor.clearState();
 
-        console.log(
-            '[GlyphCanvas]',
-            `Exited glyph edit mode - returned to text edit mode`
-        );
+        console.log(`Exited glyph edit mode - returned to text edit mode`);
         this.updatePropertiesUI();
         this.render();
     }
@@ -925,7 +905,7 @@ class GlyphCanvas {
         let glyphName = `GID ${glyphId}`;
 
         // Get glyph name from font manager (source font) instead of compiled font
-        if (fontManager && fontManager.babelfontData) {
+        if (fontManager && fontManager.currentFont) {
             glyphName = fontManager.getGlyphName(glyphId);
         } else if (this.opentypeFont && this.opentypeFont.glyphs.get(glyphId)) {
             // Fallback to compiled font name (will be production name like glyph00001)
@@ -1034,7 +1014,6 @@ class GlyphCanvas {
             glyphIndex >= this.textRunEditor!.shapedGlyphs.length
         ) {
             console.log(
-                '[GlyphCanvas]',
                 'panToGlyph: early return - not in edit mode or invalid index',
                 {
                     isGlyphEditMode: this.outlineEditor.active,
@@ -1047,7 +1026,7 @@ class GlyphCanvas {
 
         const bounds = this.outlineEditor.calculateGlyphBoundingBox();
         if (!bounds) {
-            console.log('[GlyphCanvas]', 'panToGlyph: no bounds calculated');
+            console.log('panToGlyph: no bounds calculated');
             return;
         }
 
@@ -1119,15 +1098,11 @@ class GlyphCanvas {
 
         this.textChangeDebounceTimer = setTimeout(() => {
             if (fontManager && fontManager.isReady()) {
-                console.log(
-                    '[GlyphCanvas]',
-                    '🔄 Text changed, recompiling editing font...'
-                );
+                console.log('🔄 Text changed, recompiling editing font...');
                 fontManager
                     .compileEditingFont(this.textRunEditor!.textBuffer)
                     .catch((error: any) => {
                         console.error(
-                            '[GlyphCanvas]',
                             'Failed to recompile editing font:',
                             error
                         );
@@ -1547,7 +1522,7 @@ function initCanvas() {
         // Set up editor shortcuts modal
         setupEditorShortcutsModal();
 
-        console.log('[GlyphCanvas]', 'Glyph canvas initialized');
+        console.log('Glyph canvas initialized');
     } else {
         setTimeout(initCanvas, 100);
     }
@@ -1563,30 +1538,23 @@ if (typeof document !== 'undefined' && document.addEventListener) {
 
 // Set up listener for compiled fonts
 function setupFontLoadingListener() {
-    console.log('[GlyphCanvas]', '🔧 Setting up font loading listeners...');
+    console.log('🔧 Setting up font loading listeners...');
 
     // Listen for editing font compiled by font manager (primary)
     window.addEventListener('editingFontCompiled', async (e: any) => {
-        console.log('[GlyphCanvas]', '✅ Editing font compiled event received');
-        console.log('[GlyphCanvas]', '   Event detail:', e.detail);
-        console.log('[GlyphCanvas]', '   Canvas exists:', !!window.glyphCanvas);
+        console.log('✅ Editing font compiled event received');
+        console.log('   Event detail:', e.detail);
+        console.log('   Canvas exists:', !!window.glyphCanvas);
         if (window.glyphCanvas && e.detail && e.detail.fontBytes) {
-            console.log(
-                '[GlyphCanvas]',
-                '   Loading editing font into canvas...'
-            );
+            console.log('   Loading editing font into canvas...');
             const arrayBuffer = e.detail.fontBytes.buffer.slice(
                 e.detail.fontBytes.byteOffset,
                 e.detail.fontBytes.byteOffset + e.detail.fontBytes.byteLength
             );
             window.glyphCanvas.setFont(arrayBuffer);
-            console.log(
-                '[GlyphCanvas]',
-                '   ✅ Editing font loaded into canvas'
-            );
+            console.log('   ✅ Editing font loaded into canvas');
         } else {
             console.warn(
-                '[GlyphCanvas]',
                 '   ⚠️ Cannot load font - missing canvas or fontBytes'
             );
         }
@@ -1594,7 +1562,7 @@ function setupFontLoadingListener() {
 
     // Legacy: Custom event when font is compiled via compile button
     window.addEventListener('fontCompiled', async (e: any) => {
-        console.log('[GlyphCanvas]', 'Font compiled event received (legacy)');
+        console.log('Font compiled event received (legacy)');
         if (window.glyphCanvas && e.detail && e.detail.ttfBytes) {
             const arrayBuffer = e.detail.ttfBytes.buffer.slice(
                 e.detail.ttfBytes.byteOffset,
@@ -1605,13 +1573,13 @@ function setupFontLoadingListener() {
     });
 
     // Also check for fonts loaded from file system
-    window.addEventListener('fontLoaded', async (e: any) =>
-        fontManager.onFontLoaded(e).then((arrayBuffer: ArrayBuffer | null) => {
-            if (arrayBuffer) {
-                window.glyphCanvas.setFont(arrayBuffer);
-            }
-        })
-    );
+    window.addEventListener('editingFontCompiled', async (e: Event) => {
+        let array: Uint8Array<ArrayBuffer> = (e as CustomEvent).detail
+            ?.fontBytes;
+        if (array) {
+            window.glyphCanvas.setFont(array.buffer);
+        }
+    });
 }
 
 // Set up editor keyboard shortcuts info modal

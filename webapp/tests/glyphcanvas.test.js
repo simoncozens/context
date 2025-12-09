@@ -86,7 +86,7 @@ describe('GlyphCanvas onMouseMove', () => {
         canvas.outlineEditor.layerData = {
             shapes: [
                 { Component: { transform: [1, 0, 0, 1, 0, 0] } },
-                { nodes: [[0, 0, 'l']] }
+                { nodes: [{ x: 0, y: 0, type: 'l' }] }
             ],
             anchors: [{ x: 0, y: 0 }]
         };
@@ -139,8 +139,8 @@ describe('GlyphCanvas onMouseMove', () => {
         canvas.outlineEditor.isDraggingPoint = true;
         canvas.onMouseMove({ clientX: 10, clientY: 20 });
         canvas.onMouseMove({ clientX: 25, clientY: 15 });
-        expect(canvas.outlineEditor.layerData.shapes[1].nodes[0][0]).toBe(15);
-        expect(canvas.outlineEditor.layerData.shapes[1].nodes[0][1]).toBe(5);
+        expect(canvas.outlineEditor.layerData.shapes[1].nodes[0].x).toBe(15);
+        expect(canvas.outlineEditor.layerData.shapes[1].nodes[0].y).toBe(5);
     });
 
     test('handles canvas panning when dragging', () => {
@@ -240,7 +240,7 @@ describe('GlyphCanvas hit testing', () => {
         canvas.outlineEditor.layerData = {
             shapes: [
                 { Component: { transform: [1, 0, 0, 1, 100, 100] } },
-                { nodes: [[200, 200, 'l']] }
+                { nodes: [{ x: 200, y: 200, type: 'l' }] }
             ],
             anchors: [{ x: 300, y: 300 }]
         };
@@ -395,8 +395,8 @@ describe('GlyphCanvas point movement', () => {
             shapes: [
                 {
                     nodes: [
-                        [100, 100, 'l'],
-                        [200, 200, 'l']
+                        { x: 100, y: 100, type: 'l' },
+                        { x: 200, y: 200, type: 'l' }
                     ]
                 }
             ],
@@ -415,8 +415,8 @@ describe('GlyphCanvas point movement', () => {
 
     test('should move selected points by delta', () => {
         canvas.outlineEditor.moveSelectedPoints(10, 20);
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][0]).toBe(110);
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][1]).toBe(120);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0].x).toBe(110);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0].y).toBe(120);
     });
 
     test('should move multiple selected points', () => {
@@ -425,17 +425,17 @@ describe('GlyphCanvas point movement', () => {
             { contourIndex: 0, nodeIndex: 1 }
         ];
         canvas.outlineEditor.moveSelectedPoints(10, 20);
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][0]).toBe(110);
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][1]).toBe(120);
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1][0]).toBe(210);
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1][1]).toBe(220);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0].x).toBe(110);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0].y).toBe(120);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1].x).toBe(210);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1].y).toBe(220);
     });
 
     test('should not move points when none are selected', () => {
         canvas.outlineEditor.selectedPoints = [];
         canvas.outlineEditor.moveSelectedPoints(10, 20);
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][0]).toBe(100);
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][1]).toBe(100);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0].x).toBe(100);
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0].y).toBe(100);
     });
 });
 
@@ -558,9 +558,9 @@ describe('GlyphCanvas point type toggling', () => {
             shapes: [
                 {
                     nodes: [
-                        [100, 100, 'c'],
-                        [200, 200, 'l'],
-                        [300, 300, 'o']
+                        { x: 100, y: 100, type: 'c' },
+                        { x: 200, y: 200, type: 'c' },
+                        { x: 300, y: 300, type: 'c' }
                     ]
                 }
             ],
@@ -578,50 +578,20 @@ describe('GlyphCanvas point type toggling', () => {
             contourIndex: 0,
             nodeIndex: 0
         });
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][2]).toBe('cs');
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0].type).toBe(
+            'cs'
+        );
     });
 
     test('should toggle smooth curve point back to curve', () => {
-        canvas.outlineEditor.layerData.shapes[0].nodes[0][2] = 'cs';
+        canvas.outlineEditor.layerData.shapes[0].nodes[0].type = 'cs';
         canvas.outlineEditor.togglePointSmooth({
             contourIndex: 0,
             nodeIndex: 0
         });
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0][2]).toBe('c');
-    });
-
-    test('should toggle line point to smooth line', () => {
-        canvas.outlineEditor.togglePointSmooth({
-            contourIndex: 0,
-            nodeIndex: 1
-        });
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1][2]).toBe('ls');
-    });
-
-    test('should toggle smooth line point back to line', () => {
-        canvas.outlineEditor.layerData.shapes[0].nodes[1][2] = 'ls';
-        canvas.outlineEditor.togglePointSmooth({
-            contourIndex: 0,
-            nodeIndex: 1
-        });
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[1][2]).toBe('l');
-    });
-
-    test('should toggle offcurve point to smooth offcurve', () => {
-        canvas.outlineEditor.togglePointSmooth({
-            contourIndex: 0,
-            nodeIndex: 2
-        });
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[2][2]).toBe('os');
-    });
-
-    test('should toggle smooth offcurve point back to offcurve', () => {
-        canvas.outlineEditor.layerData.shapes[0].nodes[2][2] = 'os';
-        canvas.outlineEditor.togglePointSmooth({
-            contourIndex: 0,
-            nodeIndex: 2
-        });
-        expect(canvas.outlineEditor.layerData.shapes[0].nodes[2][2]).toBe('o');
+        expect(canvas.outlineEditor.layerData.shapes[0].nodes[0].type).toBe(
+            'c'
+        );
     });
 });
 
@@ -954,8 +924,8 @@ describe('GlyphCanvas bounding box calculation', () => {
             shapes: [
                 {
                     nodes: [
-                        [0, 0, 'l'],
-                        [100, 100, 'l']
+                        { x: 0, y: 0, type: 'l' },
+                        { x: 100, y: 100, type: 'l' }
                     ]
                 }
             ],

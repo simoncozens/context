@@ -18,6 +18,7 @@
 // Based on: DIRECT_PYTHON_RUST_INTEGRATION.md
 
 import * as opentype from 'opentype.js';
+import { fontInterpolation } from './font-interpolation';
 
 interface CompilationOptions {
     skip_kerning: boolean;
@@ -259,8 +260,8 @@ class FontCompilation {
             );
 
             // Connect interpolation manager to this worker
-            if (window.fontInterpolation) {
-                window.fontInterpolation.setWorker(this.worker);
+            if (fontInterpolation) {
+                fontInterpolation.setWorker(this.worker);
                 console.log(
                     '[FontCompilation]',
                     '✅ Interpolation manager connected to worker'

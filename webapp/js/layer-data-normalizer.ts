@@ -13,7 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import { DesignspaceLocation, ParsedNode } from './basictypes';
+import { GlyphCanvas } from './glyph-canvas';
+import { OutlineEditor } from './glyph-canvas/outline-editor';
+import { DesignspaceLocation } from './locations';
+import { PythonBabelfont } from './pythonbabelfont';
 
 /**
  * Layer Data Normalizer
@@ -115,7 +118,7 @@ export class LayerDataNormalizer {
      * @param {string|Array} nodes - Nodes as string or already-parsed array
      * @returns {Array} Array of [x, y, type] triplets
      */
-    static parseNodes(nodes: string | any[]): ParsedNode[] {
+    static parseNodes(nodes: string | any[]): PythonBabelfont.Node[] {
         // If already an array, return as-is
         if (Array.isArray(nodes)) {
             return nodes;
@@ -127,14 +130,14 @@ export class LayerDataNormalizer {
             if (!nodesStr) return [];
 
             const tokens = nodesStr.split(/\s+/);
-            const nodesArray: ParsedNode[] = [];
+            const nodesArray: PythonBabelfont.Node[] = [];
 
             for (let i = 0; i + 2 < tokens.length; i += 3) {
-                nodesArray.push([
-                    parseFloat(tokens[i]), // x
-                    parseFloat(tokens[i + 1]), // y
-                    tokens[i + 2] // type (m, l, o, c, q, ms, ls, etc.)
-                ]);
+                nodesArray.push({
+                    x: parseFloat(tokens[i]), // x
+                    y: parseFloat(tokens[i + 1]), // y
+                    type: tokens[i + 2] as PythonBabelfont.NodeType // type (m, l, o, c, q, ms, ls, etc.)
+                });
             }
 
             return nodesArray;
@@ -171,12 +174,12 @@ export class LayerDataNormalizer {
     /**
      * Apply interpolated layer data from babelfont-rs to GlyphCanvas
      *
-     * @param {GlyphCanvas} glyphCanvas - The glyph canvas instance
+     * @param {OutlineEditor} outlineEditor - The glyph canvas instance
      * @param {Object} interpolatedLayer - Layer data from babelfont-rs interpolate_glyph
      * @param {Object} location - The designspace location used for interpolation
      */
     static applyInterpolatedLayer(
-        glyphCanvas: any,
+        outlineEditor: OutlineEditor,
         interpolatedLayer: any,
         location: DesignspaceLocation
     ) {
@@ -234,7 +237,7 @@ export class LayerDataNormalizer {
             parseComponentNodes(normalized.shapes);
         }
 
-        glyphCanvas.layerData = normalized;
+        outlineEditor.layerData = normalized;
         console.log('[LayerDataNormalizer]', 'Layer data applied to canvas');
         // Don't render here - let the calling code control when to render
         // This prevents intermediate renders that can cause flicker
@@ -242,11 +245,9 @@ export class LayerDataNormalizer {
 
     /**
      * Restore exact layer from Python
-     *
-     * @param {GlyphCanvas} glyphCanvas - The glyph canvas instance
      */
-    static async restoreExactLayer(glyphCanvas: any) {
+    static async restoreExactLayer(outlineEditor: OutlineEditor) {
         // Fetch layer data from Python
-        await glyphCanvas.fetchLayerData();
+        await outlineEditor.fetchLayerData();
     }
 }

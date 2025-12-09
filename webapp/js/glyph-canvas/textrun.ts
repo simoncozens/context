@@ -6,10 +6,13 @@
 // - selection handling
 
 import { Font } from 'opentype.js';
+import { Logger } from '../logger';
 import type { FeaturesManager } from './features';
 import type { AxesManager } from './variations';
 
 import bidiFactory from 'bidi-js';
+
+let console: Logger = new Logger('TextRun', false);
 
 export interface ShapedGlyph {
     dx: number;
@@ -101,7 +104,7 @@ export class TextRunEditor {
         try {
             // Wait for createHarfBuzz to be available
             if (typeof window.createHarfBuzz === 'undefined') {
-                console.log('[TextRun]', 'Waiting for HarfBuzz to load...');
+                console.log('Waiting for HarfBuzz to load...');
                 await new Promise<void>((resolve, reject) => {
                     let attempts = 0;
                     const check = () => {
@@ -119,17 +122,17 @@ export class TextRunEditor {
             }
 
             // Initialize HarfBuzz
-            console.log('[TextRun]', 'Initializing HarfBuzz WASM...');
+            console.log('Initializing HarfBuzz WASM...');
             const hbModule = await window.createHarfBuzz();
             this.hb = window.hbjs(hbModule);
-            console.log('[TextRun]', 'HarfBuzz initialized successfully');
+            console.log('HarfBuzz initialized successfully');
 
             // If we have a font loaded, shape it
             if (this.fontBlob) {
                 this.shapeText();
             }
         } catch (error) {
-            console.error('[TextRun]', 'Error loading HarfBuzz:', error);
+            console.error('Error loading HarfBuzz:', error);
             console.log(
                 '[TextRun]',
                 'Text shaping will not be available. Glyphs will be displayed as placeholder boxes.'
@@ -263,7 +266,7 @@ export class TextRunEditor {
                 `Entered glyph edit mode - selected glyph at index ${this.selectedGlyphIndex}, cluster position ${clusterPos}`
             );
         } else {
-            console.log('[TextRun]', `Deselected glyph`);
+            console.log(`Deselected glyph`);
         }
         this.call(
             'glyphselected',
@@ -558,15 +561,15 @@ export class TextRunEditor {
             return lastRun;
         }
 
-        console.log('[TextRun]', `Position ${pos} is not in any run`);
+        console.log(`Position ${pos} is not in any run`);
         return null;
     }
 
     logCursorState() {
-        console.log('[TextRun]', '=== Cursor State ===');
-        console.log('[TextRun]', 'Logical position:', this.cursorPosition);
-        console.log('[TextRun]', 'Visual X:', this.cursorX);
-        console.log('[TextRun]', 'Text buffer:', this.textBuffer);
+        console.log('=== Cursor State ===');
+        console.log('Logical position:', this.cursorPosition);
+        console.log('Visual X:', this.cursorX);
+        console.log('Text buffer:', this.textBuffer);
         const run = this.getRunAtPosition(this.cursorPosition);
         if (run) {
             console.log(
@@ -577,11 +580,11 @@ export class TextRunEditor {
                 `"${run.text}"`
             );
         }
-        console.log('[TextRun]', '==================');
+        console.log('==================');
     }
 
     moveCursorLeft() {
-        console.log('[TextRun]', '=== Move Cursor Left ===');
+        console.log('=== Move Cursor Left ===');
         this.logCursorState();
 
         // Left arrow = backward in logical order (decrease position)
@@ -590,7 +593,7 @@ export class TextRunEditor {
     }
 
     moveCursorRight() {
-        console.log('[TextRun]', '=== Move Cursor Right ===');
+        console.log('=== Move Cursor Right ===');
         this.logCursorState();
 
         // Right arrow = forward in logical order (increase position)
@@ -740,7 +743,7 @@ export class TextRunEditor {
                 `"${selectedText}"`
             );
         } catch (err) {
-            console.error('[TextRun]', 'Failed to copy to clipboard:', err);
+            console.error('Failed to copy to clipboard:', err);
         }
     }
 
@@ -771,12 +774,12 @@ export class TextRunEditor {
     async paste() {
         try {
             const text = await navigator.clipboard.readText();
-            console.log('[TextRun]', 'Pasting from clipboard:', `"${text}"`);
+            console.log('Pasting from clipboard:', `"${text}"`);
 
             // insertText already handles replacing selection
             this.insertText(text);
         } catch (err) {
-            console.error('[TextRun]', 'Failed to paste from clipboard:', err);
+            console.error('Failed to paste from clipboard:', err);
         }
     }
 
@@ -802,7 +805,7 @@ export class TextRunEditor {
     }
 
     deleteBackward() {
-        console.log('[TextRun]', '=== Delete Backward (Backspace) ===');
+        console.log('=== Delete Backward (Backspace) ===');
         this.logCursorState();
 
         // If there's a selection, delete it
@@ -839,7 +842,7 @@ export class TextRunEditor {
     }
 
     deleteForward() {
-        console.log('[TextRun]', '=== Delete Forward (Delete key) ===');
+        console.log('=== Delete Forward (Delete key) ===');
         this.logCursorState();
 
         // If there's a selection, delete it
@@ -881,8 +884,8 @@ export class TextRunEditor {
     }
 
     reshapeAndRender() {
-        console.log('[TextRun]', 'New cursor position:', this.cursorPosition);
-        console.log('[TextRun]', 'New text:', this.textBuffer);
+        console.log('New cursor position:', this.cursorPosition);
+        console.log('New text:', this.textBuffer);
 
         // Save to localStorage and trigger recompilation
         this.saveTextBuffer();
@@ -925,8 +928,8 @@ export class TextRunEditor {
             return;
         }
 
-        console.log('[TextRun]', '=== Building Cluster Map ===');
-        console.log('[TextRun]', 'Text buffer:', this.textBuffer);
+        console.log('=== Building Cluster Map ===');
+        console.log('Text buffer:', this.textBuffer);
         console.log(
             '[TextRun]',
             'Shaped glyphs count:',
@@ -996,7 +999,7 @@ export class TextRunEditor {
             i = j; // Move to next cluster
         }
 
-        console.log('[TextRun]', '===========================');
+        console.log('===========================');
     }
 
     updateCursorVisualPosition() {
@@ -1009,7 +1012,7 @@ export class TextRunEditor {
         this.cursorX = 0;
 
         if (!this.clusterMap || this.clusterMap.length === 0) {
-            console.log('[TextRun]', 'No cluster map');
+            console.log('No cluster map');
             return;
         }
 
@@ -1030,7 +1033,10 @@ export class TextRunEditor {
                 let glyphName = `GID${glyphId}`;
 
                 // Get glyph name from font manager (source font) instead of compiled font
-                if (window.fontManager && window.fontManager.babelfontData) {
+                if (
+                    window.fontManager &&
+                    window.fontManager.currentFont?.babelfontData
+                ) {
                     glyphName = window.fontManager.getGlyphName(glyphId);
                 } else if (
                     this.opentypeFont &&
@@ -1043,7 +1049,7 @@ export class TextRunEditor {
             }
             return `[${c.start}-${c.end}) @ x=${c.x.toFixed(0)}, RTL=${c.isRTL}, glyphs=[${glyphNames.join(', ')}]`;
         });
-        console.log('[TextRun]', 'Cluster map:', clusterWithNames);
+        console.log('Cluster map:', clusterWithNames);
 
         // Find the cluster that contains or is adjacent to this position
         // Priority: Check if position is the START of a cluster FIRST (more important than END)
@@ -1275,7 +1281,7 @@ export class TextRunEditor {
         this.hbFace = this.hb.createFace(this.hbBlob, 0); // 0 = first face
         this.hbFont = this.hb.createFont(this.hbFace);
 
-        console.log('[TextRun]', 'Font loaded into HarfBuzz');
+        console.log('Font loaded into HarfBuzz');
 
         // Load display string from font if available
         await this.loadTextBufferFromFont();
@@ -1315,7 +1321,7 @@ export class TextRunEditor {
                 key
             );
 
-            const result = window.fontManager.getFormatSpecific(key);
+            const result = window.fontManager?.getFormatSpecific(key);
             // If we got a display string from the font, use it (prioritize over localStorage)
             if (result !== null && result !== undefined && result !== '') {
                 console.log(
@@ -1395,7 +1401,7 @@ export class TextRunEditor {
             .replace(/\r/g, '\\r')
             .replace(/\t/g, '\\t');
 
-        window.fontManager.setFormatSpecific(key, escapedText);
+        window.fontManager?.setFormatSpecific(key, escapedText);
     }
 
     shapeText() {
@@ -1419,15 +1425,15 @@ export class TextRunEditor {
                 this.shapeTextSimple();
             }
 
-            console.log('[TextRun]', 'Shaped glyphs:', this.shapedGlyphs);
+            console.log('Shaped glyphs:', this.shapedGlyphs);
             if (this.bidiRuns.length > 0) {
-                console.log('[TextRun]', 'BiDi runs:', this.bidiRuns);
+                console.log('BiDi runs:', this.bidiRuns);
             }
 
             // Render the result
             this.call('render');
         } catch (error) {
-            console.error('[TextRun]', 'Error shaping text:', error);
+            console.error('Error shaping text:', error);
             this.shapedGlyphs = [];
             this.bidiRuns = [];
             this.call('render');
@@ -1464,7 +1470,7 @@ export class TextRunEditor {
         // Get embedding levels from bidi-js
         const embedLevels = this.bidi.getEmbeddingLevels(this.textBuffer);
         this.embeddingLevels = embedLevels; // Store for cursor logic
-        console.log('[TextRun]', 'Embedding levels:', embedLevels);
+        console.log('Embedding levels:', embedLevels);
 
         // First, shape the text in LOGICAL order with proper direction per run
         // Split into runs by embedding level

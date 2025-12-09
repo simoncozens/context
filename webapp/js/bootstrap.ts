@@ -8,7 +8,6 @@ import './compile-button.js';
 import './example-loader.js';
 import './file-browser';
 import './font-compilation';
-import './font-dropdown.js';
 import './font-manager';
 import './fonteditor.js';
 import './glyph-canvas';

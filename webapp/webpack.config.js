@@ -49,6 +49,7 @@ module.exports = {
             directory: path.join(__dirname, 'build')
         },
         port: 8000,
+        server: 'https',
         headers: {
             'Cross-Origin-Embedder-Policy': 'require-corp',
             'Cross-Origin-Opener-Policy': 'same-origin',
