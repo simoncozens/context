@@ -42,8 +42,8 @@ This is a WebAssembly-based font editor using Rust (fontc/babelfont) compiled to
 - webapp/wasm-dist/ - WASM binaries
 
 ## Build Process
-- Update Rust dependencies with update-rust-deps.sh
-- Build WASM with build-fontc-wasm.sh
+- Update Rust dependencies with `update-rust-deps.sh`
+- Build WASM with `build-fontc-wasm.sh`
 
 ## Important Notes
 - CORS headers are required for SharedArrayBuffer (see _headers and coi-serviceworker.js)
