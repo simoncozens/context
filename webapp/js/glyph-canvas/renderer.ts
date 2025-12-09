@@ -1064,8 +1064,6 @@ export class GlyphCanvasRenderer {
             return;
         }
 
-        console.log('Drawing nodes', nodes);
-
         // Draw the outline path
         this.ctx.beginPath();
         this.ctx.strokeStyle = isDarkTheme ? '#ffffff' : '#000000';
