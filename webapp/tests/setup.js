@@ -1,11 +1,6 @@
 global.GlyphCanvas = require('../js/glyph-canvas').GlyphCanvas;
 global.ViewportManager = require('../js/glyph-canvas/viewport').ViewportManager;
 
-// Load design utility functions
-const designModule = require('../js/design.js');
-global.adjustColorHueAndLightness = designModule.adjustColorHueAndLightness;
-global.desaturateColor = designModule.desaturateColor;
-
 // Mock browser-specific APIs that are not available in JSDOM by default
 if (typeof window.requestAnimationFrame === 'undefined') {
     window.requestAnimationFrame = (cb) => setTimeout(cb, 0);
