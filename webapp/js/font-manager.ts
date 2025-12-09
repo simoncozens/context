@@ -298,10 +298,10 @@ class FontManager {
      * Recompile editing font after font data changes
      */
     async recompileEditingFont() {
-        return await this.compileEditingFont(
-            this.currentText,
-            this.selectedFeatures
-        );
+        await this.compileEditingFont(this.currentText, this.selectedFeatures);
+        this.currentFont!.dirty = false;
+        await this.updateDirtyIndicator();
+        return;
     }
 
     /**
